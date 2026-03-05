@@ -6,6 +6,7 @@ import {
     History,
     User,
     CreditCard,
+    BookText,
 } from "lucide-react";
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
@@ -22,6 +23,7 @@ const userNav: NavGroup[] = [
     {
         title: "Account",
         items: [
+            { label: "My Context", href: "/context", icon: BookText },
             { label: "Profile", href: "/profile", icon: User },
             { label: "Subscription", href: "/subscription", icon: CreditCard },
         ],
