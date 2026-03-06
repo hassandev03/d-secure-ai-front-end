@@ -12,6 +12,7 @@ import {
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { useAuthStore } from "@/store/auth.store";
+import { cn } from "@/lib/utils";
 
 export default function UserLayout({
     children,
@@ -20,6 +21,7 @@ export default function UserLayout({
 }) {
     const { user } = useAuthStore();
     const [mounted, setMounted] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     useEffect(() => {
         setMounted(true);
@@ -55,8 +57,10 @@ export default function UserLayout({
                 groups={userNav}
                 portalLabel={displayRole}
                 portalColor="brand-700"
+                collapsed={sidebarCollapsed}
+                onCollapse={setSidebarCollapsed}
             />
-            <div className="pl-64 transition-all duration-300">
+            <div className={cn("transition-all duration-300", sidebarCollapsed ? "pl-16" : "pl-64")}>
                 <Topbar />
                 <main className="p-6">{children}</main>
             </div>

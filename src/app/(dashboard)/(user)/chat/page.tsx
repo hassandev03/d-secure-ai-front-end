@@ -3,7 +3,7 @@
 import { useState, useRef, useEffect } from "react";
 import {
     Send, Plus, Paperclip, Mic, Bot, User, Shield, Sparkles,
-    ChevronDown, Eye, ExternalLink,
+    ChevronDown, Eye, ExternalLink, X, FileText
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -27,6 +27,7 @@ interface Message {
     content: string;
     anonymizedContent?: string;
     entities?: AnonymizedEntity[];
+    files?: string[];
     timestamp: Date;
 }
 
@@ -95,19 +96,22 @@ export default function ChatPage() {
     const [model, setModel] = useState<LLMModel>(DEFAULT_MODEL);
     const [isLoading, setIsLoading] = useState(false);
     const [expandedEntities, setExpandedEntities] = useState<string | null>(null);
+    const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
     const bottomRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
 
     const handleSend = async () => {
-        if (!input.trim() || isLoading) return;
+        if (!input.trim() && attachedFiles.length === 0 || isLoading) return;
 
         const entities = detectEntities(input);
         const anonymizedContent = anonymize(input, entities);
+        const fileNames = attachedFiles.map(f => f.name);
 
         const userMsg: Message = {
             id: `msg-${Date.now()}`,
@@ -115,10 +119,12 @@ export default function ChatPage() {
             content: input,
             anonymizedContent,
             entities,
+            files: fileNames.length > 0 ? fileNames : undefined,
             timestamp: new Date(),
         };
         setMessages((prev) => [...prev, userMsg]);
         setInput("");
+        setAttachedFiles([]);
         setIsLoading(true);
 
         await new Promise((r) => setTimeout(r, 1500));
@@ -126,7 +132,9 @@ export default function ChatPage() {
         const assistantMsg: Message = {
             id: `msg-${Date.now() + 1}`,
             role: "assistant",
-            content: "I've analyzed your request. Here's a detailed response with all sensitive information properly handled through D-SecureAI's anonymization pipeline.\n\nThe data has been processed through our PII detection engine, ensuring that personal identifiers, organization names, and project references are properly masked before reaching the AI model.\n\n**Key findings:**\n1. All PII entities were successfully detected and anonymized\n2. Context-aware mapping ensured referential consistency\n3. The response has been de-anonymized for your viewing",
+            content: fileNames.length > 0
+                ? `I've analyzed the ${fileNames.length} file(s) you attached alongside your request. All contents were securely parsed through D-SecureAI's anonymization pipeline.`
+                : "I've analyzed your request. Here's a detailed response with all sensitive information properly handled through D-SecureAI's anonymization pipeline.\n\nThe data has been processed through our PII detection engine, ensuring that personal identifiers, organization names, and project references are properly masked before reaching the AI model.\n\n**Key findings:**\n1. All PII entities were successfully detected and anonymized\n2. Context-aware mapping ensured referential consistency\n3. The response has been de-anonymized for your viewing",
             entities: entities.length > 0 ? entities : [],
             timestamp: new Date(),
         };
@@ -136,6 +144,16 @@ export default function ChatPage() {
 
     const handleKeyDown = (e: React.KeyboardEvent) => {
         if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); handleSend(); }
+    };
+
+    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files) {
+            setAttachedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+        }
+    };
+
+    const removeAttachedFile = (index: number) => {
+        setAttachedFiles(prev => prev.filter((_, i) => i !== index));
     };
 
     const toggleEntities = (id: string) =>
@@ -258,6 +276,16 @@ export default function ChatPage() {
                                 "max-w-[75%] rounded-2xl px-4 py-3",
                                 msg.role === "user" ? "bg-brand-600 text-white" : "bg-muted"
                             )}>
+                                {msg.files && msg.files.length > 0 && (
+                                    <div className="mb-3 flex flex-wrap gap-2">
+                                        {msg.files.map((file, i) => (
+                                            <div key={i} className="flex items-center gap-1.5 rounded bg-brand-700 px-2.5 py-1.5 text-xs text-brand-50 shadow-sm border border-brand-500">
+                                                <FileText className="h-3.5 w-3.5" />
+                                                <span className="truncate max-w-[150px]">{file}</span>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
                                 <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
 
                                 {/* ─── Anonymization entity viewer ─── */}
@@ -341,7 +369,20 @@ export default function ChatPage() {
 
             {/* ─── Input area ─── */}
             <div className="mt-4 shrink-0">
-                <div className="relative rounded-2xl border border-border bg-white shadow-sm focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand-100">
+                <div className="relative rounded-2xl border border-border bg-white shadow-sm focus-within:border-brand-300 focus-within:ring-2 focus-within:ring-brand-100 p-2">
+                    {attachedFiles.length > 0 && (
+                        <div className="flex flex-wrap gap-2 px-2 pb-2">
+                            {attachedFiles.map((f, i) => (
+                                <Badge key={i} variant="secondary" className="gap-1.5 py-1 px-2.5 bg-muted text-muted-foreground hover:bg-muted font-medium text-[11px] border-border">
+                                    <FileText className="h-3 w-3" />
+                                    {f.name}
+                                    <button onClick={() => removeAttachedFile(i)} className="ml-0.5 rounded-full hover:bg-border p-0.5 transition-colors">
+                                        <X className="h-3 w-3" />
+                                    </button>
+                                </Badge>
+                            ))}
+                        </div>
+                    )}
                     <textarea
                         ref={textareaRef}
                         value={input}
@@ -349,12 +390,13 @@ export default function ChatPage() {
                         onKeyDown={handleKeyDown}
                         placeholder="Type your message… Your data will be anonymized automatically."
                         rows={1}
-                        className="w-full resize-none bg-transparent px-4 pt-3.5 pb-12 text-sm placeholder:text-muted-foreground focus:outline-none"
-                        style={{ minHeight: 52, maxHeight: 160 }}
+                        className="w-full resize-none bg-transparent px-2 pt-1.5 pb-10 text-sm placeholder:text-muted-foreground focus:outline-none"
+                        style={{ minHeight: 44, maxHeight: 160 }}
                     />
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                         <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Attach file">
+                            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" multiple accept=".pdf,.txt,.xls,.xlsx,.csv" />
+                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Attach file" onClick={() => fileInputRef.current?.click()}>
                                 <Paperclip className="h-4 w-4" />
                             </Button>
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Voice input">
@@ -367,7 +409,7 @@ export default function ChatPage() {
                             </Badge>
                             <Button
                                 onClick={handleSend}
-                                disabled={!input.trim() || isLoading}
+                                disabled={(!input.trim() && attachedFiles.length === 0) || isLoading}
                                 size="icon"
                                 className="h-8 w-8 rounded-lg bg-brand-600 hover:bg-brand-700 disabled:opacity-40"
                             >

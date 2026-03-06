@@ -26,7 +26,7 @@ const initialTerms = [
 
 const initialDocs = [
     { id: 1, name: "NDA_Template.pdf", size: "1.2 MB", uploadedAt: "2025-11-20" },
-    { id: 2, name: "Domain_Glossary.docx", size: "340 KB", uploadedAt: "2025-11-15" },
+    { id: 2, name: "Domain_Glossary.xlsx", size: "340 KB", uploadedAt: "2025-11-15" },
     { id: 3, name: "Research_Notes_Q4.pdf", size: "2.8 MB", uploadedAt: "2025-12-01" },
 ];
 
@@ -126,8 +126,9 @@ export default function MyContextPage() {
         onDrop,
         accept: {
             'application/pdf': ['.pdf'],
-            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
-            'text/plain': ['.txt']
+            'text/plain': ['.txt'],
+            'application/vnd.ms-excel': ['.xls'],
+            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
         },
         maxSize: 10485760 // 10MB
     });
@@ -226,7 +227,7 @@ export default function MyContextPage() {
                                 <div className="text-center">
                                     <Upload className={`mx-auto h-10 w-10 ${isDragActive ? 'text-brand-500' : 'text-muted-foreground'}`} />
                                     <p className="mt-2 text-sm font-medium">{isDragActive ? "Drop the files here" : "Drop files here or click to upload"}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, TXT — up to 10 MB</p>
+                                    <p className="text-xs text-muted-foreground mt-1">PDF, Excel, TXT — up to 10 MB</p>
                                     <Button variant="outline" size="sm" className="mt-3 pointer-events-none">Browse Files</Button>
                                 </div>
                             </div>

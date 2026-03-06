@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Check, X, Zap, CreditCard, Lock } from "lucide-react";
+import { Check, X, Zap, CreditCard, Lock, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
 import QuotaBar from "@/components/shared/QuotaBar";
@@ -62,13 +62,21 @@ const plansData = [
 export default function SubscriptionPage() {
     const [currentPlanKey, setCurrentPlanKey] = useState("PRO");
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
+    const [isAddCardModalOpen, setIsAddCardModalOpen] = useState(false);
     const [selectedPlanForUpgrade, setSelectedPlanForUpgrade] = useState<typeof plansData[0] | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    const [savedCards, setSavedCards] = useState([
+        { id: "card-1", last4: "4242", brand: "Visa", isDefault: true }
+    ]);
+    const [useNewCard, setUseNewCard] = useState(false);
+    const [newCardNumber, setNewCardNumber] = useState("");
 
     const activePlan = plansData.find(p => p.key === currentPlanKey)!;
 
     const handleUpgradeClick = (plan: typeof plansData[0]) => {
         setSelectedPlanForUpgrade(plan);
+        setUseNewCard(savedCards.length === 0);
         setIsPaymentModalOpen(true);
     };
 
@@ -81,6 +89,24 @@ export default function SubscriptionPage() {
         }, 800);
     };
 
+    const handleDeleteCard = (id: string) => {
+        setSavedCards(prev => prev.filter(c => c.id !== id));
+        toast.success("Payment method removed.");
+    };
+
+    const handleAddCardSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (newCardNumber.length < 4) return;
+        const last4 = newCardNumber.slice(-4);
+        setSavedCards(prev => [
+            ...prev.map(c => ({ ...c, isDefault: false })),
+            { id: `card-${Date.now()}`, last4, brand: "Mastercard", isDefault: true }
+        ]);
+        setNewCardNumber("");
+        setIsAddCardModalOpen(false);
+        toast.success("Payment method added.");
+    };
+
     const handlePaymentSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsProcessing(true);
@@ -88,6 +114,14 @@ export default function SubscriptionPage() {
         await new Promise((r) => setTimeout(r, 1500));
         setIsProcessing(false);
         setIsPaymentModalOpen(false);
+        if (useNewCard && newCardNumber.length >= 4) {
+            const last4 = newCardNumber.slice(-4);
+            setSavedCards(prev => [
+                ...prev.map(c => ({ ...c, isDefault: false })),
+                { id: `card-${Date.now()}`, last4, brand: "Mastercard", isDefault: true }
+            ]);
+            setNewCardNumber("");
+        }
         setCurrentPlanKey(selectedPlanForUpgrade!.key);
         toast.success(`Successfully upgraded to the ${selectedPlanForUpgrade!.name} Plan!`);
     };
@@ -157,21 +191,47 @@ export default function SubscriptionPage() {
             <Separator className="my-8" />
 
             <Card>
-                <CardHeader><CardTitle className="text-base">Billing Information</CardTitle></CardHeader>
-                <CardContent className="space-y-3">
-                    <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Payment Method</span>
-                        <span className="font-medium flex items-center gap-2"><CreditCard className="h-4 w-4 text-muted-foreground" /> Visa •••• 4242</span>
+                <CardHeader className="flex flex-row items-center justify-between">
+                    <CardTitle className="text-base">Payment Methods</CardTitle>
+                    <Button variant="outline" size="sm" onClick={() => setIsAddCardModalOpen(true)}>
+                        <Plus className="mr-2 h-4 w-4" /> Add Card
+                    </Button>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    {savedCards.length === 0 ? (
+                        <p className="text-sm text-muted-foreground">No payment methods saved.</p>
+                    ) : (
+                        savedCards.map(card => (
+                            <div key={card.id} className="flex items-center justify-between text-sm border-b border-border pb-3 last:border-0 last:pb-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-muted border border-border">
+                                        <CreditCard className="h-5 w-5 text-muted-foreground" />
+                                    </div>
+                                    <div>
+                                        <p className="font-medium flex items-center gap-2">
+                                            {card.brand} •••• {card.last4}
+                                            {card.isDefault && <Badge variant="secondary" className="font-normal text-[10px] py-0 border-transparent bg-brand-100 text-brand-700">Default</Badge>}
+                                        </p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Expires 12/28</p>
+                                    </div>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger hover:bg-danger/10" onClick={() => handleDeleteCard(card.id)}>
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                            </div>
+                        ))
+                    )}
+
+                    <div className="mt-4 pt-4 border-t border-border space-y-3">
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Next Billing Date</span>
+                            <span className="font-medium">2026-04-01</span>
+                        </div>
+                        <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Billing Email</span>
+                            <span className="font-medium">alex@freelance.com</span>
+                        </div>
                     </div>
-                    <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Next Billing Date</span>
-                        <span className="font-medium">2026-04-01</span>
-                    </div>
-                    <div className="flex items-center justify-between text-sm">
-                        <span className="text-muted-foreground">Billing Email</span>
-                        <span className="font-medium">alex@freelance.com</span>
-                    </div>
-                    <div className="pt-2"><Button variant="outline" size="sm">Update Payment Method</Button></div>
                 </CardContent>
             </Card>
 
@@ -191,29 +251,64 @@ export default function SubscriptionPage() {
                                 <span className="font-bold text-lg">${selectedPlanForUpgrade?.price}.00</span>
                             </div>
 
-                            <div className="space-y-2">
-                                <Label htmlFor="name">Name on Card</Label>
-                                <Input id="name" defaultValue="Alex Thompson" required />
-                            </div>
+                            {savedCards.length > 0 && (
+                                <div className="space-y-3 mb-4">
+                                    <Label>Payment Method</Label>
+                                    <div className="grid gap-2">
+                                        <div
+                                            className={`flex justify-between items-center p-3 rounded-xl border cursor-pointer transition-colors ${!useNewCard ? 'border-brand-500 bg-brand-50/50 ring-1 ring-brand-500/20' : 'border-border hover:bg-muted/50'}`}
+                                            onClick={() => setUseNewCard(false)}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <CreditCard className={`h-5 w-5 ${!useNewCard ? 'text-brand-600' : 'text-muted-foreground'}`} />
+                                                <div className="text-sm">
+                                                    <p className="font-medium">{savedCards.find(c => c.isDefault)?.brand || savedCards[0].brand} •••• {savedCards.find(c => c.isDefault)?.last4 || savedCards[0].last4}</p>
+                                                    <p className="text-xs text-muted-foreground">Default Card</p>
+                                                </div>
+                                            </div>
+                                            {!useNewCard && <Check className="h-4 w-4 text-brand-600" />}
+                                        </div>
+                                        <div
+                                            className={`flex justify-between items-center p-3 rounded-xl border cursor-pointer transition-colors ${useNewCard ? 'border-brand-500 bg-brand-50/50 ring-1 ring-brand-500/20' : 'border-border hover:bg-muted/50'}`}
+                                            onClick={() => setUseNewCard(true)}
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <Plus className={`h-5 w-5 ${useNewCard ? 'text-brand-600' : 'text-muted-foreground'}`} />
+                                                <span className="text-sm font-medium">Use a new payment method</span>
+                                            </div>
+                                            {useNewCard && <Check className="h-4 w-4 text-brand-600" />}
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
-                            <div className="space-y-2">
-                                <Label htmlFor="card">Card Information</Label>
-                                <div className="relative">
-                                    <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                    <Input id="card" placeholder="0000 0000 0000 0000" className="pl-9" required />
-                                </div>
-                            </div>
+                            {(useNewCard || savedCards.length === 0) && (
+                                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+                                    <div className="space-y-2">
+                                        <Label htmlFor="name">Name on Card</Label>
+                                        <Input id="name" defaultValue="Alex Thompson" required />
+                                    </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="expiry">Expiry (MM/YY)</Label>
-                                    <Input id="expiry" placeholder="12/28" required />
+                                    <div className="space-y-2">
+                                        <Label htmlFor="card">Card Information</Label>
+                                        <div className="relative">
+                                            <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                            <Input id="card" placeholder="0000 0000 0000 0000" className="pl-9" required value={newCardNumber} onChange={(e) => setNewCardNumber(e.target.value)} />
+                                        </div>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-4">
+                                        <div className="space-y-2">
+                                            <Label htmlFor="expiry">Expiry (MM/YY)</Label>
+                                            <Input id="expiry" placeholder="12/28" required />
+                                        </div>
+                                        <div className="space-y-2">
+                                            <Label htmlFor="cvc">CVC</Label>
+                                            <Input id="cvc" placeholder="123" required type="password" />
+                                        </div>
+                                    </div>
                                 </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="cvc">CVC</Label>
-                                    <Input id="cvc" placeholder="123" required type="password" />
-                                </div>
-                            </div>
+                            )}
                         </div>
                         <DialogFooter className="flex-col gap-2 sm:flex-col sm:gap-2">
                             <Button type="submit" className="w-full bg-brand-600 hover:bg-brand-700 h-10" disabled={isProcessing}>
@@ -222,6 +317,46 @@ export default function SubscriptionPage() {
                             <p className="text-[10px] text-muted-foreground text-center flex items-center justify-center pt-2">
                                 <Lock className="h-3 w-3 mr-1" /> Payments are secure and encrypted.
                             </p>
+                        </DialogFooter>
+                    </form>
+                </DialogContent>
+            </Dialog>
+            {/* Add Card Modal */}
+            <Dialog open={isAddCardModalOpen} onOpenChange={setIsAddCardModalOpen}>
+                <DialogContent className="sm:max-w-[425px]">
+                    <DialogHeader>
+                        <DialogTitle>Add Payment Method</DialogTitle>
+                        <DialogDescription>
+                            Enter your new card details below. This will become your default payment method.
+                        </DialogDescription>
+                    </DialogHeader>
+                    <form onSubmit={handleAddCardSubmit}>
+                        <div className="grid gap-4 py-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="new-name">Name on Card</Label>
+                                <Input id="new-name" defaultValue="Alex Thompson" required />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="new-card">Card Information</Label>
+                                <div className="relative">
+                                    <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                                    <Input id="new-card" placeholder="0000 0000 0000 0000" className="pl-9" required value={newCardNumber} onChange={(e) => setNewCardNumber(e.target.value)} />
+                                </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-4">
+                                <div className="space-y-2">
+                                    <Label htmlFor="new-expiry">Expiry (MM/YY)</Label>
+                                    <Input id="new-expiry" placeholder="12/28" required />
+                                </div>
+                                <div className="space-y-2">
+                                    <Label htmlFor="new-cvc">CVC</Label>
+                                    <Input id="new-cvc" placeholder="123" required type="password" />
+                                </div>
+                            </div>
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={() => setIsAddCardModalOpen(false)}>Cancel</Button>
+                            <Button type="submit" className="bg-brand-600 hover:bg-brand-700">Save Payment Method</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

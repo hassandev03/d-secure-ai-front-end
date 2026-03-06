@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import {
     LayoutDashboard,
     Users,
@@ -8,6 +9,7 @@ import {
 } from "lucide-react";
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
+import { cn } from "@/lib/utils";
 
 const deptAdminNav: NavGroup[] = [
     {
@@ -31,14 +33,18 @@ export default function DeptAdminLayout({
 }: {
     children: React.ReactNode;
 }) {
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
     return (
         <div className="min-h-screen bg-background">
             <Sidebar
                 groups={deptAdminNav}
                 portalLabel="Dept Admin"
                 portalColor="brand-700"
+                collapsed={sidebarCollapsed}
+                onCollapse={setSidebarCollapsed}
             />
-            <div className="pl-64 transition-all duration-300">
+            <div className={cn("transition-all duration-300", sidebarCollapsed ? "pl-16" : "pl-64")}>
                 <Topbar />
                 <main className="p-6">{children}</main>
             </div>

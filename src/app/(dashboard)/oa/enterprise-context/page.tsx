@@ -22,7 +22,7 @@ const mockTerms = [
 
 const mockDocuments = [
     { id: 1, name: "Company Style Guide.pdf", size: "2.4 MB", uploadedAt: "2025-11-20", type: "PDF" },
-    { id: 2, name: "Product Terminology.docx", size: "340 KB", uploadedAt: "2025-11-15", type: "DOCX" },
+    { id: 2, name: "Product Terminology.txt", size: "340 KB", uploadedAt: "2025-11-15", type: "TXT" },
     { id: 3, name: "Compliance Glossary.pdf", size: "1.1 MB", uploadedAt: "2025-10-28", type: "PDF" },
 ];
 
@@ -115,7 +115,7 @@ export default function EnterpriseContextPage() {
                                 <div className="text-center">
                                     <Upload className="mx-auto h-10 w-10 text-muted-foreground" />
                                     <p className="mt-2 text-sm font-medium">Drop files here or click to upload</p>
-                                    <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, TXT — up to 10 MB</p>
+                                    <p className="text-xs text-muted-foreground mt-1">PDF, Excel, TXT — up to 10 MB</p>
                                     <Button variant="outline" size="sm" className="mt-3">Browse Files</Button>
                                 </div>
                             </div>

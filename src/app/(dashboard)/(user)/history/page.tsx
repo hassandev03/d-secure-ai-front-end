@@ -3,6 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Search, MessageSquare, Trash2, Calendar, Paperclip } from "lucide-react";
+import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -35,12 +36,19 @@ const providerColor: Record<string, string> = {
 };
 
 export default function HistoryPage() {
+    const [sessions, setSessions] = useState(mockSessions);
     const [search, setSearch] = useState("");
     const [providerFilter, setProviderFilter] = useState("all");
     const [dateRange, setDateRange] = useState("all");
     const [hasFile, setHasFile] = useState("all");
 
-    const filtered = mockSessions.filter((s) => {
+    const handleDelete = (id: string, e: React.MouseEvent) => {
+        e.preventDefault();
+        setSessions(prev => prev.filter(s => s.id !== id));
+        toast.success("Chat session deleted");
+    };
+
+    const filtered = sessions.filter((s) => {
         const matchSearch = s.title.toLowerCase().includes(search.toLowerCase());
         const matchProvider = providerFilter === "all" || s.provider === providerFilter;
         const matchFile = hasFile === "all" || (hasFile === "yes" ? s.hasFile : !s.hasFile);
@@ -64,7 +72,7 @@ export default function HistoryPage() {
         <div className="mx-auto max-w-4xl">
             <PageHeader
                 title="Chat History"
-                subtitle={`${mockSessions.length} sessions total`}
+                subtitle={`${sessions.length} sessions total`}
                 breadcrumbs={[{ label: "User", href: "/dashboard" }, { label: "History" }]}
             />
 
@@ -125,7 +133,7 @@ export default function HistoryPage() {
                     </div>
                     <div className="space-y-2">
                         {sessions.map((s) => (
-                            <Link key={s.id} href={`/chat/${s.id}`}>
+                            <Link key={s.id} href={`/chat?id=${s.id}`}>
                                 <div className="group flex items-center gap-4 rounded-xl border border-border bg-white p-4 transition-all hover:shadow-sm hover:border-brand-200 cursor-pointer">
                                     <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 shrink-0 relative">
                                         <MessageSquare className="h-5 w-5 text-brand-600" />
@@ -140,7 +148,7 @@ export default function HistoryPage() {
                                         <p className="text-xs text-muted-foreground mt-0.5">{s.messages} messages · {s.time}</p>
                                     </div>
                                     <Badge variant="secondary" className={providerColor[s.provider] || ""}>{s.model}</Badge>
-                                    <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger shrink-0" onClick={(e) => { e.preventDefault(); }}>
+                                    <Button variant="ghost" size="icon" className="h-8 w-8 opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-danger shrink-0" onClick={(e) => handleDelete(s.id, e)}>
                                         <Trash2 className="h-4 w-4" />
                                     </Button>
                                 </div>

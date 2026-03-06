@@ -7,24 +7,24 @@ import QuotaBar from "@/components/shared/QuotaBar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
+import { ComposedChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend } from "recharts";
 
 const userStats = {
     totalSessions: 48,
     totalRequests: 320,
     anonymizationOps: 890,
-    avgResponseTime: "1.2s",
+    tokensSaved: "45.2k",
     quota: { used: 320, total: 1000 },
 };
 
 const activityData = [
-    { date: "Mar 1", requests: 12, anonymized: 34 },
-    { date: "Mar 2", requests: 18, anonymized: 45 },
-    { date: "Mar 3", requests: 15, anonymized: 38 },
-    { date: "Mar 4", requests: 25, anonymized: 70 },
-    { date: "Mar 5", requests: 22, anonymized: 62 },
-    { date: "Mar 6", requests: 30, anonymized: 85 },
-    { date: "Mar 7", requests: 28, anonymized: 80 },
+    { date: "Mar 1", requests: 12, anonymized: 34, quotaUsed: 15 },
+    { date: "Mar 2", requests: 18, anonymized: 45, quotaUsed: 25 },
+    { date: "Mar 3", requests: 15, anonymized: 38, quotaUsed: 18 },
+    { date: "Mar 4", requests: 25, anonymized: 70, quotaUsed: 35 },
+    { date: "Mar 5", requests: 22, anonymized: 62, quotaUsed: 28 },
+    { date: "Mar 6", requests: 30, anonymized: 85, quotaUsed: 40 },
+    { date: "Mar 7", requests: 28, anonymized: 80, quotaUsed: 42 },
 ];
 
 const modelData = [
@@ -60,9 +60,9 @@ export default function UserDashboard() {
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard title="Chat Sessions" value={userStats.totalSessions} icon={MessageSquare} />
-                <StatCard title="AI Requests" value={userStats.totalRequests} icon={Activity} iconColor="text-info bg-info/10" />
-                <StatCard title="Data Anonymized" value={userStats.anonymizationOps} icon={Shield} iconColor="text-success bg-success/10" />
-                <StatCard title="Avg Response" value={userStats.avgResponseTime} icon={Clock} iconColor="text-warning bg-warning/10" />
+                <StatCard title="AI Requests" value={userStats.totalRequests} icon={Activity} iconColor="text-brand-600 bg-brand-100" />
+                <StatCard title="PII Entities Redacted" value={userStats.anonymizationOps} icon={Shield} iconColor="text-success bg-success/10" />
+                <StatCard title="Tokens Saved" value={userStats.tokensSaved} icon={Clock} iconColor="text-purple-600 bg-purple-100" />
             </div>
 
             <Card className="mt-6">
@@ -75,15 +75,15 @@ export default function UserDashboard() {
                 </CardContent>
             </Card>
 
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="mt-6 grid gap-6 lg:grid-cols-2 items-stretch">
                 {/* ── Daily Activity Chart ── */}
-                <Card>
+                <Card className="flex flex-col">
                     <CardHeader>
                         <CardTitle className="text-base font-semibold">Daily Request Activity</CardTitle>
                     </CardHeader>
-                    <CardContent className="h-[300px] w-full pb-4">
+                    <CardContent className="flex-1 min-h-[300px] w-full pb-4">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={activityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <ComposedChart data={activityData} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} dy={10} />
                                 <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
@@ -94,7 +94,8 @@ export default function UserDashboard() {
                                 <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
                                 <Bar dataKey="requests" name="AI Requests" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={24} />
                                 <Bar dataKey="anonymized" name="Entities Anonymized" fill="#10b981" radius={[4, 4, 0, 0]} barSize={24} />
-                            </BarChart>
+                                <Line type="monotone" dataKey="quotaUsed" name="Quota Utilized" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: "#f59e0b", strokeWidth: 2, stroke: "#fff" }} />
+                            </ComposedChart>
                         </ResponsiveContainer>
                     </CardContent>
                 </Card>
@@ -152,7 +153,7 @@ export default function UserDashboard() {
                 <CardContent>
                     <div className="space-y-3">
                         {recentSessions.map((s) => (
-                            <Link key={s.id} href={`/chat/${s.id}`}>
+                            <Link key={s.id} href={`/chat?id=${s.id}`}>
                                 <div className="flex items-center gap-4 rounded-lg border border-border p-3 transition-colors hover:bg-muted/50 cursor-pointer">
                                     <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 shrink-0">
                                         <MessageSquare className="h-4 w-4 text-brand-600" />

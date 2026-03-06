@@ -34,15 +34,29 @@ interface SidebarProps {
     groups: NavGroup[];
     portalLabel: string;
     portalColor?: string; // e.g. "brand-950"
+    collapsed?: boolean;
+    onCollapse?: (collapsed: boolean) => void;
 }
 
 export default function Sidebar({
     groups,
     portalLabel,
     portalColor = "brand-700",
+    collapsed: controlledCollapsed,
+    onCollapse,
 }: SidebarProps) {
     const pathname = usePathname();
-    const [collapsed, setCollapsed] = useState(false);
+    const [internalCollapsed, setInternalCollapsed] = useState(false);
+
+    const isCollapsed = controlledCollapsed !== undefined ? controlledCollapsed : internalCollapsed;
+
+    const handleCollapseToggle = () => {
+        if (onCollapse) {
+            onCollapse(!isCollapsed);
+        } else {
+            setInternalCollapsed(!isCollapsed);
+        }
+    };
 
     const isActive = (href: string) => {
         if (href === pathname) return true;
@@ -55,13 +69,13 @@ export default function Sidebar({
         <aside
             className={cn(
                 "fixed left-0 top-0 z-40 flex h-screen flex-col border-r border-border bg-white transition-all duration-300",
-                collapsed ? "w-16" : "w-64"
+                isCollapsed ? "w-16" : "w-64"
             )}
         >
             {/* Logo */}
             <div className={cn(
                 "flex h-16 shrink-0 items-center border-b border-border transition-all",
-                collapsed ? "justify-center" : "px-4"
+                isCollapsed ? "justify-center" : "px-4"
             )}>
                 <Link href="/" className="flex items-center gap-2">
                     <div
@@ -74,7 +88,7 @@ export default function Sidebar({
                         <Shield className="h-5 w-5" />
                     </div>
                     <AnimatePresence>
-                        {!collapsed && (
+                        {!isCollapsed && (
                             <motion.div
                                 initial={{ opacity: 0, width: 0 }}
                                 animate={{ opacity: 1, width: "auto" }}
@@ -97,12 +111,12 @@ export default function Sidebar({
             <nav className="flex-1 overflow-y-auto px-3 py-4">
                 {groups.map((group, gi) => (
                     <div key={gi} className={cn(gi > 0 && "mt-6")}>
-                        {group.title && !collapsed && (
+                        {group.title && !isCollapsed && (
                             <p className="mb-2 px-2 text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">
                                 {group.title}
                             </p>
                         )}
-                        {group.title && collapsed && (
+                        {group.title && isCollapsed && (
                             <div className="mb-2 mx-auto h-px w-6 bg-border" />
                         )}
                         <ul className="space-y-1">
@@ -116,7 +130,7 @@ export default function Sidebar({
                                             active
                                                 ? "bg-brand-50 text-brand-700"
                                                 : "text-muted-foreground hover:bg-muted hover:text-foreground",
-                                            collapsed && "justify-center px-0"
+                                            isCollapsed && "justify-center px-0"
                                         )}
                                     >
                                         <item.icon
@@ -125,7 +139,7 @@ export default function Sidebar({
                                                 active ? "text-brand-600" : ""
                                             )}
                                         />
-                                        {!collapsed && (
+                                        {!isCollapsed && (
                                             <>
                                                 <span className="flex-1">{item.label}</span>
                                                 {item.badge !== undefined && (
@@ -140,7 +154,7 @@ export default function Sidebar({
 
                                 return (
                                     <li key={item.href}>
-                                        {collapsed ? (
+                                        {isCollapsed ? (
                                             <TooltipProvider delayDuration={0}>
                                                 <Tooltip>
                                                     <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
@@ -163,14 +177,14 @@ export default function Sidebar({
             {/* Collapse toggle */}
             <div className="border-t border-border p-3">
                 <button
-                    onClick={() => setCollapsed(!collapsed)}
+                    onClick={handleCollapseToggle}
                     className="flex w-full items-center justify-center rounded-lg p-2 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
-                    aria-label={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+                    aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
                 >
                     <ChevronLeft
                         className={cn(
                             "h-5 w-5 transition-transform duration-300",
-                            collapsed && "rotate-180"
+                            isCollapsed && "rotate-180"
                         )}
                     />
                 </button>
