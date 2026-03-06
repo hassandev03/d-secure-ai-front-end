@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import {
     LayoutDashboard,
     MessageSquare,
@@ -10,36 +11,49 @@ import {
 } from "lucide-react";
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
-
-const userNav: NavGroup[] = [
-    {
-        title: "Main",
-        items: [
-            { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
-            { label: "Chat", href: "/chat", icon: MessageSquare },
-            { label: "History", href: "/history", icon: History },
-        ],
-    },
-    {
-        title: "Account",
-        items: [
-            { label: "My Context", href: "/context", icon: BookText },
-            { label: "Profile", href: "/profile", icon: User },
-            { label: "Subscription", href: "/subscription", icon: CreditCard },
-        ],
-    },
-];
+import { useAuthStore } from "@/store/auth.store";
 
 export default function UserLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
+    const { user } = useAuthStore();
+    const [mounted, setMounted] = useState(false);
+
+    useEffect(() => {
+        setMounted(true);
+    }, []);
+
+    const showContextTab = user?.role === 'PROFESSIONAL' && (user?.subscriptionTier === 'PRO' || user?.subscriptionTier === 'MAX');
+
+    const userNav: NavGroup[] = [
+        {
+            title: "Main",
+            items: [
+                { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard },
+                { label: "Chat", href: "/chat", icon: MessageSquare },
+                { label: "History", href: "/history", icon: History },
+            ],
+        },
+        {
+            title: "Account",
+            items: [
+                ...(mounted && showContextTab ? [{ label: "My Context", href: "/context", icon: BookText }] : []),
+                { label: "Profile", href: "/profile", icon: User },
+                { label: "Subscription", href: "/subscription", icon: CreditCard },
+            ],
+        },
+    ];
+    const displayRole = mounted && user?.role
+        ? user.role.replace(/_/g, " ")
+        : "User";
+
     return (
         <div className="min-h-screen bg-background">
             <Sidebar
                 groups={userNav}
-                portalLabel="User"
+                portalLabel={displayRole}
                 portalColor="brand-700"
             />
             <div className="pl-64 transition-all duration-300">

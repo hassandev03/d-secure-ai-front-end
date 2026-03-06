@@ -1,8 +1,11 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { useAuthStore } from "@/store/auth.store";
+import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen, Edit, FileMusic } from "lucide-react";
 import { toast } from "sonner";
+import { useDropzone } from "react-dropzone";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -10,6 +13,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Switch } from "@/components/ui/switch";
 
 /* ── Mock data ─────────────────────────── */
 const initialTerms = [
@@ -33,9 +38,36 @@ const initialPatterns = [
 export default function MyContextPage() {
     const [terms, setTerms] = useState(initialTerms);
     const [docs, setDocs] = useState(initialDocs);
+    const [patterns, setPatterns] = useState(initialPatterns);
+
+    // Add new term form
     const [newTerm, setNewTerm] = useState("");
     const [newDef, setNewDef] = useState("");
     const [newCat, setNewCat] = useState("");
+
+    // Editing Dialogs
+    const [editingTerm, setEditingTerm] = useState<typeof initialTerms[0] | null>(null);
+    const [editingPattern, setEditingPattern] = useState<typeof initialPatterns[0] | null>(null);
+    const [isPatternAddModalOpen, setIsPatternAddModalOpen] = useState(false);
+
+    // Pattern Add form
+    const [newPatLabel, setNewPatLabel] = useState("");
+    const [newPatRegex, setNewPatRegex] = useState("");
+    const [newPatExample, setNewPatExample] = useState("");
+
+    const router = useRouter();
+    const { user } = useAuthStore();
+    const [authorized, setAuthorized] = useState<boolean | null>(null);
+
+    useEffect(() => {
+        if (!user) return;
+        const canAccess = user.role === 'PROFESSIONAL' && (user.subscriptionTier === 'PRO' || user.subscriptionTier === 'MAX');
+        if (!canAccess) {
+            router.replace("/dashboard");
+        } else {
+            setAuthorized(true);
+        }
+    }, [user, router]);
 
     const handleAddTerm = () => {
         if (!newTerm || !newDef) return;
@@ -44,8 +76,63 @@ export default function MyContextPage() {
         toast.success(`Term "${newTerm}" added!`);
     };
 
+    const handleSaveEditTerm = () => {
+        if (!editingTerm) return;
+        setTerms(prev => prev.map(t => t.id === editingTerm.id ? editingTerm : t));
+        setEditingTerm(null);
+        toast.success("Term updated successfully.");
+    };
+
     const handleRemoveTerm = (id: number) => setTerms((prev) => prev.filter((t) => t.id !== id));
     const handleRemoveDoc = (id: number) => setDocs((prev) => prev.filter((d) => d.id !== id));
+
+    const handleAddPattern = () => {
+        if (!newPatLabel || !newPatRegex) return;
+        setPatterns(prev => [...prev, { id: Date.now(), label: newPatLabel, pattern: newPatRegex, example: newPatExample, active: true }]);
+        setNewPatLabel(""); setNewPatRegex(""); setNewPatExample("");
+        setIsPatternAddModalOpen(false);
+        toast.success("Pattern added successfully.");
+    };
+
+    const handleSaveEditPattern = () => {
+        if (!editingPattern) return;
+        setPatterns(prev => prev.map(p => p.id === editingPattern.id ? editingPattern : p));
+        setEditingPattern(null);
+        toast.success("Pattern updated successfully.");
+    };
+
+    const handleRemovePattern = (id: number) => setPatterns(prev => prev.filter(p => p.id !== id));
+
+    const togglePatternActive = (id: number) => {
+        setPatterns(prev => prev.map(p => p.id === id ? { ...p, active: !p.active } : p));
+    };
+
+    // Dropzone logic
+    const onDrop = useCallback((acceptedFiles: File[]) => {
+        acceptedFiles.forEach((file) => {
+            const sizeInMB = file.size / (1024 * 1024);
+            const sizeStr = sizeInMB > 1 ? `${sizeInMB.toFixed(1)} MB` : `${(file.size / 1024).toFixed(0)} KB`;
+            setDocs(prev => [...prev, {
+                id: Date.now() + Math.random(),
+                name: file.name,
+                size: sizeStr,
+                uploadedAt: new Date().toISOString().split('T')[0]
+            }]);
+            toast.success(`${file.name} uploaded and processed.`);
+        });
+    }, []);
+
+    const { getRootProps, getInputProps, isDragActive } = useDropzone({
+        onDrop,
+        accept: {
+            'application/pdf': ['.pdf'],
+            'application/vnd.openxmlformats-officedocument.wordprocessingml.document': ['.docx'],
+            'text/plain': ['.txt']
+        },
+        maxSize: 10485760 // 10MB
+    });
+
+    if (!authorized) return null;
 
     return (
         <div className="mx-auto max-w-5xl">
@@ -82,7 +169,7 @@ export default function MyContextPage() {
                     <Card>
                         <CardHeader><CardTitle className="text-base">Add Term</CardTitle></CardHeader>
                         <CardContent className="flex flex-col gap-3 sm:flex-row">
-                            <Input placeholder="Term" value={newTerm} onChange={(e) => setNewTerm(e.target.value)} className="sm:w-44" />
+                            <Input placeholder="Term (e.g. Project Enigma)" value={newTerm} onChange={(e) => setNewTerm(e.target.value)} className="sm:w-44" />
                             <Input placeholder="Definition" value={newDef} onChange={(e) => setNewDef(e.target.value)} className="flex-1" />
                             <Input placeholder="Category" value={newCat} onChange={(e) => setNewCat(e.target.value)} className="sm:w-32" />
                             <Button onClick={handleAddTerm} className="bg-brand-700 hover:bg-brand-800"><Plus className="mr-2 h-4 w-4" />Add</Button>
@@ -97,7 +184,7 @@ export default function MyContextPage() {
                         <CardContent>
                             <div className="space-y-3">
                                 {terms.map((entry) => (
-                                    <div key={entry.id} className="flex items-start justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/50">
+                                    <div key={entry.id} className="flex items-start justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 group">
                                         <div className="flex-1">
                                             <div className="flex items-center gap-2">
                                                 <p className="text-sm font-semibold text-foreground">{entry.term}</p>
@@ -105,9 +192,14 @@ export default function MyContextPage() {
                                             </div>
                                             <p className="mt-1 text-sm text-muted-foreground">{entry.definition}</p>
                                         </div>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger shrink-0" onClick={() => handleRemoveTerm(entry.id)}>
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
+                                        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingTerm(entry)}>
+                                                <Edit className="h-4 w-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger shrink-0" onClick={() => handleRemoveTerm(entry.id)}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
+                                        </div>
                                     </div>
                                 ))}
                                 {terms.length === 0 && (
@@ -126,12 +218,16 @@ export default function MyContextPage() {
                             <CardDescription>Upload work documents to enrich the AI&apos;s understanding of your domain across all conversations.</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="flex items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/30 p-8 transition-colors hover:border-brand-300 cursor-pointer">
+                            <div
+                                {...getRootProps()}
+                                className={`flex items-center justify-center rounded-xl border-2 border-dashed p-8 transition-colors cursor-pointer ${isDragActive ? 'border-brand-500 bg-brand-50' : 'border-border bg-muted/30 hover:border-brand-300'}`}
+                            >
+                                <input {...getInputProps()} />
                                 <div className="text-center">
-                                    <Upload className="mx-auto h-10 w-10 text-muted-foreground" />
-                                    <p className="mt-2 text-sm font-medium">Drop files here or click to upload</p>
+                                    <Upload className={`mx-auto h-10 w-10 ${isDragActive ? 'text-brand-500' : 'text-muted-foreground'}`} />
+                                    <p className="mt-2 text-sm font-medium">{isDragActive ? "Drop the files here" : "Drop files here or click to upload"}</p>
                                     <p className="text-xs text-muted-foreground mt-1">PDF, DOCX, TXT — up to 10 MB</p>
-                                    <Button variant="outline" size="sm" className="mt-3">Browse Files</Button>
+                                    <Button variant="outline" size="sm" className="mt-3 pointer-events-none">Browse Files</Button>
                                 </div>
                             </div>
                         </CardContent>
@@ -170,27 +266,113 @@ export default function MyContextPage() {
                 <TabsContent value="patterns" className="mt-6 space-y-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-base">Custom Anonymization Patterns</CardTitle>
-                            <CardDescription>Define regex patterns to detect your domain-specific sensitive data (client IDs, project codes, etc.).</CardDescription>
+                            <div className="flex justify-between items-center">
+                                <div>
+                                    <CardTitle className="text-base">Custom Anonymization Patterns</CardTitle>
+                                    <CardDescription>Define regex patterns to detect your domain-specific sensitive data (client IDs, project codes, etc.).</CardDescription>
+                                </div>
+                                <Button className="bg-brand-700 hover:bg-brand-800" onClick={() => setIsPatternAddModalOpen(true)}>
+                                    <Plus className="mr-2 h-4 w-4" />Add Pattern
+                                </Button>
+                            </div>
                         </CardHeader>
                         <CardContent>
                             <div className="space-y-4">
-                                {initialPatterns.map((p) => (
-                                    <div key={p.id} className="flex items-center justify-between rounded-lg border border-border p-4">
+                                {patterns.map((p) => (
+                                    <div key={p.id} className="flex items-center justify-between rounded-lg border border-border p-4 overflow-hidden group">
                                         <div>
-                                            <p className="text-sm font-medium">{p.label}</p>
-                                            <code className="mt-1 inline-block text-xs bg-muted px-2 py-0.5 rounded font-mono">{p.pattern}</code>
-                                            <p className="text-xs text-muted-foreground mt-1">Example: {p.example}</p>
+                                            <p className="text-sm font-medium flex items-center gap-2">
+                                                {p.label}
+                                                <Badge variant={p.active ? "default" : "secondary"} className={p.active ? "bg-success/10 text-success hover:bg-success/20 border-0" : ""}>{p.active ? "Active" : "Disabled"}</Badge>
+                                            </p>
+                                            <code className="mt-1.5 inline-block text-xs bg-muted px-2 py-0.5 rounded font-mono border border-border/50">{p.pattern}</code>
+                                            {p.example && <p className="text-[11px] text-muted-foreground mt-1.5">Example: {p.example}</p>}
                                         </div>
-                                        <Badge variant={p.active ? "default" : "secondary"}>{p.active ? "Active" : "Disabled"}</Badge>
+                                        <div className="flex items-center gap-2 sm:gap-4">
+                                            <Switch checked={p.active} onCheckedChange={() => togglePatternActive(p.id)} />
+                                            <div className="flex items-center gap-1">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingPattern(p)}>
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemovePattern(p.id)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
                                     </div>
                                 ))}
+                                {patterns.length === 0 && (
+                                    <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No patterns added yet</p></div>
+                                )}
                             </div>
-                            <Button variant="outline" className="mt-4"><Plus className="mr-2 h-4 w-4" />Add Pattern</Button>
                         </CardContent>
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* Editing Term Modal */}
+            <Dialog open={!!editingTerm} onOpenChange={(open) => !open && setEditingTerm(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Edit Term</DialogTitle>
+                    </DialogHeader>
+                    {editingTerm && (
+                        <div className="grid gap-4 py-4">
+                            <div className="space-y-2"><Label>Term</Label><Input value={editingTerm.term} onChange={e => setEditingTerm({ ...editingTerm, term: e.target.value })} /></div>
+                            <div className="space-y-2"><Label>Definition</Label><Input value={editingTerm.definition} onChange={e => setEditingTerm({ ...editingTerm, definition: e.target.value })} /></div>
+                            <div className="space-y-2"><Label>Category</Label><Input value={editingTerm.category} onChange={e => setEditingTerm({ ...editingTerm, category: e.target.value })} /></div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setEditingTerm(null)}>Cancel</Button>
+                        <Button onClick={handleSaveEditTerm} className="bg-brand-600 hover:bg-brand-700">Save Changes</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* Add/Edit Pattern Modal */}
+            <Dialog open={!!editingPattern || isPatternAddModalOpen} onOpenChange={(open) => { if (!open) { setEditingPattern(null); setIsPatternAddModalOpen(false); } }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>{editingPattern ? "Edit Pattern" : "Add Custom Pattern"}</DialogTitle>
+                        <DialogDescription>Define a regular expression to instruct the anonymizer on what to blank out.</DialogDescription>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Label/Name</Label>
+                            <Input
+                                placeholder="e.g. Account Number"
+                                value={editingPattern ? editingPattern.label : newPatLabel}
+                                onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, label: e.target.value }) : setNewPatLabel(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Regex Pattern</Label>
+                            <Input
+                                placeholder="e.g. ACCT-[0-9]{6}"
+                                value={editingPattern ? editingPattern.pattern : newPatRegex}
+                                onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, pattern: e.target.value }) : setNewPatRegex(e.target.value)}
+                                className="font-mono text-sm"
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Example Match <span className="text-muted-foreground font-normal">(Optional)</span></Label>
+                            <Input
+                                placeholder="e.g. ACCT-123456"
+                                value={editingPattern ? editingPattern.example : newPatExample}
+                                onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, example: e.target.value }) : setNewPatExample(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => { setEditingPattern(null); setIsPatternAddModalOpen(false); }}>Cancel</Button>
+                        <Button onClick={editingPattern ? handleSaveEditPattern : handleAddPattern} className="bg-brand-600 hover:bg-brand-700">
+                            {editingPattern ? "Save Changes" : "Create Pattern"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
         </div>
     );
 }

@@ -88,7 +88,7 @@ const welcomeExamples = [
    ══════════════════════════════════════════════════════ */
 export default function ChatPage() {
     const { user } = useAuthStore();
-    const isProfessional = user?.role === "PROFESSIONAL";
+    const showContextBadge = user?.role === 'PROFESSIONAL' && (user?.subscriptionTier === 'PRO' || user?.subscriptionTier === 'MAX');
 
     const [messages, setMessages] = useState<Message[]>([]);
     const [input, setInput] = useState("");
@@ -185,8 +185,8 @@ export default function ChatPage() {
                 </div>
 
                 <div className="flex items-center gap-2">
-                    {/* Context shortcut — professionals & subscribed users only */}
-                    {isProfessional && (
+                    {/* Context shortcut — professionals with PRO/MAX subscriptions only */}
+                    {showContextBadge && (
                         <Link href="/context">
                             <Badge
                                 variant="outline"
@@ -222,18 +222,18 @@ export default function ChatPage() {
             </div>
 
             {/* ─── Messages ─── */}
-            <div className="flex-1 overflow-y-auto space-y-4 pr-2">
+            <div className="flex flex-1 flex-col overflow-y-auto space-y-4 pr-2">
                 {messages.length === 0 ? (
-                    <div className="flex h-full flex-col items-center justify-center text-center">
-                        <div className="flex h-16 w-16 items-center justify-center rounded-2xl bg-brand-50 mb-4">
+                    <div className="m-auto flex w-full max-w-lg flex-col items-center justify-center text-center py-8">
+                        <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-50 mb-4">
                             <Shield className="h-8 w-8 text-brand-600" />
                         </div>
                         <h3 className="text-xl font-semibold text-foreground">Privacy-First AI Assistant</h3>
-                        <p className="mt-2 max-w-md text-sm text-muted-foreground">
+                        <p className="mt-2 text-sm text-muted-foreground">
                             Your prompts are automatically anonymized before being sent to the AI model.
                             Personal data never leaves your device in plaintext.
                         </p>
-                        <div className="mt-8 grid gap-2 sm:grid-cols-2 max-w-lg w-full">
+                        <div className="mt-8 grid w-full gap-2 sm:grid-cols-2">
                             {welcomeExamples.map((ex) => (
                                 <button
                                     key={ex}

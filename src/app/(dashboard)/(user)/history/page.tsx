@@ -2,23 +2,30 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { Search, MessageSquare, Trash2, Calendar } from "lucide-react";
+import { Search, MessageSquare, Trash2, Calendar, Paperclip } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
-import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { subDays, format } from "date-fns";
+
+const today = new Date();
+const d0 = format(today, "yyyy-MM-dd");
+const d1 = format(subDays(today, 1), "yyyy-MM-dd");
+const d2 = format(subDays(today, 2), "yyyy-MM-dd");
+const d3 = format(subDays(today, 5), "yyyy-MM-dd");
+const d4 = format(subDays(today, 10), "yyyy-MM-dd");
 
 const mockSessions = [
-    { id: "sess-1", title: "GDPR Compliance Query", model: "Claude 4.6 Sonnet", provider: "Anthropic", messages: 12, date: "2025-12-01", time: "10:30 AM" },
-    { id: "sess-2", title: "Code Review — Auth Module", model: "GPT-5.1", provider: "OpenAI", messages: 8, date: "2025-12-01", time: "8:15 AM" },
-    { id: "sess-3", title: "Market Research Analysis", model: "Gemini 3.1 Pro", provider: "Google", messages: 15, date: "2025-11-30", time: "3:45 PM" },
-    { id: "sess-4", title: "SQL Optimization Help", model: "Claude 4.5 Haiku", provider: "Anthropic", messages: 6, date: "2025-11-30", time: "11:20 AM" },
-    { id: "sess-5", title: "Technical Writing Draft", model: "GPT-4o", provider: "OpenAI", messages: 20, date: "2025-11-29", time: "2:00 PM" },
-    { id: "sess-6", title: "API Design Review", model: "Claude 4.6 Sonnet", provider: "Anthropic", messages: 18, date: "2025-11-28", time: "4:30 PM" },
-    { id: "sess-7", title: "Bug Triage Summary", model: "GPT-5.1", provider: "OpenAI", messages: 10, date: "2025-11-27", time: "9:00 AM" },
-    { id: "sess-8", title: "Legal Document Drafting", model: "Claude 4.6 Opus", provider: "Anthropic", messages: 25, date: "2025-11-26", time: "1:15 PM" },
+    { id: "sess-1", title: "GDPR Compliance Query", model: "Claude 4.6 Sonnet", provider: "Anthropic", messages: 12, date: d0, time: "10:30 AM", hasFile: true },
+    { id: "sess-2", title: "Code Review — Auth Module", model: "GPT-5.1", provider: "OpenAI", messages: 8, date: d0, time: "8:15 AM", hasFile: false },
+    { id: "sess-3", title: "Market Research Analysis", model: "Gemini 3.1 Pro", provider: "Google", messages: 15, date: d1, time: "3:45 PM", hasFile: true },
+    { id: "sess-4", title: "SQL Optimization Help", model: "Claude 4.5 Haiku", provider: "Anthropic", messages: 6, date: d1, time: "11:20 AM", hasFile: false },
+    { id: "sess-5", title: "Technical Writing Draft", model: "GPT-4o", provider: "OpenAI", messages: 20, date: d2, time: "2:00 PM", hasFile: false },
+    { id: "sess-6", title: "API Design Review", model: "Claude 4.6 Sonnet", provider: "Anthropic", messages: 18, date: d3, time: "4:30 PM", hasFile: true },
+    { id: "sess-7", title: "Bug Triage Summary", model: "GPT-5.1", provider: "OpenAI", messages: 10, date: d4, time: "9:00 AM", hasFile: false },
+    { id: "sess-8", title: "Legal Document Drafting", model: "Claude 4.6 Opus", provider: "Anthropic", messages: 25, date: d4, time: "1:15 PM", hasFile: true },
 ];
 
 const providerColor: Record<string, string> = {
@@ -30,11 +37,20 @@ const providerColor: Record<string, string> = {
 export default function HistoryPage() {
     const [search, setSearch] = useState("");
     const [providerFilter, setProviderFilter] = useState("all");
+    const [dateRange, setDateRange] = useState("all");
+    const [hasFile, setHasFile] = useState("all");
 
     const filtered = mockSessions.filter((s) => {
         const matchSearch = s.title.toLowerCase().includes(search.toLowerCase());
         const matchProvider = providerFilter === "all" || s.provider === providerFilter;
-        return matchSearch && matchProvider;
+        const matchFile = hasFile === "all" || (hasFile === "yes" ? s.hasFile : !s.hasFile);
+
+        let matchDate = true;
+        if (dateRange === "today") matchDate = s.date === d0;
+        if (dateRange === "7days") matchDate = new Date(s.date) >= subDays(today, 7);
+        if (dateRange === "30days") matchDate = new Date(s.date) >= subDays(today, 30);
+
+        return matchSearch && matchProvider && matchDate && matchFile;
     });
 
     // Group by date
@@ -52,36 +68,72 @@ export default function HistoryPage() {
                 breadcrumbs={[{ label: "User", href: "/dashboard" }, { label: "History" }]}
             />
 
-            <Card className="mb-6">
-                <CardContent className="flex flex-col gap-3 p-4 sm:flex-row sm:items-center">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input placeholder="Search sessions..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
-                    </div>
-                    <Select value={providerFilter} onValueChange={setProviderFilter}>
-                        <SelectTrigger className="w-36"><SelectValue /></SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All Providers</SelectItem>
-                            <SelectItem value="OpenAI">OpenAI</SelectItem>
-                            <SelectItem value="Anthropic">Anthropic</SelectItem>
-                            <SelectItem value="Google">Google</SelectItem>
-                        </SelectContent>
-                    </Select>
-                </CardContent>
-            </Card>
+            <div className="mb-6 grid gap-3 sm:grid-cols-2 md:grid-cols-4 lg:grid-cols-5">
+                <div className="relative md:col-span-2">
+                    <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        placeholder="Search sessions..."
+                        className="pl-9 bg-white shadow-sm w-full"
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                    />
+                </div>
+
+                <Select value={dateRange} onValueChange={setDateRange}>
+                    <SelectTrigger className="bg-white shadow-sm">
+                        <SelectValue placeholder="Date Range" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">Any Time</SelectItem>
+                        <SelectItem value="today">Today</SelectItem>
+                        <SelectItem value="7days">Last 7 Days</SelectItem>
+                        <SelectItem value="30days">Last 30 Days</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <Select value={providerFilter} onValueChange={setProviderFilter}>
+                    <SelectTrigger className="bg-white shadow-sm">
+                        <SelectValue placeholder="Provider" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Providers</SelectItem>
+                        <SelectItem value="OpenAI">OpenAI</SelectItem>
+                        <SelectItem value="Anthropic">Anthropic</SelectItem>
+                        <SelectItem value="Google">Google</SelectItem>
+                    </SelectContent>
+                </Select>
+
+                <Select value={hasFile} onValueChange={setHasFile}>
+                    <SelectTrigger className="bg-white shadow-sm">
+                        <SelectValue placeholder="Files" />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value="all">All Sessions</SelectItem>
+                        <SelectItem value="yes">With Files</SelectItem>
+                        <SelectItem value="no">Without Files</SelectItem>
+                    </SelectContent>
+                </Select>
+            </div>
 
             {Object.entries(grouped).map(([date, sessions]) => (
                 <div key={date} className="mb-6">
                     <div className="flex items-center gap-2 mb-3">
                         <Calendar className="h-4 w-4 text-muted-foreground" />
-                        <h3 className="text-sm font-semibold text-muted-foreground">{date}</h3>
+                        <h3 className="text-sm font-semibold text-muted-foreground">
+                            {date === d0 ? "Today" : date === d1 ? "Yesterday" : format(new Date(date), "MMM d, yyyy")}
+                        </h3>
                     </div>
                     <div className="space-y-2">
                         {sessions.map((s) => (
                             <Link key={s.id} href={`/chat/${s.id}`}>
                                 <div className="group flex items-center gap-4 rounded-xl border border-border bg-white p-4 transition-all hover:shadow-sm hover:border-brand-200 cursor-pointer">
-                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 shrink-0">
+                                    <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50 shrink-0 relative">
                                         <MessageSquare className="h-5 w-5 text-brand-600" />
+                                        {s.hasFile && (
+                                            <div className="absolute -bottom-1 -right-1 rounded-full bg-white p-0.5 border border-border">
+                                                <Paperclip className="h-3 w-3 text-muted-foreground" />
+                                            </div>
+                                        )}
                                     </div>
                                     <div className="flex-1 min-w-0">
                                         <p className="text-sm font-medium text-foreground group-hover:text-brand-600 truncate">{s.title}</p>

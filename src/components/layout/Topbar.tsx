@@ -33,15 +33,6 @@ export default function Topbar() {
 
     return (
         <header className="sticky top-0 z-30 flex h-16 items-center justify-between border-b border-border bg-white/80 px-6 backdrop-blur-lg">
-            {/* Search */}
-            <div className="relative hidden w-full max-w-sm md:block">
-                <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                    placeholder="Search..."
-                    className="h-9 pl-9 bg-muted/50 border-0 focus-visible:ring-1"
-                />
-            </div>
-
             {/* Right side */}
             <div className="ml-auto flex items-center gap-3">
                 {/* Notifications */}
@@ -74,11 +65,11 @@ export default function Topbar() {
                             <p className="text-xs text-muted-foreground">{user?.email}</p>
                         </div>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => router.push('/profile')} className="cursor-pointer">
                             <User className="mr-2 h-4 w-4" /> Profile
                         </DropdownMenuItem>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={handleLogout} className="text-danger focus:text-danger">
+                        <DropdownMenuItem onClick={handleLogout} className="text-danger focus:text-danger cursor-pointer">
                             <LogOut className="mr-2 h-4 w-4" /> Sign Out
                         </DropdownMenuItem>
                     </DropdownMenuContent>

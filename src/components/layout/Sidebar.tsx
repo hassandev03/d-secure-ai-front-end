@@ -14,6 +14,7 @@ import { APP_NAME } from "@/lib/constants";
 import {
     Tooltip,
     TooltipContent,
+    TooltipProvider,
     TooltipTrigger,
 } from "@/components/ui/tooltip";
 
@@ -58,8 +59,11 @@ export default function Sidebar({
             )}
         >
             {/* Logo */}
-            <div className="flex h-16 shrink-0 items-center border-b border-border px-4">
-                <Link href="/" className="flex items-center gap-2 overflow-hidden">
+            <div className={cn(
+                "flex h-16 shrink-0 items-center border-b border-border transition-all",
+                collapsed ? "justify-center" : "px-4"
+            )}>
+                <Link href="/" className="flex items-center gap-2">
                     <div
                         className={cn(
                             "flex h-9 w-9 shrink-0 items-center justify-center rounded-lg text-white",
@@ -137,12 +141,14 @@ export default function Sidebar({
                                 return (
                                     <li key={item.href}>
                                         {collapsed ? (
-                                            <Tooltip delayDuration={0}>
-                                                <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
-                                                <TooltipContent side="right" sideOffset={8}>
-                                                    {item.label}
-                                                </TooltipContent>
-                                            </Tooltip>
+                                            <TooltipProvider delayDuration={0}>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>{linkContent}</TooltipTrigger>
+                                                    <TooltipContent side="right" sideOffset={8}>
+                                                        {item.label}
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                            </TooltipProvider>
                                         ) : (
                                             linkContent
                                         )}
