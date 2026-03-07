@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import {
     Send, Plus, Paperclip, Mic, Bot, User, Shield, Sparkles,
     ChevronDown, Eye, ExternalLink, X, FileText
@@ -13,25 +14,9 @@ import { MODELS, DEFAULT_MODEL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
 import type { LLMModel } from "@/types/chat.types";
+import { getChatSession, getChatMessages, type ChatMessage, type AnonymizedEntity } from "@/services/chat.service";
 
-/* ── Types ──────────────────────────────────────────── */
-interface AnonymizedEntity {
-    original: string;
-    replacement: string;
-    type: "PERSON" | "ORG" | "PROJECT" | "LOCATION" | "DATE" | "EMAIL" | "PHONE" | "CUSTOM";
-}
-
-interface Message {
-    id: string;
-    role: "user" | "assistant";
-    content: string;
-    anonymizedContent?: string;
-    entities?: AnonymizedEntity[];
-    files?: string[];
-    timestamp: Date;
-}
-
-/* ── Mock PII detection ──────────────────────────────── */
+/* ── Mock entity detection ───────────────────────────── */
 function detectEntities(text: string): AnonymizedEntity[] {
     const patterns: { regex: RegExp; type: AnonymizedEntity["type"]; prefix: string }[] = [
         { regex: /\b(Ahmed|Khan|Sarah|John|Alex|Fatima|Carlos|Raj|Lisa)\b/gi, type: "PERSON", prefix: "PERSON" },
@@ -66,7 +51,7 @@ function anonymize(text: string, entities: AnonymizedEntity[]): string {
 }
 
 /* ── Entity type colours ────────────────────────────── */
-const entityColors: Record<AnonymizedEntity["type"], string> = {
+const entityColors: Record<string, string> = {
     PERSON: "bg-violet-100 text-violet-700 border-violet-200",
     ORG: "bg-amber-100 text-amber-700 border-amber-200",
     PROJECT: "bg-cyan-100 text-cyan-700 border-cyan-200",
@@ -76,6 +61,17 @@ const entityColors: Record<AnonymizedEntity["type"], string> = {
     PHONE: "bg-orange-100 text-orange-700 border-orange-200",
     CUSTOM: "bg-gray-100 text-gray-700 border-gray-200",
 };
+
+/* ── Local Message type (extends service ChatMessage for UI-only fields) ── */
+interface Message {
+    id: string;
+    role: "user" | "assistant";
+    content: string;
+    anonymizedContent?: string;
+    entities?: AnonymizedEntity[];
+    files?: string[];
+    timestamp: Date;
+}
 
 const welcomeExamples = [
     "Analyze this contract for GDPR compliance risks",
@@ -89,12 +85,18 @@ const welcomeExamples = [
    ══════════════════════════════════════════════════════ */
 export default function ChatPage() {
     const { user } = useAuthStore();
+    const router = useRouter();
+    const searchParams = useSearchParams();
+    const sessionId = searchParams.get("id");
+
     const showContextBadge = user?.role === 'PROFESSIONAL' && (user?.subscriptionTier === 'PRO' || user?.subscriptionTier === 'MAX');
 
     const [messages, setMessages] = useState<Message[]>([]);
+    const [chatTitle, setChatTitle] = useState("AI Chat");
     const [input, setInput] = useState("");
     const [model, setModel] = useState<LLMModel>(DEFAULT_MODEL);
     const [isLoading, setIsLoading] = useState(false);
+    const [isLoadingSession, setIsLoadingSession] = useState(false);
     const [expandedEntities, setExpandedEntities] = useState<string | null>(null);
     const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
@@ -102,9 +104,47 @@ export default function ChatPage() {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
+    /* ── Load existing chat session from URL param ── */
+    useEffect(() => {
+        if (!sessionId) {
+            setChatTitle("AI Chat");
+            setMessages([]);
+            return;
+        }
+
+        setIsLoadingSession(true);
+        Promise.all([getChatSession(sessionId), getChatMessages(sessionId)])
+            .then(([session, chatMessages]) => {
+                if (session) {
+                    setChatTitle(session.title);
+                    setModel(session.model);
+                }
+                // Convert service ChatMessage[] to local Message[]
+                const mapped: Message[] = chatMessages.map((m: ChatMessage) => ({
+                    id: m.id,
+                    role: m.role,
+                    content: m.content,
+                    anonymizedContent: m.anonymizedContent,
+                    entities: m.entities,
+                    files: m.files,
+                    timestamp: new Date(m.createdAt),
+                }));
+                setMessages(mapped);
+            })
+            .finally(() => setIsLoadingSession(false));
+    }, [sessionId]);
+
     useEffect(() => {
         bottomRef.current?.scrollIntoView({ behavior: "smooth" });
     }, [messages]);
+
+    const handleNewChat = () => {
+        router.push("/chat");
+        setChatTitle("AI Chat");
+        setMessages([]);
+        setInput("");
+        setAttachedFiles([]);
+    };
 
     const handleSend = async () => {
         if (!input.trim() && attachedFiles.length === 0 || isLoading) return;
@@ -134,7 +174,7 @@ export default function ChatPage() {
             role: "assistant",
             content: fileNames.length > 0
                 ? `I've analyzed the ${fileNames.length} file(s) you attached alongside your request. All contents were securely parsed through D-SecureAI's anonymization pipeline.`
-                : "I've analyzed your request. Here's a detailed response with all sensitive information properly handled through D-SecureAI's anonymization pipeline.\n\nThe data has been processed through our PII detection engine, ensuring that personal identifiers, organization names, and project references are properly masked before reaching the AI model.\n\n**Key findings:**\n1. All PII entities were successfully detected and anonymized\n2. Context-aware mapping ensured referential consistency\n3. The response has been de-anonymized for your viewing",
+                : "I've analyzed your request. Here's a detailed response with all sensitive information properly handled through D-SecureAI's anonymization pipeline.\n\nThe data has been processed through our entity detection engine, ensuring that personal identifiers, organization names, and project references are properly masked before reaching the AI model.\n\n**Key findings:**\n1. All entities were successfully detected and anonymized\n2. Context-aware mapping ensured referential consistency\n3. The response has been de-anonymized for your viewing",
             entities: entities.length > 0 ? entities : [],
             timestamp: new Date(),
         };
@@ -197,7 +237,7 @@ export default function ChatPage() {
                         <Sparkles className="h-5 w-5 text-brand-600" />
                     </div>
                     <div>
-                        <h2 className="text-lg font-semibold">AI Chat</h2>
+                        <h2 className="text-lg font-semibold">{chatTitle}</h2>
                         <p className="text-xs text-muted-foreground">Your data is anonymized before reaching the AI</p>
                     </div>
                 </div>
@@ -233,7 +273,7 @@ export default function ChatPage() {
                         </SelectContent>
                     </Select>
 
-                    <Button variant="outline" size="icon" className="h-9 w-9" title="New chat">
+                    <Button variant="outline" size="icon" className="h-9 w-9" title="New chat" onClick={handleNewChat}>
                         <Plus className="h-4 w-4" />
                     </Button>
                 </div>
@@ -241,7 +281,12 @@ export default function ChatPage() {
 
             {/* ─── Messages ─── */}
             <div className="flex flex-1 flex-col overflow-y-auto space-y-4 pr-2">
-                {messages.length === 0 ? (
+                {isLoadingSession ? (
+                    <div className="m-auto flex flex-col items-center justify-center gap-3">
+                        <div className="h-8 w-8 rounded-full border-2 border-brand-600 border-t-transparent animate-spin" />
+                        <p className="text-sm text-muted-foreground">Loading conversation…</p>
+                    </div>
+                ) : messages.length === 0 ? (
                     <div className="m-auto flex w-full max-w-lg flex-col items-center justify-center text-center py-8">
                         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl bg-brand-50 mb-4">
                             <Shield className="h-8 w-8 text-brand-600" />
@@ -419,7 +464,7 @@ export default function ChatPage() {
                     </div>
                 </div>
                 <p className="mt-2 text-center text-[11px] text-muted-foreground">
-                    All prompts are processed through D-SecureAI&apos;s PII anonymization engine before reaching{" "}
+                    All prompts are processed through D-SecureAI&apos;s anonymization engine before reaching{" "}
                     {selectedModel?.name || "the AI model"}.
                 </p>
             </div>

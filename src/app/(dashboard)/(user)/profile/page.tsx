@@ -14,23 +14,26 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { INDUSTRIES } from "@/lib/constants";
+import { useAuthStore } from "@/store/auth.store";
 
 export default function ProfilePage() {
+    const { user } = useAuthStore();
     const [saving, setSaving] = useState(false);
 
     // Avatar State
     const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    // Profile States
-    const [firstName, setFirstName] = useState("Alex");
-    const [lastName, setLastName] = useState("Thompson");
-    const [email, setEmail] = useState("alex@freelance.com");
-    const [phone, setPhone] = useState("+1-555-0199");
-    const [country, setCountry] = useState("United States");
-    const [jobTitle, setJobTitle] = useState("Data Scientist");
-    const [industry, setIndustry] = useState("Technology");
-    const [bio, setBio] = useState("Experienced data scientist specializing in NLP and machine learning with a focus on healthcare applications.");
+    // Profile States — initialize from auth store
+    const nameParts = (user?.name || 'User').split(' ');
+    const [firstName, setFirstName] = useState(nameParts[0] || '');
+    const [lastName, setLastName] = useState(nameParts.slice(1).join(' ') || '');
+    const [email, setEmail] = useState(user?.email || '');
+    const [phone, setPhone] = useState(user?.phone || '');
+    const [country, setCountry] = useState(user?.country || '');
+    const [jobTitle, setJobTitle] = useState(user?.jobTitle || '');
+    const [industry, setIndustry] = useState(user?.industry || '');
+    const [bio, setBio] = useState("");
 
     // Dialog States
     const [passwordOpen, setPasswordOpen] = useState(false);
@@ -88,7 +91,10 @@ export default function ProfilePage() {
                     <div>
                         <h3 className="text-lg font-semibold">{firstName} {lastName}</h3>
                         <p className="text-sm text-muted-foreground">{email}</p>
-                        <p className="text-xs text-muted-foreground mt-1">Professional Account · Pro Plan</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {user?.role === 'PROFESSIONAL' ? 'Professional' : user?.role === 'ORG_EMPLOYEE' ? 'Organization Employee' : ''} Account
+                            {user?.subscriptionTier ? ` · ${user.subscriptionTier} Plan` : ''}
+                        </p>
                     </div>
                 </CardContent>
             </Card>

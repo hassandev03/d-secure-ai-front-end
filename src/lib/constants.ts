@@ -33,7 +33,7 @@ export const SUBSCRIPTION_PLANS = {
         requests: 50,
         sessionsPerDay: 3,
         features: [
-            'Basic PII & rule-based anonymization',
+            'Basic entity & rule-based anonymization',
             '50 AI requests/month',
             '3 chat sessions/day',
             'Standard support',

@@ -14,7 +14,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 const mockTerms = [
     { id: 1, term: "D-SecureAI", definition: "Our privacy-preserving AI gateway platform", category: "Product" },
-    { id: 2, term: "PII Masking Engine", definition: "Core component that detects and replaces personally identifiable information", category: "Technical" },
+    { id: 2, term: "Entity Masking Engine", definition: "Core component that detects and replaces personally identifiable information", category: "Technical" },
     { id: 3, term: "Project Falcon", definition: "Internal codename for upcoming enterprise analytics module", category: "Internal" },
     { id: 4, term: "CTRL Protocol", definition: "Internal data handling standard v2.3", category: "Compliance" },
     { id: 5, term: "QuotaSync", definition: "Real-time quota tracking and allocation system", category: "Technical" },

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Check, X, Zap, CreditCard, Lock, Plus, Trash2 } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
@@ -12,69 +12,35 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
-
-const plansData = [
-    {
-        key: "FREE",
-        name: "Free",
-        price: 0,
-        quotaTotal: 50,
-        features: [
-            { text: "50 AI requests/month", included: true },
-            { text: "Basic PII anonymization", included: true },
-            { text: "2 AI models", included: true },
-            { text: "File uploads", included: false },
-            { text: "Speech-to-text", included: false },
-            { text: "Chat history (7 days)", included: true },
-        ],
-    },
-    {
-        key: "PRO",
-        name: "Pro",
-        price: 29,
-        quotaTotal: 1000,
-        features: [
-            { text: "1,000 AI requests/month", included: true },
-            { text: "Full context-aware anonymization", included: true },
-            { text: "All AI providers", included: true },
-            { text: "PDF + file upload support", included: true },
-            { text: "Speech-to-text input", included: true },
-            { text: "90-day chat history", included: true },
-        ],
-    },
-    {
-        key: "MAX",
-        name: "Max",
-        price: 79,
-        quotaTotal: 5000,
-        features: [
-            { text: "5,000 AI requests/month", included: true },
-            { text: "Everything in Pro", included: true },
-            { text: "Extended context window", included: true },
-            { text: "API access", included: true },
-            { text: "Higher chat history limit", included: true },
-            { text: "Early access to new features", included: true },
-            { text: "Dedicated support", included: true },
-        ],
-    },
-];
+import { useAuthStore } from "@/store/auth.store";
+import {
+    getSubscriptionPlans, getPaymentMethods,
+    type SubscriptionPlanDisplay, type PaymentMethod
+} from "@/services/subscription.service";
 
 export default function SubscriptionPage() {
-    const [currentPlanKey, setCurrentPlanKey] = useState("PRO");
+    const { user } = useAuthStore();
+    const [plansData, setPlansData] = useState<SubscriptionPlanDisplay[]>([]);
+    const [currentPlanKey, setCurrentPlanKey] = useState<string>(user?.subscriptionTier || 'FREE');
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isAddCardModalOpen, setIsAddCardModalOpen] = useState(false);
-    const [selectedPlanForUpgrade, setSelectedPlanForUpgrade] = useState<typeof plansData[0] | null>(null);
+    const [selectedPlanForUpgrade, setSelectedPlanForUpgrade] = useState<SubscriptionPlanDisplay | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    const [savedCards, setSavedCards] = useState([
-        { id: "card-1", last4: "4242", brand: "Visa", isDefault: true }
-    ]);
+    const [savedCards, setSavedCards] = useState<PaymentMethod[]>([]);
     const [useNewCard, setUseNewCard] = useState(false);
     const [newCardNumber, setNewCardNumber] = useState("");
 
-    const activePlan = plansData.find(p => p.key === currentPlanKey)!;
+    useEffect(() => {
+        getSubscriptionPlans().then(setPlansData);
+        getPaymentMethods().then(setSavedCards);
+    }, []);
 
-    const handleUpgradeClick = (plan: typeof plansData[0]) => {
+    const activePlan = plansData.find(p => p.key === currentPlanKey);
+
+    if (!activePlan || plansData.length === 0) return null;
+
+    const handleUpgradeClick = (plan: SubscriptionPlanDisplay) => {
         setSelectedPlanForUpgrade(plan);
         setUseNewCard(savedCards.length === 0);
         setIsPaymentModalOpen(true);
@@ -82,7 +48,7 @@ export default function SubscriptionPage() {
 
     const handleDowngradeClick = async (planKey: string) => {
         toast.info("Downgrade scheduled for the end of the billing cycle.");
-        // We'll instantly change it here just to demonstrate interactivity for the mock
+        // We'll instantly change it here just to demonstrate interactivity
         setTimeout(() => {
             setCurrentPlanKey(planKey);
             toast.success(`Successfully downgraded to the ${plansData.find(p => p.key === planKey)?.name} plan.`);
@@ -100,7 +66,7 @@ export default function SubscriptionPage() {
         const last4 = newCardNumber.slice(-4);
         setSavedCards(prev => [
             ...prev.map(c => ({ ...c, isDefault: false })),
-            { id: `card-${Date.now()}`, last4, brand: "Mastercard", isDefault: true }
+            { id: `card-${Date.now()}`, last4, brand: 'Mastercard', expiryMonth: 12, expiryYear: 2029, isDefault: true }
         ]);
         setNewCardNumber("");
         setIsAddCardModalOpen(false);
@@ -118,7 +84,7 @@ export default function SubscriptionPage() {
             const last4 = newCardNumber.slice(-4);
             setSavedCards(prev => [
                 ...prev.map(c => ({ ...c, isDefault: false })),
-                { id: `card-${Date.now()}`, last4, brand: "Mastercard", isDefault: true }
+                { id: `card-${Date.now()}`, last4, brand: 'Mastercard', expiryMonth: 12, expiryYear: 2029, isDefault: true }
             ]);
             setNewCardNumber("");
         }
@@ -139,7 +105,7 @@ export default function SubscriptionPage() {
                 <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
                     <div>
                         <CardTitle className="text-base font-semibold">Current Plan: {activePlan.name}</CardTitle>
-                        <p className="text-xs text-muted-foreground mt-0.5">${activePlan.price}/month · Renews 2026-04-01</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">${activePlan.price}/month</p>
                     </div>
                     <Badge className="bg-brand-600">Active</Badge>
                 </CardHeader>
@@ -152,7 +118,7 @@ export default function SubscriptionPage() {
             <div className="grid gap-6 lg:grid-cols-3">
                 {plansData.map((plan) => {
                     const isCurrent = plan.key === currentPlanKey;
-                    const isUpgrade = plan.price > activePlan.price;
+                    const isUpgrade = plan.price > (activePlan?.price || 0);
 
                     return (
                         <Card key={plan.key} className={isCurrent ? "border-brand-500 ring-1 ring-brand-500/20 relative" : ""}>

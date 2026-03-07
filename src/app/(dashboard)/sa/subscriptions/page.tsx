@@ -11,7 +11,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 const plans = [
     {
         key: "starter", name: "Starter", price: 499, annualPrice: 4990, perUser: 4.99, type: "Enterprise",
-        features: ["Basic PII anonymization", "Up to 1,000 requests/month", "5 departments max", "Standard support", "30-day history"],
+        features: ["Basic entity anonymization", "Up to 1,000 requests/month", "5 departments max", "Standard support", "30-day history"],
         excluded: ["No context-aware anonymization", "No file upload", "Limited models"],
     },
     {
