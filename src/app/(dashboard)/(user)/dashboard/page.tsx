@@ -12,6 +12,7 @@ import {
     ComposedChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, ResponsiveContainer, PieChart, Pie, Cell, Legend
 } from "recharts";
+import { useAuthStore } from "@/store/auth.store";
 
 import {
     getUserDashboardStats, getDailyActivity, getModelUsageBreakdown, getEntityTypeBreakdown,
@@ -20,6 +21,7 @@ import {
 import { getChatSessions, type ChatSessionSummary } from "@/services/chat.service";
 
 export default function UserDashboard() {
+    const { user } = useAuthStore();
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [activity, setActivity] = useState<DailyActivityPoint[]>([]);
     const [models, setModels] = useState<ModelUsagePoint[]>([]);
@@ -27,7 +29,7 @@ export default function UserDashboard() {
     const [recentSessions, setRecentSessions] = useState<ChatSessionSummary[]>([]);
 
     useEffect(() => {
-        getUserDashboardStats().then(setStats);
+        getUserDashboardStats(user?.subscriptionTier).then(setStats);
         getDailyActivity(7).then(setActivity);
         getModelUsageBreakdown().then(setModels);
         getEntityTypeBreakdown().then(setEntities);

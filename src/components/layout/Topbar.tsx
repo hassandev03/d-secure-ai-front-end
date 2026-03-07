@@ -55,6 +55,9 @@ export default function Topbar() {
                             <div className="hidden text-left md:block">
                                 <p className="text-sm font-medium text-foreground">{user?.name || "User"}</p>
                                 <p className="text-[11px] text-muted-foreground">{user?.role?.replace("_", " ") || "Guest"}</p>
+                                {user?.orgName && (
+                                    <p className="text-[10px] text-muted-foreground">{user.orgName}</p>
+                                )}
                             </div>
                             <ChevronDown className="hidden h-4 w-4 text-muted-foreground md:block" />
                         </button>

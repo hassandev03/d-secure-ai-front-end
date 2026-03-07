@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, X, Zap, CreditCard, Lock, Plus, Trash2 } from "lucide-react";
+import { Check, X, Zap, CreditCard, Lock, Plus, Trash2, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
 import QuotaBar from "@/components/shared/QuotaBar";
@@ -12,11 +12,31 @@ import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/store/auth.store";
 import {
     getSubscriptionPlans, getPaymentMethods,
     type SubscriptionPlanDisplay, type PaymentMethod
 } from "@/services/subscription.service";
+
+/* ── Helpers ── */
+function formatCardNumber(value: string): string {
+    const digits = value.replace(/\D/g, '').slice(0, 16);
+    return digits.replace(/(.{4})/g, '$1 ').trim();
+}
+
+function FieldError({ error }: { error: string | null }) {
+    if (!error) return null;
+    return (
+        <p className="flex items-center gap-1 text-xs text-danger mt-1">
+            <AlertCircle className="h-3 w-3 shrink-0" />{error}
+        </p>
+    );
+}
+
+const currentYear = new Date().getFullYear();
+const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0'));
+const YEARS = Array.from({ length: 11 }, (_, i) => String(currentYear + i));
 
 export default function SubscriptionPage() {
     const { user } = useAuthStore();
@@ -29,7 +49,15 @@ export default function SubscriptionPage() {
 
     const [savedCards, setSavedCards] = useState<PaymentMethod[]>([]);
     const [useNewCard, setUseNewCard] = useState(false);
+
+    // Card form state
+    const [cardName, setCardName] = useState(user?.name || "");
     const [newCardNumber, setNewCardNumber] = useState("");
+    const [expiryMonth, setExpiryMonth] = useState("");
+    const [expiryYear, setExpiryYear] = useState("");
+    const [cvv, setCvv] = useState("");
+    const [address, setAddress] = useState("");
+    const [cardErrors, setCardErrors] = useState<Record<string, string | null>>({});
 
     useEffect(() => {
         getSubscriptionPlans().then(setPlansData);
@@ -40,15 +68,39 @@ export default function SubscriptionPage() {
 
     if (!activePlan || plansData.length === 0) return null;
 
+    const resetCardForm = () => {
+        setCardName(user?.name || "");
+        setNewCardNumber("");
+        setExpiryMonth("");
+        setExpiryYear("");
+        setCvv("");
+        setAddress("");
+        setCardErrors({});
+    };
+
+    const validateCardForm = (): boolean => {
+        const digits = newCardNumber.replace(/\D/g, '');
+        const errs: Record<string, string | null> = {
+            cardName: !cardName.trim() ? "Name on card is required." : null,
+            cardNumber: digits.length !== 16 ? "Card number must be 16 digits." : null,
+            expiryMonth: !expiryMonth ? "Select a month." : null,
+            expiryYear: !expiryYear ? "Select a year." : null,
+            cvv: !/^\d{3,4}$/.test(cvv) ? "CVV must be 3 or 4 digits." : null,
+            address: !address.trim() ? "Billing address is required." : null,
+        };
+        setCardErrors(errs);
+        return !Object.values(errs).some(e => e !== null);
+    };
+
     const handleUpgradeClick = (plan: SubscriptionPlanDisplay) => {
         setSelectedPlanForUpgrade(plan);
         setUseNewCard(savedCards.length === 0);
+        resetCardForm();
         setIsPaymentModalOpen(true);
     };
 
     const handleDowngradeClick = async (planKey: string) => {
         toast.info("Downgrade scheduled for the end of the billing cycle.");
-        // We'll instantly change it here just to demonstrate interactivity
         setTimeout(() => {
             setCurrentPlanKey(planKey);
             toast.success(`Successfully downgraded to the ${plansData.find(p => p.key === planKey)?.name} plan.`);
@@ -60,37 +112,135 @@ export default function SubscriptionPage() {
         toast.success("Payment method removed.");
     };
 
+    const createCardFromForm = (): PaymentMethod => {
+        const digits = newCardNumber.replace(/\D/g, '');
+        return {
+            id: `card-${Date.now()}`,
+            last4: digits.slice(-4),
+            brand: 'Mastercard',
+            expiryMonth: parseInt(expiryMonth),
+            expiryYear: parseInt(expiryYear),
+            isDefault: true,
+        };
+    };
+
     const handleAddCardSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (newCardNumber.length < 4) return;
-        const last4 = newCardNumber.slice(-4);
+        if (!validateCardForm()) return;
         setSavedCards(prev => [
             ...prev.map(c => ({ ...c, isDefault: false })),
-            { id: `card-${Date.now()}`, last4, brand: 'Mastercard', expiryMonth: 12, expiryYear: 2029, isDefault: true }
+            createCardFromForm(),
         ]);
-        setNewCardNumber("");
+        resetCardForm();
         setIsAddCardModalOpen(false);
         toast.success("Payment method added.");
     };
 
     const handlePaymentSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+        if (useNewCard || savedCards.length === 0) {
+            if (!validateCardForm()) return;
+        }
         setIsProcessing(true);
-        // Simulate payment gateway delay
         await new Promise((r) => setTimeout(r, 1500));
         setIsProcessing(false);
         setIsPaymentModalOpen(false);
-        if (useNewCard && newCardNumber.length >= 4) {
-            const last4 = newCardNumber.slice(-4);
+        if (useNewCard || savedCards.length === 0) {
             setSavedCards(prev => [
                 ...prev.map(c => ({ ...c, isDefault: false })),
-                { id: `card-${Date.now()}`, last4, brand: 'Mastercard', expiryMonth: 12, expiryYear: 2029, isDefault: true }
+                createCardFromForm(),
             ]);
-            setNewCardNumber("");
+            resetCardForm();
         }
         setCurrentPlanKey(selectedPlanForUpgrade!.key);
         toast.success(`Successfully upgraded to the ${selectedPlanForUpgrade!.name} Plan!`);
     };
+
+    /* ── Shared card form fields component ── */
+    const CardFormFields = () => (
+        <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
+            <div className="space-y-2">
+                <Label htmlFor="card-name">Name on Card <span className="text-danger">*</span></Label>
+                <Input id="card-name" value={cardName} onChange={(e) => { setCardName(e.target.value); setCardErrors(prev => ({ ...prev, cardName: null })); }} className={cardErrors.cardName ? "border-danger" : ""} />
+                <FieldError error={cardErrors.cardName ?? null} />
+            </div>
+
+            <div className="space-y-2">
+                <Label htmlFor="card-number">Card Number <span className="text-danger">*</span></Label>
+                <div className="relative">
+                    <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                        id="card-number"
+                        placeholder="0000 0000 0000 0000"
+                        className={`pl-9 ${cardErrors.cardNumber ? "border-danger" : ""}`}
+                        value={newCardNumber}
+                        onChange={(e) => {
+                            setNewCardNumber(formatCardNumber(e.target.value));
+                            setCardErrors(prev => ({ ...prev, cardNumber: null }));
+                        }}
+                        maxLength={19}
+                        inputMode="numeric"
+                    />
+                </div>
+                <FieldError error={cardErrors.cardNumber ?? null} />
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+                <div className="space-y-2">
+                    <Label>Month <span className="text-danger">*</span></Label>
+                    <Select value={expiryMonth} onValueChange={(v) => { setExpiryMonth(v); setCardErrors(prev => ({ ...prev, expiryMonth: null })); }}>
+                        <SelectTrigger className={cardErrors.expiryMonth ? "border-danger" : ""}>
+                            <SelectValue placeholder="MM" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {MONTHS.map(m => <SelectItem key={m} value={m}>{m}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FieldError error={cardErrors.expiryMonth ?? null} />
+                </div>
+                <div className="space-y-2">
+                    <Label>Year <span className="text-danger">*</span></Label>
+                    <Select value={expiryYear} onValueChange={(v) => { setExpiryYear(v); setCardErrors(prev => ({ ...prev, expiryYear: null })); }}>
+                        <SelectTrigger className={cardErrors.expiryYear ? "border-danger" : ""}>
+                            <SelectValue placeholder="YYYY" />
+                        </SelectTrigger>
+                        <SelectContent>
+                            {YEARS.map(y => <SelectItem key={y} value={y}>{y}</SelectItem>)}
+                        </SelectContent>
+                    </Select>
+                    <FieldError error={cardErrors.expiryYear ?? null} />
+                </div>
+                <div className="space-y-2">
+                    <Label>CVV <span className="text-danger">*</span></Label>
+                    <Input
+                        placeholder="123"
+                        type="password"
+                        value={cvv}
+                        onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '').slice(0, 4);
+                            setCvv(val);
+                            setCardErrors(prev => ({ ...prev, cvv: null }));
+                        }}
+                        maxLength={4}
+                        inputMode="numeric"
+                        className={cardErrors.cvv ? "border-danger" : ""}
+                    />
+                    <FieldError error={cardErrors.cvv ?? null} />
+                </div>
+            </div>
+
+            <div className="space-y-2">
+                <Label>Billing Address <span className="text-danger">*</span></Label>
+                <Input
+                    placeholder="123 Main St, City, Country"
+                    value={address}
+                    onChange={(e) => { setAddress(e.target.value); setCardErrors(prev => ({ ...prev, address: null })); }}
+                    className={cardErrors.address ? "border-danger" : ""}
+                />
+                <FieldError error={cardErrors.address ?? null} />
+            </div>
+        </div>
+    );
 
     return (
         <div className="mx-auto max-w-5xl">
@@ -159,7 +309,7 @@ export default function SubscriptionPage() {
             <Card>
                 <CardHeader className="flex flex-row items-center justify-between">
                     <CardTitle className="text-base">Payment Methods</CardTitle>
-                    <Button variant="outline" size="sm" onClick={() => setIsAddCardModalOpen(true)}>
+                    <Button variant="outline" size="sm" onClick={() => { resetCardForm(); setIsAddCardModalOpen(true); }}>
                         <Plus className="mr-2 h-4 w-4" /> Add Card
                     </Button>
                 </CardHeader>
@@ -178,7 +328,7 @@ export default function SubscriptionPage() {
                                             {card.brand} •••• {card.last4}
                                             {card.isDefault && <Badge variant="secondary" className="font-normal text-[10px] py-0 border-transparent bg-brand-100 text-brand-700">Default</Badge>}
                                         </p>
-                                        <p className="text-xs text-muted-foreground mt-0.5">Expires 12/28</p>
+                                        <p className="text-xs text-muted-foreground mt-0.5">Expires {String(card.expiryMonth).padStart(2, '0')}/{card.expiryYear}</p>
                                     </div>
                                 </div>
                                 <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger hover:bg-danger/10" onClick={() => handleDeleteCard(card.id)}>
@@ -195,14 +345,14 @@ export default function SubscriptionPage() {
                         </div>
                         <div className="flex items-center justify-between text-sm">
                             <span className="text-muted-foreground">Billing Email</span>
-                            <span className="font-medium">alex@freelance.com</span>
+                            <span className="font-medium">{user?.email || '—'}</span>
                         </div>
                     </div>
                 </CardContent>
             </Card>
 
             {/* Payment Modal */}
-            <Dialog open={isPaymentModalOpen} onOpenChange={setIsPaymentModalOpen}>
+            <Dialog open={isPaymentModalOpen} onOpenChange={(open) => { setIsPaymentModalOpen(open); if (!open) resetCardForm(); }}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
                         <DialogTitle>Upgrade to {selectedPlanForUpgrade?.name}</DialogTitle>
@@ -248,33 +398,7 @@ export default function SubscriptionPage() {
                                 </div>
                             )}
 
-                            {(useNewCard || savedCards.length === 0) && (
-                                <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
-                                    <div className="space-y-2">
-                                        <Label htmlFor="name">Name on Card</Label>
-                                        <Input id="name" defaultValue="Alex Thompson" required />
-                                    </div>
-
-                                    <div className="space-y-2">
-                                        <Label htmlFor="card">Card Information</Label>
-                                        <div className="relative">
-                                            <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                            <Input id="card" placeholder="0000 0000 0000 0000" className="pl-9" required value={newCardNumber} onChange={(e) => setNewCardNumber(e.target.value)} />
-                                        </div>
-                                    </div>
-
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="space-y-2">
-                                            <Label htmlFor="expiry">Expiry (MM/YY)</Label>
-                                            <Input id="expiry" placeholder="12/28" required />
-                                        </div>
-                                        <div className="space-y-2">
-                                            <Label htmlFor="cvc">CVC</Label>
-                                            <Input id="cvc" placeholder="123" required type="password" />
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
+                            {(useNewCard || savedCards.length === 0) && <CardFormFields />}
                         </div>
                         <DialogFooter className="flex-col gap-2 sm:flex-col sm:gap-2">
                             <Button type="submit" className="w-full bg-brand-600 hover:bg-brand-700 h-10" disabled={isProcessing}>
@@ -287,8 +411,9 @@ export default function SubscriptionPage() {
                     </form>
                 </DialogContent>
             </Dialog>
+
             {/* Add Card Modal */}
-            <Dialog open={isAddCardModalOpen} onOpenChange={setIsAddCardModalOpen}>
+            <Dialog open={isAddCardModalOpen} onOpenChange={(open) => { setIsAddCardModalOpen(open); if (!open) resetCardForm(); }}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
                         <DialogTitle>Add Payment Method</DialogTitle>
@@ -297,28 +422,8 @@ export default function SubscriptionPage() {
                         </DialogDescription>
                     </DialogHeader>
                     <form onSubmit={handleAddCardSubmit}>
-                        <div className="grid gap-4 py-4">
-                            <div className="space-y-2">
-                                <Label htmlFor="new-name">Name on Card</Label>
-                                <Input id="new-name" defaultValue="Alex Thompson" required />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="new-card">Card Information</Label>
-                                <div className="relative">
-                                    <CreditCard className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                                    <Input id="new-card" placeholder="0000 0000 0000 0000" className="pl-9" required value={newCardNumber} onChange={(e) => setNewCardNumber(e.target.value)} />
-                                </div>
-                            </div>
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="space-y-2">
-                                    <Label htmlFor="new-expiry">Expiry (MM/YY)</Label>
-                                    <Input id="new-expiry" placeholder="12/28" required />
-                                </div>
-                                <div className="space-y-2">
-                                    <Label htmlFor="new-cvc">CVC</Label>
-                                    <Input id="new-cvc" placeholder="123" required type="password" />
-                                </div>
-                            </div>
+                        <div className="py-4">
+                            <CardFormFields />
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsAddCardModalOpen(false)}>Cancel</Button>

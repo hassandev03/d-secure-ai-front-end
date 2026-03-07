@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef } from "react";
-import { Save, Loader2, Camera, ShieldCheck, KeyRound } from "lucide-react";
+import { Save, Loader2, Camera, ShieldCheck, KeyRound, AlertCircle } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -15,6 +15,43 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from "@/components/ui/badge";
 import { INDUSTRIES } from "@/lib/constants";
 import { useAuthStore } from "@/store/auth.store";
+
+/* ── Validation helpers ── */
+function validateEmail(email: string): string | null {
+    if (!email.trim()) return "Email is required.";
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) return "Enter a valid email address.";
+    return null;
+}
+
+function validateName(name: string, label: string): string | null {
+    if (!name.trim()) return `${label} is required.`;
+    if (name.trim().length < 2) return `${label} must be at least 2 characters.`;
+    return null;
+}
+
+function validatePhone(phone: string): string | null {
+    if (!phone.trim()) return null; // optional
+    if (!/^\+?[\d\s\-()]{7,20}$/.test(phone)) return "Enter a valid phone number.";
+    return null;
+}
+
+function validatePassword(password: string): string | null {
+    if (!password) return "Password is required.";
+    if (password.length < 8) return "Must be at least 8 characters.";
+    if (!/[A-Z]/.test(password)) return "Must contain an uppercase letter.";
+    if (!/[0-9]/.test(password)) return "Must contain a number.";
+    if (!/[^A-Za-z0-9]/.test(password)) return "Must contain a special character.";
+    return null;
+}
+
+function FieldError({ error }: { error: string | null }) {
+    if (!error) return null;
+    return (
+        <p className="flex items-center gap-1 text-xs text-danger mt-1">
+            <AlertCircle className="h-3 w-3 shrink-0" />{error}
+        </p>
+    );
+}
 
 export default function ProfilePage() {
     const { user } = useAuthStore();
@@ -35,9 +72,18 @@ export default function ProfilePage() {
     const [industry, setIndustry] = useState(user?.industry || '');
     const [bio, setBio] = useState("");
 
+    // Validation errors
+    const [errors, setErrors] = useState<Record<string, string | null>>({});
+
     // Dialog States
     const [passwordOpen, setPasswordOpen] = useState(false);
     const [twoFAOpen, setTwoFAOpen] = useState(false);
+
+    // Password form
+    const [currentPassword, setCurrentPassword] = useState("");
+    const [newPassword, setNewPassword] = useState("");
+    const [confirmPassword, setConfirmPassword] = useState("");
+    const [pwErrors, setPwErrors] = useState<Record<string, string | null>>({});
 
     const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -49,11 +95,48 @@ export default function ProfilePage() {
     };
 
     const handleSave = async () => {
+        // Validate all fields
+        const newErrors: Record<string, string | null> = {
+            firstName: validateName(firstName, "First Name"),
+            lastName: validateName(lastName, "Last Name"),
+            email: validateEmail(email),
+            phone: validatePhone(phone),
+        };
+        setErrors(newErrors);
+
+        const hasErrors = Object.values(newErrors).some(e => e !== null);
+        if (hasErrors) {
+            toast.error("Please fix the validation errors.");
+            return;
+        }
+
         setSaving(true);
-        // Simulate API call
         await new Promise((r) => setTimeout(r, 800));
         setSaving(false);
-        toast.success("Profile saved effectively.");
+        toast.success("Profile saved successfully.");
+    };
+
+    const handlePasswordChange = async () => {
+        const newPwErrors: Record<string, string | null> = {
+            currentPassword: !currentPassword ? "Current password is required." : null,
+            newPassword: validatePassword(newPassword),
+            confirmPassword: !confirmPassword
+                ? "Please confirm your new password."
+                : confirmPassword !== newPassword
+                    ? "Passwords do not match."
+                    : null,
+        };
+        setPwErrors(newPwErrors);
+
+        const hasErrors = Object.values(newPwErrors).some(e => e !== null);
+        if (hasErrors) return;
+
+        setPasswordOpen(false);
+        setCurrentPassword("");
+        setNewPassword("");
+        setConfirmPassword("");
+        setPwErrors({});
+        toast.success("Password updated successfully.");
     };
 
     return (
@@ -103,10 +186,26 @@ export default function ProfilePage() {
             <Card className="mb-6">
                 <CardHeader><CardTitle className="text-base">Personal Information</CardTitle></CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2"><Label>First Name</Label><Input value={firstName} onChange={(e) => setFirstName(e.target.value)} /></div>
-                    <div className="space-y-2"><Label>Last Name</Label><Input value={lastName} onChange={(e) => setLastName(e.target.value)} /></div>
-                    <div className="sm:col-span-2 space-y-2"><Label>Email</Label><Input value={email} onChange={(e) => setEmail(e.target.value)} type="email" /></div>
-                    <div className="space-y-2"><Label>Phone</Label><Input value={phone} onChange={(e) => setPhone(e.target.value)} /></div>
+                    <div className="space-y-2">
+                        <Label>First Name <span className="text-danger">*</span></Label>
+                        <Input value={firstName} onChange={(e) => { setFirstName(e.target.value); setErrors(prev => ({ ...prev, firstName: null })); }} className={errors.firstName ? "border-danger" : ""} />
+                        <FieldError error={errors.firstName ?? null} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Last Name <span className="text-danger">*</span></Label>
+                        <Input value={lastName} onChange={(e) => { setLastName(e.target.value); setErrors(prev => ({ ...prev, lastName: null })); }} className={errors.lastName ? "border-danger" : ""} />
+                        <FieldError error={errors.lastName ?? null} />
+                    </div>
+                    <div className="sm:col-span-2 space-y-2">
+                        <Label>Email <span className="text-danger">*</span></Label>
+                        <Input value={email} onChange={(e) => { setEmail(e.target.value); setErrors(prev => ({ ...prev, email: null })); }} type="email" className={errors.email ? "border-danger" : ""} />
+                        <FieldError error={errors.email ?? null} />
+                    </div>
+                    <div className="space-y-2">
+                        <Label>Phone</Label>
+                        <Input value={phone} onChange={(e) => { setPhone(e.target.value); setErrors(prev => ({ ...prev, phone: null })); }} placeholder="+1 234 567 8900" className={errors.phone ? "border-danger" : ""} />
+                        <FieldError error={errors.phone ?? null} />
+                    </div>
                     <div className="space-y-2"><Label>Country</Label><Input value={country} onChange={(e) => setCountry(e.target.value)} /></div>
                 </CardContent>
             </Card>
@@ -148,7 +247,7 @@ export default function ProfilePage() {
                             <Label>Password</Label>
                             <p className="text-xs text-muted-foreground mt-0.5">Last changed 30 days ago</p>
                         </div>
-                        <Dialog open={passwordOpen} onOpenChange={setPasswordOpen}>
+                        <Dialog open={passwordOpen} onOpenChange={(open) => { setPasswordOpen(open); if (!open) { setPwErrors({}); setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); } }}>
                             <DialogTrigger asChild><Button variant="outline" size="sm">Change Password</Button></DialogTrigger>
                             <DialogContent className="sm:max-w-[425px]">
                                 <DialogHeader>
@@ -156,12 +255,25 @@ export default function ProfilePage() {
                                     <DialogDescription>Ensure your account is using a long, random password to stay secure.</DialogDescription>
                                 </DialogHeader>
                                 <div className="grid gap-4 py-4">
-                                    <div className="space-y-2"><Label>Current Password</Label><Input type="password" /></div>
-                                    <div className="space-y-2"><Label>New Password</Label><Input type="password" /></div>
-                                    <div className="space-y-2"><Label>Confirm New Password</Label><Input type="password" /></div>
+                                    <div className="space-y-2">
+                                        <Label>Current Password <span className="text-danger">*</span></Label>
+                                        <Input type="password" value={currentPassword} onChange={(e) => { setCurrentPassword(e.target.value); setPwErrors(prev => ({ ...prev, currentPassword: null })); }} className={pwErrors.currentPassword ? "border-danger" : ""} />
+                                        <FieldError error={pwErrors.currentPassword ?? null} />
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>New Password <span className="text-danger">*</span></Label>
+                                        <Input type="password" value={newPassword} onChange={(e) => { setNewPassword(e.target.value); setPwErrors(prev => ({ ...prev, newPassword: null })); }} className={pwErrors.newPassword ? "border-danger" : ""} />
+                                        <FieldError error={pwErrors.newPassword ?? null} />
+                                        <p className="text-[10px] text-muted-foreground">Min 8 chars, uppercase, number, and special character required.</p>
+                                    </div>
+                                    <div className="space-y-2">
+                                        <Label>Confirm New Password <span className="text-danger">*</span></Label>
+                                        <Input type="password" value={confirmPassword} onChange={(e) => { setConfirmPassword(e.target.value); setPwErrors(prev => ({ ...prev, confirmPassword: null })); }} className={pwErrors.confirmPassword ? "border-danger" : ""} />
+                                        <FieldError error={pwErrors.confirmPassword ?? null} />
+                                    </div>
                                 </div>
                                 <DialogFooter>
-                                    <Button onClick={() => { setPasswordOpen(false); toast.success("Password updated successfully."); }} className="bg-brand-600 hover:bg-brand-700">Save changes</Button>
+                                    <Button onClick={handlePasswordChange} className="bg-brand-600 hover:bg-brand-700">Save changes</Button>
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>

@@ -89,7 +89,10 @@ export default function ChatPage() {
     const searchParams = useSearchParams();
     const sessionId = searchParams.get("id");
 
-    const showContextBadge = user?.role === 'PROFESSIONAL' && (user?.subscriptionTier === 'PRO' || user?.subscriptionTier === 'MAX');
+    const isPaidTier = user?.subscriptionTier === 'PRO' || user?.subscriptionTier === 'MAX';
+    const showContextBadge = user?.role === 'PROFESSIONAL' && isPaidTier;
+    const isOrgUser = user?.role === 'ORG_EMPLOYEE' || user?.role === 'ORG_ADMIN' || user?.role === 'DEPT_ADMIN';
+    const hasContextAware = isPaidTier || isOrgUser;
 
     const [messages, setMessages] = useState<Message[]>([]);
     const [chatTitle, setChatTitle] = useState("AI Chat");
@@ -169,13 +172,16 @@ export default function ChatPage() {
 
         await new Promise((r) => setTimeout(r, 1500));
 
+        const anonymizationNote = hasContextAware
+            ? "The data has been processed through our **context-aware** anonymization engine, ensuring that personal identifiers, organization names, project references, and domain-specific terms are properly masked before reaching the AI model.\n\n**Key findings:**\n1. All entities were successfully detected and anonymized\n2. Context-aware mapping ensured referential consistency\n3. The response has been de-anonymized for your viewing"
+            : "The data has been processed through our basic entity detection engine, ensuring that common personal identifiers (names, emails, phones, locations) are properly masked before reaching the AI model.\n\n**Key findings:**\n1. Standard PII entities were detected and anonymized\n2. The response has been de-anonymized for your viewing";
+
         const assistantMsg: Message = {
             id: `msg-${Date.now() + 1}`,
             role: "assistant",
             content: fileNames.length > 0
                 ? `I've analyzed the ${fileNames.length} file(s) you attached alongside your request. All contents were securely parsed through D-SecureAI's anonymization pipeline.`
-                : "I've analyzed your request. Here's a detailed response with all sensitive information properly handled through D-SecureAI's anonymization pipeline.\n\nThe data has been processed through our entity detection engine, ensuring that personal identifiers, organization names, and project references are properly masked before reaching the AI model.\n\n**Key findings:**\n1. All entities were successfully detected and anonymized\n2. Context-aware mapping ensured referential consistency\n3. The response has been de-anonymized for your viewing",
-            entities: entities.length > 0 ? entities : [],
+                : `I've analyzed your request. Here's a detailed response with all sensitive information properly handled through D-SecureAI's anonymization pipeline.\n\n${anonymizationNote}`,
             timestamp: new Date(),
         };
         setMessages((prev) => [...prev, assistantMsg]);
@@ -333,20 +339,12 @@ export default function ChatPage() {
                                 )}
                                 <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
 
-                                {/* ─── Anonymization entity viewer ─── */}
-                                {msg.entities && msg.entities.length > 0 && (
-                                    <div className={cn(
-                                        "mt-2 border-t pt-2",
-                                        msg.role === "user" ? "border-white/20" : "border-border"
-                                    )}>
+                                {/* ─── Anonymization entity viewer (user messages only) ─── */}
+                                {msg.role === "user" && msg.entities && msg.entities.length > 0 && (
+                                    <div className="mt-2 border-t pt-2 border-white/20">
                                         <button
                                             onClick={() => toggleEntities(msg.id)}
-                                            className={cn(
-                                                "flex items-center gap-1.5 text-[11px] font-medium transition-colors",
-                                                msg.role === "user"
-                                                    ? "text-white/70 hover:text-white"
-                                                    : "text-muted-foreground hover:text-foreground"
-                                            )}
+                                            className="flex items-center gap-1.5 text-[11px] font-medium transition-colors text-white/70 hover:text-white"
                                         >
                                             <Eye className="h-3 w-3" />
                                             {expandedEntities === msg.id ? "Hide" : "View"}{" "}
@@ -361,10 +359,9 @@ export default function ChatPage() {
                                             <>
                                                 <EntityBadges
                                                     entities={msg.entities}
-                                                    variant={msg.role === "user" ? "dark" : "light"}
+                                                    variant="dark"
                                                 />
-                                                {/* Show the anonymized prompt only on user messages */}
-                                                {msg.role === "user" && msg.anonymizedContent && (
+                                                {msg.anonymizedContent && (
                                                     <div className="mt-2 rounded-lg bg-black/20 p-2.5 text-[11px] font-mono leading-relaxed text-white/80">
                                                         <p className="mb-1 font-sans text-[10px] text-white/50">
                                                             Anonymized prompt sent to AI:
@@ -450,7 +447,7 @@ export default function ChatPage() {
                         </div>
                         <div className="flex items-center gap-2">
                             <Badge variant="outline" className="text-[10px] text-success border-success/30 bg-success/5">
-                                <Shield className="mr-1 h-3 w-3" />Anonymization Active
+                                <Shield className="mr-1 h-3 w-3" />{hasContextAware ? 'Context-Aware' : 'Basic'} Anonymization
                             </Badge>
                             <Button
                                 onClick={handleSend}

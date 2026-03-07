@@ -1,5 +1,7 @@
 import { delay } from './api';
 import type { UserStats } from '@/types/analytics.types';
+import type { SubscriptionTier } from '@/types/user.types';
+import { SUBSCRIPTION_PLANS } from '@/lib/constants';
 
 /* ══════════════════════════════════════════════════════
    Dashboard-specific types (mirror backend response)
@@ -31,27 +33,28 @@ export interface EntityTypePoint {
 
 /* ══════════════════════════════════════════════════════
    Mock data — realistic & internally consistent
-   
-   A PRO user with 1000 monthly quota:
-   - 47 sessions this month so far
-   - 312 total requests
-   - ~780 entities anonymized (≈2.5 per request)
-   - Quota used: 312/1000 = 31.2%
    ══════════════════════════════════════════════════════ */
 
+function getQuotaForTier(tier?: SubscriptionTier): number {
+    if (!tier) return SUBSCRIPTION_PLANS.FREE.requests;
+    return SUBSCRIPTION_PLANS[tier]?.requests ?? SUBSCRIPTION_PLANS.FREE.requests;
+}
+
 /** GET /api/v1/dashboard/stats */
-export async function getUserDashboardStats(): Promise<DashboardStats> {
+export async function getUserDashboardStats(subscriptionTier?: SubscriptionTier): Promise<DashboardStats> {
     await delay(300);
 
-    const totalRequests = 312;
-    const entitiesAnonymized = 782;
+    const quotaTotal = getQuotaForTier(subscriptionTier);
+    const isFree = !subscriptionTier || subscriptionTier === 'FREE';
+    const totalRequests = isFree ? 15 : 312;
+    const entitiesAnonymized = isFree ? 38 : 782;
 
     return {
         totalRequestsThisMonth: totalRequests,
-        totalSessions: 47,
+        totalSessions: isFree ? 5 : 47,
         entitiesAnonymized,
-        quotaRemaining: 1000 - totalRequests,
-        quotaTotal: 1000,
+        quotaRemaining: quotaTotal - totalRequests,
+        quotaTotal,
         avgEntitiesPerRequest: Math.round((entitiesAnonymized / totalRequests) * 10) / 10,
     };
 }
