@@ -1,4 +1,4 @@
-import { delay } from './api';
+import api, { delay } from './api';
 import type { User, LoginCredentials, RegisterData, TwoFAVerification } from '@/types/user.types';
 
 // --- Mock Data ---
@@ -129,11 +129,24 @@ export async function resetPassword(token: string, newPassword: string): Promise
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-    await delay(300);
-    // MOCK: Return null when not authenticated
-    return null;
+    // Check if a token exists before making a network call
+    const token = typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    if (!token) return null;
+
+    try {
+        // BACKEND: GET /api/v1/users/me — returns the authenticated user
+        // MOCK: simulates the call with delay; replace the body below with:
+        //   const { data } = await api.get<User>('/users/me');
+        //   return data;
+        await delay(300);
+        return null; // mock returns null; real backend will return the User object
+    } catch {
+        return null;
+    }
 }
 
 export async function logout(): Promise<void> {
+    // BACKEND: DELETE /api/v1/auth/sessions — invalidates the server-side session/token
+    // MOCK: no-op; real backend will clear the HttpOnly cookie
     await delay(200);
 }

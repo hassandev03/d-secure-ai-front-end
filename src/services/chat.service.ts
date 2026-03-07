@@ -1,39 +1,17 @@
 import { delay } from './api';
-import type { LLMModel, LLMProvider } from '@/types/chat.types';
+import type { LLMModel, LLMProvider, ChatSession, Message, AnonymizedEntity } from '@/types/chat.types';
 
 /* ══════════════════════════════════════════════════════
-   Types — mirrors backend response shapes
+   Backwards-compatible aliases
+   ChatSessionSummary = ChatSession  (from chat.types.ts)
+   ChatMessage        = Message      (from chat.types.ts)
+   These names are used internally AND re-exported so that
+   existing page imports remain unchanged.
    ══════════════════════════════════════════════════════ */
+export type ChatSessionSummary = ChatSession;
+export type ChatMessage = Message;
+export type { AnonymizedEntity };
 
-export interface ChatSessionSummary {
-    id: string;
-    title: string;
-    model: LLMModel;
-    modelName: string;
-    provider: LLMProvider;
-    providerName: string;
-    messageCount: number;
-    createdAt: string;     // ISO date
-    lastMessageAt: string; // ISO date/time display string
-    hasFileUploads: boolean;
-}
-
-export interface AnonymizedEntity {
-    original: string;
-    replacement: string;
-    type: 'PERSON' | 'ORG' | 'EMAIL' | 'PHONE' | 'LOCATION' | 'PROJECT' | 'CUSTOM';
-}
-
-export interface ChatMessage {
-    id: string;
-    sessionId: string;
-    role: 'user' | 'assistant';
-    content: string;
-    anonymizedContent?: string;
-    entities?: AnonymizedEntity[];
-    files?: string[];
-    createdAt: Date;
-}
 
 /* ══════════════════════════════════════════════════════
    Mock Data — single source of truth
@@ -58,7 +36,7 @@ export const MOCK_SESSIONS: ChatSessionSummary[] = [
 ];
 
 /** Pre-populated chat messages for each session (first 3 sessions have full conversations) */
-export const MOCK_MESSAGES: Record<string, ChatMessage[]> = {
+export const MOCK_MESSAGES: Record<string, Message[]> = {
     'sess-1': [
         {
             id: 'msg-1a', sessionId: 'sess-1', role: 'user',
@@ -257,14 +235,39 @@ export async function deleteChatSession(sessionId: string): Promise<{ success: b
     return { success: true };
 }
 
-/** POST /api/v1/chat/sessions/:id/messages */
+/** POST /api/v1/chat/sessions/:id/messages
+ *
+ * Sends a user message and returns both the stored user message and the AI response.
+ * BACKEND SWAP: Replace the body with:
+ *   const { data } = await api.post<{ userMessage: Message; assistantMessage: Message }>(
+ *     `/chat/sessions/${sessionId}/messages`,
+ *     { content, files: files?.map(f => f.name) }
+ *   );
+ *   return data;
+ */
 export async function sendMessage(
-    _sessionId: string,
-    _content: string,
-    _files?: File[]
-): Promise<{ userMessage: ChatMessage; assistantMessage: ChatMessage }> {
+    sessionId: string,
+    content: string,
+    files?: File[]
+): Promise<{ userMessage: Message; assistantMessage: Message }> {
     await delay(1200);
-    // The actual mock creation is handled client-side for now.
-    // Backend will return both the stored user message and the AI response.
-    throw new Error('Use client-side mock in chat page until backend is ready');
+    // MOCK: Build the response locally. The backend will handle this entirely.
+    const now = new Date();
+    const userMessage: Message = {
+        id: `msg-${Date.now()}`,
+        sessionId,
+        role: 'user',
+        content,
+        files: files?.map(f => f.name),
+        createdAt: now,
+        // anonymizedContent and entities populated by the backend anonymization engine
+    };
+    const assistantMessage: Message = {
+        id: `msg-${Date.now() + 1}`,
+        sessionId,
+        role: 'assistant',
+        content: `I've analyzed your request. All sensitive information was handled through D-SecureAI's anonymization pipeline before reaching the AI model.`,
+        createdAt: new Date(now.getTime() + 1000),
+    };
+    return { userMessage, assistantMessage };
 }

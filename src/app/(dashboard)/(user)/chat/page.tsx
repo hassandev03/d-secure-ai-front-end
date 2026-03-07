@@ -14,41 +14,7 @@ import { MODELS, DEFAULT_MODEL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
 import type { LLMModel } from "@/types/chat.types";
-import { getChatSession, getChatMessages, type ChatMessage, type AnonymizedEntity } from "@/services/chat.service";
-
-/* ── Mock entity detection ───────────────────────────── */
-function detectEntities(text: string): AnonymizedEntity[] {
-    const patterns: { regex: RegExp; type: AnonymizedEntity["type"]; prefix: string }[] = [
-        { regex: /\b(Ahmed|Khan|Sarah|John|Alex|Fatima|Carlos|Raj|Lisa)\b/gi, type: "PERSON", prefix: "PERSON" },
-        { regex: /\b(Samsung|Google|Apple|Acme|Microsoft|Amazon|OpenAI)\b/gi, type: "ORG", prefix: "ORG" },
-        { regex: /\b(Enigma|Falcon|Phoenix|Atlas|Titan|DataPipe)\b/gi, type: "PROJECT", prefix: "PROJECT" },
-        { regex: /\b(New York|London|Berlin|Singapore|Karachi|Dubai)\b/gi, type: "LOCATION", prefix: "LOCATION" },
-        { regex: /[\w.-]+@[\w.-]+\.\w+/g, type: "EMAIL", prefix: "EMAIL" },
-        { regex: /\+?\d[\d\s-]{7,}/g, type: "PHONE", prefix: "PHONE" },
-    ];
-    const seen = new Set<string>();
-    const entities: AnonymizedEntity[] = [];
-    let counter = 1;
-
-    patterns.forEach(({ regex, type, prefix }) => {
-        let match;
-        while ((match = regex.exec(text)) !== null) {
-            const original = match[0];
-            const key = `${type}:${original.toLowerCase()}`;
-            if (!seen.has(key)) {
-                seen.add(key);
-                entities.push({ original, replacement: `[${prefix}_${counter++}]`, type });
-            }
-        }
-    });
-    return entities;
-}
-
-function anonymize(text: string, entities: AnonymizedEntity[]): string {
-    let out = text;
-    for (const e of entities) out = out.replaceAll(e.original, e.replacement);
-    return out;
-}
+import { getChatSession, getChatMessages, sendMessage, type ChatMessage, type AnonymizedEntity } from "@/services/chat.service";
 
 /* ── Entity type colours ────────────────────────────── */
 const entityColors: Record<string, string> = {
@@ -125,7 +91,7 @@ export default function ChatPage() {
                 // Convert service ChatMessage[] to local Message[]
                 const mapped: Message[] = chatMessages.map((m: ChatMessage) => ({
                     id: m.id,
-                    role: m.role,
+                    role: m.role === 'system' ? 'assistant' as const : m.role,
                     content: m.content,
                     anonymizedContent: m.anonymizedContent,
                     entities: m.entities,
@@ -152,40 +118,56 @@ export default function ChatPage() {
     const handleSend = async () => {
         if (!input.trim() && attachedFiles.length === 0 || isLoading) return;
 
-        const entities = detectEntities(input);
-        const anonymizedContent = anonymize(input, entities);
-        const fileNames = attachedFiles.map(f => f.name);
-
-        const userMsg: Message = {
-            id: `msg-${Date.now()}`,
-            role: "user",
-            content: input,
-            anonymizedContent,
-            entities,
-            files: fileNames.length > 0 ? fileNames : undefined,
-            timestamp: new Date(),
-        };
-        setMessages((prev) => [...prev, userMsg]);
+        const currentInput = input;
+        const currentFiles = attachedFiles;
         setInput("");
         setAttachedFiles([]);
         setIsLoading(true);
 
-        await new Promise((r) => setTimeout(r, 1500));
-
-        const anonymizationNote = hasContextAware
-            ? "The data has been processed through our **context-aware** anonymization engine, ensuring that personal identifiers, organization names, project references, and domain-specific terms are properly masked before reaching the AI model.\n\n**Key findings:**\n1. All entities were successfully detected and anonymized\n2. Context-aware mapping ensured referential consistency\n3. The response has been de-anonymized for your viewing"
-            : "The data has been processed through our basic entity detection engine, ensuring that common personal identifiers (names, emails, phones, locations) are properly masked before reaching the AI model.\n\n**Key findings:**\n1. Standard PII entities were detected and anonymized\n2. The response has been de-anonymized for your viewing";
-
-        const assistantMsg: Message = {
-            id: `msg-${Date.now() + 1}`,
-            role: "assistant",
-            content: fileNames.length > 0
-                ? `I've analyzed the ${fileNames.length} file(s) you attached alongside your request. All contents were securely parsed through D-SecureAI's anonymization pipeline.`
-                : `I've analyzed your request. Here's a detailed response with all sensitive information properly handled through D-SecureAI's anonymization pipeline.\n\n${anonymizationNote}`,
+        // Optimistically show a placeholder user message immediately
+        const tempId = `temp-${Date.now()}`;
+        const optimisticUserMsg: Message = {
+            id: tempId,
+            role: "user",
+            content: currentInput,
+            files: currentFiles.length > 0 ? currentFiles.map(f => f.name) : undefined,
             timestamp: new Date(),
         };
-        setMessages((prev) => [...prev, assistantMsg]);
-        setIsLoading(false);
+        setMessages(prev => [...prev, optimisticUserMsg]);
+
+        try {
+            // Blocker 2 Fix: call sendMessage() from the service layer.
+            // BACKEND SWAP: Replace sendMessage() body with api.post() — zero UI changes needed.
+            // The backend returns { userMessage, assistantMessage } with real anonymizedContent
+            // and entities populated by the anonymization engine.
+            const { userMessage, assistantMessage } = await sendMessage(
+                sessionId || 'new',
+                currentInput,
+                currentFiles.length > 0 ? currentFiles : undefined
+            );
+
+            // Replace optimistic message with the real one from the server
+            const mapMsg = (m: ChatMessage): Message => ({
+                id: m.id,
+                role: m.role === 'system' ? 'assistant' : m.role,
+                content: m.content,
+                anonymizedContent: m.anonymizedContent,
+                entities: m.entities,
+                files: m.files,
+                timestamp: new Date(m.createdAt),
+            });
+
+            setMessages(prev => [
+                ...prev.filter(m => m.id !== tempId),
+                mapMsg(userMessage),
+                mapMsg(assistantMessage),
+            ]);
+        } catch {
+            // On error, remove the optimistic message
+            setMessages(prev => prev.filter(m => m.id !== tempId));
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     const handleKeyDown = (e: React.KeyboardEvent) => {

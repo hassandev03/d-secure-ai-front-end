@@ -12,6 +12,7 @@ import {
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { useAuthStore } from "@/store/auth.store";
+import { getCurrentUser } from "@/services/auth.service";
 import { cn } from "@/lib/utils";
 
 export default function UserLayout({
@@ -19,12 +20,23 @@ export default function UserLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { user } = useAuthStore();
+    const { user, token, setUser, isAuthenticated } = useAuthStore();
     const [mounted, setMounted] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
 
     useEffect(() => {
         setMounted(true);
+        // Blocker 1 Fix: Rehydrate user session from backend on page refresh.
+        // getCurrentUser() reads the stored token and calls GET /api/v1/users/me.
+        // In mock mode it returns null (no-op). When the backend is live, it
+        // returns the full User object which gets stored in Zustand.
+        if (!isAuthenticated) {
+            getCurrentUser().then((fetchedUser) => {
+                if (fetchedUser && token) {
+                    setUser(fetchedUser, token);
+                }
+            });
+        }
     }, []);
 
     const isProfessional = user?.role === 'PROFESSIONAL';

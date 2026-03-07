@@ -15,6 +15,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Badge } from "@/components/ui/badge";
 import { INDUSTRIES } from "@/lib/constants";
 import { useAuthStore } from "@/store/auth.store";
+import { updateUserProfile, changePassword } from "@/services/profile.service";
 
 /* ── Validation helpers ── */
 function validateEmail(email: string): string | null {
@@ -68,7 +69,7 @@ function FieldError({ error }: { error: string | null }) {
 }
 
 export default function ProfilePage() {
-    const { user } = useAuthStore();
+    const { user, updateUser } = useAuthStore();
     const [saving, setSaving] = useState(false);
 
     // Avatar State
@@ -127,9 +128,29 @@ export default function ProfilePage() {
         }
 
         setSaving(true);
-        await new Promise((r) => setTimeout(r, 800));
-        setSaving(false);
-        toast.success("Profile saved successfully.");
+        try {
+            // Blocker 5 Fix: call profile service and sync result to Zustand.
+            // BACKEND: PUT /api/v1/users/me will return the updated Partial<User>.
+            // updateUser() pushes those fields into the global store immediately,
+            // so the topbar/avatar refresh without a page reload.
+            const result = await updateUserProfile({
+                name: `${firstName.trim()} ${lastName.trim()}`,
+                email,
+                phone,
+                country,
+                jobTitle,
+                industry,
+                bio,
+            });
+            if (result.success && result.user) {
+                updateUser(result.user);
+            }
+            toast.success("Profile saved successfully.");
+        } catch {
+            toast.error("Failed to save profile. Please try again.");
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handlePasswordChange = async () => {

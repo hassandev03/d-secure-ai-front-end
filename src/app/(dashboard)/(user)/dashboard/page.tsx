@@ -31,7 +31,7 @@ export default function UserDashboard() {
 
     useEffect(() => {
         getUserDashboardStats(user?.subscriptionTier).then(setStats);
-        getDailyActivity(7).then(setActivity);
+        getDailyActivity(7, user?.subscriptionTier).then(setActivity);
         getModelUsageBreakdown().then(setModels);
         getEntityTypeBreakdown().then(setEntities);
         getChatSessions().then(sessions => setRecentSessions(sessions.slice(0, 5)));
