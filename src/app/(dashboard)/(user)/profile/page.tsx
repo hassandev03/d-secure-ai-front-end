@@ -175,8 +175,13 @@ export default function ProfilePage() {
                         <h3 className="text-lg font-semibold">{firstName} {lastName}</h3>
                         <p className="text-sm text-muted-foreground">{email}</p>
                         <p className="text-xs text-muted-foreground mt-1">
-                            {user?.role === 'PROFESSIONAL' ? 'Professional' : user?.role === 'ORG_EMPLOYEE' ? 'Organization Employee' : ''} Account
-                            {user?.subscriptionTier ? ` · ${user.subscriptionTier} Plan` : ''}
+                            {user?.role === 'PROFESSIONAL' ? (
+                                <>Professional Account{user?.subscriptionTier ? ` · ${user.subscriptionTier} Plan` : ''}</>
+                            ) : user?.orgName ? (
+                                <>{user.orgName}{user?.subscriptionTier ? ` · ${user.subscriptionTier} Plan` : ''}</>
+                            ) : (
+                                "Organization Employee Account"
+                            )}
                         </p>
                     </div>
                 </CardContent>

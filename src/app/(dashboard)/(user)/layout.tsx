@@ -27,7 +27,8 @@ export default function UserLayout({
         setMounted(true);
     }, []);
 
-    const showContextTab = user?.role === 'PROFESSIONAL' && (user?.subscriptionTier === 'PRO' || user?.subscriptionTier === 'MAX');
+    const isProfessional = user?.role === 'PROFESSIONAL';
+    const showContextTab = isProfessional && (user?.subscriptionTier === 'PRO' || user?.subscriptionTier === 'MAX');
 
     const userNav: NavGroup[] = [
         {
@@ -43,7 +44,7 @@ export default function UserLayout({
             items: [
                 ...(mounted && showContextTab ? [{ label: "My Context", href: "/context", icon: BookText }] : []),
                 { label: "Profile", href: "/profile", icon: User },
-                { label: "Subscription", href: "/subscription", icon: CreditCard },
+                ...(mounted && isProfessional ? [{ label: "Subscription", href: "/subscription", icon: CreditCard }] : []),
             ],
         },
     ];

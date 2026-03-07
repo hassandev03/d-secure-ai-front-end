@@ -68,6 +68,26 @@ export default function SubscriptionPage() {
 
     if (!activePlan || plansData.length === 0) return null;
 
+    if (user?.role !== 'PROFESSIONAL') {
+        return (
+            <div className="mx-auto max-w-5xl">
+                <PageHeader
+                    title="Subscription"
+                    subtitle="Manage your plan and usage."
+                    breadcrumbs={[{ label: "User", href: "/dashboard" }, { label: "Subscription" }]}
+                />
+                <Card className="mt-8 text-center p-12">
+                    <CardHeader>
+                        <CardTitle className="text-xl">Organization Billing</CardTitle>
+                    </CardHeader>
+                    <CardContent className="text-muted-foreground">
+                        Your subscription and billing are managed centrally by your organization. Please contact your organization administrator for any upgrades or billing inquiries.
+                    </CardContent>
+                </Card>
+            </div>
+        );
+    }
+
     const resetCardForm = () => {
         setCardName(user?.name || "");
         setNewCardNumber("");

@@ -22,6 +22,7 @@ import { getChatSessions, type ChatSessionSummary } from "@/services/chat.servic
 
 export default function UserDashboard() {
     const { user } = useAuthStore();
+    const isOrgUser = user?.role === 'ORG_EMPLOYEE' || user?.role === 'ORG_ADMIN' || user?.role === 'DEPT_ADMIN';
     const [stats, setStats] = useState<DashboardStats | null>(null);
     const [activity, setActivity] = useState<DailyActivityPoint[]>([]);
     const [models, setModels] = useState<ModelUsagePoint[]>([]);
@@ -54,8 +55,12 @@ export default function UserDashboard() {
 
             <Card className="mt-6">
                 <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-                    <CardTitle className="text-base font-semibold">Monthly Quota</CardTitle>
-                    <Link href="/subscription"><Button variant="ghost" size="sm">Upgrade →</Button></Link>
+                    <CardTitle className="text-base font-semibold">
+                        {isOrgUser ? "Organization Quota" : "Monthly Quota"}
+                    </CardTitle>
+                    {!isOrgUser && (
+                        <Link href="/subscription"><Button variant="ghost" size="sm">Upgrade →</Button></Link>
+                    )}
                 </CardHeader>
                 <CardContent>
                     <QuotaBar
