@@ -58,7 +58,7 @@ export const MOCK_SESSIONS: ChatSessionSummary[] = [
 ];
 
 /** Pre-populated chat messages for each session (first 3 sessions have full conversations) */
-const MOCK_MESSAGES: Record<string, ChatMessage[]> = {
+export const MOCK_MESSAGES: Record<string, ChatMessage[]> = {
     'sess-1': [
         {
             id: 'msg-1a', sessionId: 'sess-1', role: 'user',

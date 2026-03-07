@@ -339,12 +339,14 @@ export default function ChatPage() {
                                 )}
                                 <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
 
-                                {/* ─── Anonymization entity viewer (user messages only) ─── */}
-                                {msg.role === "user" && msg.entities && msg.entities.length > 0 && (
-                                    <div className="mt-2 border-t pt-2 border-white/20">
+                                {/* ─── Anonymization entity viewer (universal) ─── */}
+                                {msg.entities && msg.entities.length > 0 && (
+                                    <div className={cn("mt-2 border-t pt-2", msg.role === 'user' ? 'border-white/20' : 'border-border')}>
                                         <button
                                             onClick={() => toggleEntities(msg.id)}
-                                            className="flex items-center gap-1.5 text-[11px] font-medium transition-colors text-white/70 hover:text-white"
+                                            className={cn("flex items-center gap-1.5 text-[11px] font-medium transition-colors",
+                                                msg.role === 'user' ? "text-white/70 hover:text-white" : "text-muted-foreground hover:text-foreground"
+                                            )}
                                         >
                                             <Eye className="h-3 w-3" />
                                             {expandedEntities === msg.id ? "Hide" : "View"}{" "}
@@ -359,11 +361,13 @@ export default function ChatPage() {
                                             <>
                                                 <EntityBadges
                                                     entities={msg.entities}
-                                                    variant="dark"
+                                                    variant={msg.role === 'user' ? "dark" : "light"}
                                                 />
                                                 {msg.anonymizedContent && (
-                                                    <div className="mt-2 rounded-lg bg-black/20 p-2.5 text-[11px] font-mono leading-relaxed text-white/80">
-                                                        <p className="mb-1 font-sans text-[10px] text-white/50">
+                                                    <div className={cn("mt-2 rounded-lg p-2.5 text-[11px] font-mono leading-relaxed",
+                                                        msg.role === 'user' ? "bg-black/20 text-white/80" : "bg-muted/50 border border-border text-foreground/80"
+                                                    )}>
+                                                        <p className={cn("mb-1 font-sans text-[10px]", msg.role === 'user' ? "text-white/50" : "text-muted-foreground")}>
                                                             Anonymized prompt sent to AI:
                                                         </p>
                                                         {msg.anonymizedContent}
