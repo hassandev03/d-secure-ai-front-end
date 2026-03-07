@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
-import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen, Edit, FileMusic } from "lucide-react";
+import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen, Edit, FileMusic, Loader2, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
 import PageHeader from "@/components/layout/PageHeader";
@@ -35,10 +35,36 @@ const initialPatterns = [
     { id: 2, label: "Internal Doc Ref", pattern: "DOC-[A-Z]{3}-[0-9]+", example: "DOC-FIN-42", active: true },
 ];
 
+interface ExtractedEntity { id: number; type: string; original: string; description: string; checked: boolean; }
+interface StagedDoc { id: number; name: string; size: string; file: File; }
+
 export default function MyContextPage() {
     const [terms, setTerms] = useState(initialTerms);
     const [docs, setDocs] = useState(initialDocs);
     const [patterns, setPatterns] = useState(initialPatterns);
+
+    // Processing Workflow State
+    const [stagedDocs, setStagedDocs] = useState<StagedDoc[]>([]);
+    const [processingDoc, setProcessingDoc] = useState<StagedDoc | null>(null);
+    const [isExtracting, setIsExtracting] = useState(false);
+    const [extractedEntities, setExtractedEntities] = useState<ExtractedEntity[]>([]);
+    const [editingEntityId, setEditingEntityId] = useState<number | null>(null);
+    const [editEntityForm, setEditEntityForm] = useState<Partial<ExtractedEntity>>({});
+
+    const startEditingEntity = (entity: ExtractedEntity) => {
+        setEditingEntityId(entity.id);
+        setEditEntityForm(entity);
+    };
+
+    const saveEditingEntity = () => {
+        if (!editingEntityId) return;
+        setExtractedEntities(prev => prev.map(e => e.id === editingEntityId ? { ...e, ...editEntityForm as ExtractedEntity } : e));
+        setEditingEntityId(null);
+    };
+
+    const deleteEntity = (id: number) => {
+        setExtractedEntities(prev => prev.filter(e => e.id !== id));
+    };
 
     // Add new term form
     const [newTerm, setNewTerm] = useState("");
@@ -107,18 +133,71 @@ export default function MyContextPage() {
         setPatterns(prev => prev.map(p => p.id === id ? { ...p, active: !p.active } : p));
     };
 
+    // Document Processing Logic
+    const handleProcessDoc = async (doc: StagedDoc) => {
+        setProcessingDoc(doc);
+        setIsExtracting(true);
+        // Simulate processing time
+        await new Promise(r => setTimeout(r, 2000));
+
+        // Mock extracted entities
+        const mockEntities: ExtractedEntity[] = doc.name.toLowerCase().includes('nda') ? [
+            { id: 1, type: 'ORG', original: 'Acme Corp', description: 'Extracted organizational entity', checked: true },
+            { id: 2, type: 'PERSON', original: 'John Doe', description: 'Extracted personal entity', checked: true }
+        ] : [
+            { id: 1, type: 'PROJECT', original: 'Project Titan', description: `Extracted PROJECT from ${doc.name}`, checked: true },
+            { id: 2, type: 'EMAIL', original: 'contact@acmecorp.com', description: `Extracted EMAIL from ${doc.name}`, checked: true }
+        ];
+
+        setExtractedEntities(mockEntities);
+        setIsExtracting(false);
+    };
+
+    const toggleEntityCheck = (id: number) => {
+        setExtractedEntities(prev => prev.map(e => e.id === id ? { ...e, checked: !e.checked } : e));
+    };
+
+    const handleSaveEntities = () => {
+        if (!processingDoc) return;
+
+        // Add checked entities to glossary terms
+        const newTerms = extractedEntities.filter(e => e.checked).map(e => ({
+            id: Date.now() + Math.random(),
+            term: e.original,
+            definition: e.description || `Extracted ${e.type} from ${processingDoc.name}`,
+            category: e.type
+        }));
+
+        if (newTerms.length > 0) {
+            setTerms(prev => [...prev, ...newTerms]);
+            toast.success(`Added ${newTerms.length} terms to Glossary.`);
+        }
+
+        // Move doc to uploaded
+        setDocs(prev => [{
+            id: processingDoc.id,
+            name: processingDoc.name,
+            size: processingDoc.size,
+            uploadedAt: new Date().toISOString().split('T')[0]
+        }, ...prev]);
+
+        setStagedDocs(prev => prev.filter(d => d.id !== processingDoc.id));
+        setProcessingDoc(null);
+        toast.success(`${processingDoc.name} processed and saved.`);
+    };
+
     // Dropzone logic
     const onDrop = useCallback((acceptedFiles: File[]) => {
         acceptedFiles.forEach((file) => {
             const sizeInMB = file.size / (1024 * 1024);
             const sizeStr = sizeInMB > 1 ? `${sizeInMB.toFixed(1)} MB` : `${(file.size / 1024).toFixed(0)} KB`;
-            setDocs(prev => [...prev, {
+            setStagedDocs(prev => [...prev, {
                 id: Date.now() + Math.random(),
                 name: file.name,
                 size: sizeStr,
-                uploadedAt: new Date().toISOString().split('T')[0]
+                file
             }]);
-            toast.success(`${file.name} uploaded and processed.`);
+            toast.success(`${file.name} staged for processing.`);
         });
     }, []);
 
@@ -126,9 +205,7 @@ export default function MyContextPage() {
         onDrop,
         accept: {
             'application/pdf': ['.pdf'],
-            'text/plain': ['.txt'],
-            'application/vnd.ms-excel': ['.xls'],
-            'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': ['.xlsx']
+            'text/plain': ['.txt']
         },
         maxSize: 10485760 // 10MB
     });
@@ -227,12 +304,46 @@ export default function MyContextPage() {
                                 <div className="text-center">
                                     <Upload className={`mx-auto h-10 w-10 ${isDragActive ? 'text-brand-500' : 'text-muted-foreground'}`} />
                                     <p className="mt-2 text-sm font-medium">{isDragActive ? "Drop the files here" : "Drop files here or click to upload"}</p>
-                                    <p className="text-xs text-muted-foreground mt-1">PDF, Excel, TXT — up to 10 MB</p>
+                                    <p className="text-xs text-muted-foreground mt-1">PDF, TXT — up to 10 MB</p>
                                     <Button variant="outline" size="sm" className="mt-3 pointer-events-none">Browse Files</Button>
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
+
+                    {stagedDocs.length > 0 && (
+                        <Card className="border-brand-200 bg-brand-50/20">
+                            <CardHeader>
+                                <CardTitle className="text-base text-brand-800 flex items-center gap-2">
+                                    <Clock className="h-4 w-4" /> Staged for Processing
+                                </CardTitle>
+                                <CardDescription>Review and process these documents to extract domain terms.</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <div className="space-y-3">
+                                    {stagedDocs.map((doc) => (
+                                        <div key={doc.id} className="flex items-center justify-between rounded-lg border border-brand-200 bg-white p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50"><FileText className="h-5 w-5 text-orange-600" /></div>
+                                                <div>
+                                                    <p className="text-sm font-medium">{doc.name}</p>
+                                                    <p className="text-xs text-muted-foreground">{doc.size}</p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Button variant="outline" size="sm" className="h-8 text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => handleProcessDoc(doc)}>
+                                                    Process
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => setStagedDocs(prev => prev.filter(d => d.id !== doc.id))}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </CardContent>
+                        </Card>
+                    )}
 
                     <Card>
                         <CardHeader>
@@ -373,7 +484,93 @@ export default function MyContextPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-
+            {/* Process Document Modal */}
+            <Dialog open={!!processingDoc} onOpenChange={(open) => !open && !isExtracting && setProcessingDoc(null)}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Processing Document</DialogTitle>
+                        <DialogDescription>
+                            {processingDoc?.name}
+                        </DialogDescription>
+                    </DialogHeader>
+                    <div className="py-4">
+                        {isExtracting ? (
+                            <div className="flex flex-col items-center justify-center py-8 space-y-4">
+                                <Loader2 className="h-8 w-8 text-brand-600 animate-spin" />
+                                <p className="text-sm font-medium text-muted-foreground">Extracting sensitive entities...</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-4">
+                                <div className="rounded-lg bg-success/10 p-3 flex items-center gap-2 text-sm text-success-700">
+                                    <CheckCircle2 className="h-5 w-5" />
+                                    Successfully extracted {extractedEntities.length} entities.
+                                </div>
+                                <p className="text-sm text-muted-foreground">Select the entities you want to add to your Context Glossary.</p>
+                                <div className="mt-4 border rounded-md divide-y overflow-y-auto max-h-[350px] pr-2">
+                                    {extractedEntities.map(entity => (
+                                        <div key={entity.id} className="relative flex flex-col p-3 hover:bg-muted/50 transition-colors group">
+                                            {editingEntityId === entity.id ? (
+                                                <div className="space-y-3 w-full animate-in fade-in zoom-in duration-200">
+                                                    <div className="grid grid-cols-2 gap-2">
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Entity Name</Label>
+                                                            <Input size={1} className="h-8 text-sm" value={editEntityForm.original || ""} onChange={e => setEditEntityForm({ ...editEntityForm, original: e.target.value })} />
+                                                        </div>
+                                                        <div className="space-y-1">
+                                                            <Label className="text-xs text-muted-foreground">Type</Label>
+                                                            <Input size={1} className="h-8 text-sm" value={editEntityForm.type || ""} onChange={e => setEditEntityForm({ ...editEntityForm, type: e.target.value })} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="space-y-1">
+                                                        <Label className="text-xs text-muted-foreground">Description</Label>
+                                                        <Input size={1} className="h-8 text-sm" value={editEntityForm.description || ""} onChange={e => setEditEntityForm({ ...editEntityForm, description: e.target.value })} />
+                                                    </div>
+                                                    <div className="flex justify-end gap-2 pt-1">
+                                                        <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditingEntityId(null)}>Cancel</Button>
+                                                        <Button size="sm" className="h-7 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={saveEditingEntity}>Save</Button>
+                                                    </div>
+                                                </div>
+                                            ) : (
+                                                <div className="flex items-start justify-between w-full">
+                                                    <div className="flex items-start gap-3">
+                                                        <Switch checked={entity.checked} onCheckedChange={() => toggleEntityCheck(entity.id)} className="mt-0.5" />
+                                                        <div>
+                                                            <p className="font-medium text-sm flex items-center gap-2">
+                                                                {entity.original}
+                                                                {entity.type && <Badge variant="outline" className="text-[10px]">{entity.type}</Badge>}
+                                                            </p>
+                                                            {entity.description && <p className="text-xs text-muted-foreground mt-0.5">{entity.description}</p>}
+                                                        </div>
+                                                    </div>
+                                                    <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white/50 backdrop-blur-sm rounded-md p-0.5">
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-brand-600" onClick={() => startEditingEntity(entity)}>
+                                                            <Edit className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-danger" onClick={() => deleteEntity(entity.id)}>
+                                                            <Trash2 className="h-3.5 w-3.5" />
+                                                        </Button>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    ))}
+                                    {extractedEntities.length === 0 && (
+                                        <div className="p-8 text-center text-sm text-muted-foreground">No entities remaining.</div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                    {!isExtracting && (
+                        <DialogFooter>
+                            <Button variant="outline" onClick={() => setProcessingDoc(null)}>Discard</Button>
+                            <Button className="bg-brand-600 hover:bg-brand-700" onClick={handleSaveEntities}>
+                                Save to Context
+                            </Button>
+                        </DialogFooter>
+                    )}
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }

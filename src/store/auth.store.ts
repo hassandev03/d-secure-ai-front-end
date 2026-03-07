@@ -11,6 +11,7 @@ interface AuthState {
 
     setUser: (user: User, token: string) => void;
     setPendingUser: (user: User, token: string) => void;
+    updateUser: (updates: Partial<User>) => void;
     confirmAuth: () => void;
     logout: () => void;
     setLoading: (loading: boolean) => void;
@@ -39,6 +40,13 @@ export const useAuthStore = create<AuthState>((set, get) => ({
 
     setPendingUser: (user, token) => {
         set({ pendingUser: user, token, isAuthenticated: false });
+    },
+
+    updateUser: (updates) => {
+        set((state) => ({
+            user: state.user ? { ...state.user, ...updates } : null,
+            role: state.user && updates.role ? updates.role : state.role
+        }));
     },
 
     confirmAuth: () => {

@@ -39,7 +39,7 @@ const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, '0
 const YEARS = Array.from({ length: 11 }, (_, i) => String(currentYear + i));
 
 export default function SubscriptionPage() {
-    const { user } = useAuthStore();
+    const { user, updateUser } = useAuthStore();
     const [plansData, setPlansData] = useState<SubscriptionPlanDisplay[]>([]);
     const [currentPlanKey, setCurrentPlanKey] = useState<string>(user?.subscriptionTier || 'FREE');
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
@@ -173,11 +173,12 @@ export default function SubscriptionPage() {
             resetCardForm();
         }
         setCurrentPlanKey(selectedPlanForUpgrade!.key);
+        updateUser({ subscriptionTier: selectedPlanForUpgrade!.key as any });
         toast.success(`Successfully upgraded to the ${selectedPlanForUpgrade!.name} Plan!`);
     };
 
     /* ── Shared card form fields component ── */
-    const CardFormFields = () => (
+    const renderCardFormFields = () => (
         <div className="space-y-4 animate-in fade-in slide-in-from-top-2 duration-300">
             <div className="space-y-2">
                 <Label htmlFor="card-name">Name on Card <span className="text-danger">*</span></Label>
@@ -418,7 +419,7 @@ export default function SubscriptionPage() {
                                 </div>
                             )}
 
-                            {(useNewCard || savedCards.length === 0) && <CardFormFields />}
+                            {(useNewCard || savedCards.length === 0) && renderCardFormFields()}
                         </div>
                         <DialogFooter className="flex-col gap-2 sm:flex-col sm:gap-2">
                             <Button type="submit" className="w-full bg-brand-600 hover:bg-brand-700 h-10" disabled={isProcessing}>
@@ -443,7 +444,7 @@ export default function SubscriptionPage() {
                     </DialogHeader>
                     <form onSubmit={handleAddCardSubmit}>
                         <div className="py-4">
-                            <CardFormFields />
+                            {renderCardFormFields()}
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={() => setIsAddCardModalOpen(false)}>Cancel</Button>

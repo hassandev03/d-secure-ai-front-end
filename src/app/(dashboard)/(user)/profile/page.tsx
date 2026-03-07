@@ -30,8 +30,22 @@ function validateName(name: string, label: string): string | null {
 }
 
 function validatePhone(phone: string): string | null {
-    if (!phone.trim()) return null; // optional
+    if (!phone.trim()) return "Phone is required.";
     if (!/^\+?[\d\s\-()]{7,20}$/.test(phone)) return "Enter a valid phone number.";
+    return null;
+}
+
+function validateCountry(country: string): string | null {
+    if (!country.trim()) return "Country is required.";
+    if (country.trim().length < 2) return "Country must be at least 2 characters.";
+    if (!/^[A-Za-z\s\-,.]+$/.test(country)) return "Enter a valid country name.";
+    return null;
+}
+
+function validateJobTitle(title: string): string | null {
+    if (!title.trim()) return "Job title is required.";
+    if (title.trim().length < 2) return "Job title must be at least 2 characters.";
+    if (!/^[A-Za-z0-9\s\-,.&]+$/.test(title)) return "Enter a valid job title.";
     return null;
 }
 
@@ -101,6 +115,8 @@ export default function ProfilePage() {
             lastName: validateName(lastName, "Last Name"),
             email: validateEmail(email),
             phone: validatePhone(phone),
+            country: validateCountry(country),
+            jobTitle: validateJobTitle(jobTitle),
         };
         setErrors(newErrors);
 
@@ -207,11 +223,15 @@ export default function ProfilePage() {
                         <FieldError error={errors.email ?? null} />
                     </div>
                     <div className="space-y-2">
-                        <Label>Phone</Label>
+                        <Label>Phone <span className="text-danger">*</span></Label>
                         <Input value={phone} onChange={(e) => { setPhone(e.target.value); setErrors(prev => ({ ...prev, phone: null })); }} placeholder="+1 234 567 8900" className={errors.phone ? "border-danger" : ""} />
                         <FieldError error={errors.phone ?? null} />
                     </div>
-                    <div className="space-y-2"><Label>Country</Label><Input value={country} onChange={(e) => setCountry(e.target.value)} /></div>
+                    <div className="space-y-2">
+                        <Label>Country <span className="text-danger">*</span></Label>
+                        <Input value={country} onChange={(e) => { setCountry(e.target.value); setErrors(prev => ({ ...prev, country: null })); }} className={errors.country ? "border-danger" : ""} />
+                        <FieldError error={errors.country ?? null} />
+                    </div>
                 </CardContent>
             </Card>
 
@@ -219,7 +239,11 @@ export default function ProfilePage() {
             <Card className="mb-6">
                 <CardHeader><CardTitle className="text-base">Professional Details</CardTitle></CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2"><Label>Job Title</Label><Input value={jobTitle} onChange={(e) => setJobTitle(e.target.value)} /></div>
+                    <div className="space-y-2">
+                        <Label>Job Title <span className="text-danger">*</span></Label>
+                        <Input value={jobTitle} onChange={(e) => { setJobTitle(e.target.value); setErrors(prev => ({ ...prev, jobTitle: null })); }} className={errors.jobTitle ? "border-danger" : ""} />
+                        <FieldError error={errors.jobTitle ?? null} />
+                    </div>
                     <div className="space-y-2">
                         <Label>Industry</Label>
                         <Select value={industry} onValueChange={setIndustry}>

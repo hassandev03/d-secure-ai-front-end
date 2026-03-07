@@ -437,7 +437,7 @@ export default function ChatPage() {
                     />
                     <div className="absolute bottom-2 left-2 right-2 flex items-center justify-between">
                         <div className="flex gap-1">
-                            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" multiple accept=".pdf,.txt,.xls,.xlsx,.csv" />
+                            <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" multiple accept=".pdf,.txt" />
                             <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" title="Attach file" onClick={() => fileInputRef.current?.click()}>
                                 <Paperclip className="h-4 w-4" />
                             </Button>
