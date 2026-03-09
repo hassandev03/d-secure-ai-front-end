@@ -12,6 +12,7 @@ import {
     addDeptEmployee,
     removeDeptEmployee,
     updateEmployeeLimit,
+    setEmployeeRestriction,
     type DeptEmployee,
     type OrgRole,
 } from "@/services/da.service";
@@ -176,16 +177,15 @@ export default function EmployeeManagementPage() {
         }
     };
 
-    const handleRestrictToggle = (emp: DeptEmployee) => {
+    const handleRestrictToggle = async (emp: DeptEmployee) => {
         const restricting = emp.dailyLimit !== 0;
-        setEmployees((prev) =>
-            prev.map((e) =>
-                e.id === emp.id
-                    ? { ...e, dailyLimit: restricting ? 0 : 30, status: restricting ? "INACTIVE" : "ACTIVE" }
-                    : e,
-            ),
-        );
-        toast.success(`${emp.name} has been ${restricting ? "restricted" : "unrestricted"}.`);
+        try {
+            const updated = await setEmployeeRestriction(emp.id, restricting);
+            setEmployees((prev) => prev.map((e) => e.id === emp.id ? updated : e));
+            toast.success(`${emp.name} has been ${restricting ? "restricted" : "unrestricted"}.`);
+        } catch {
+            toast.error(`Failed to ${restricting ? "restrict" : "unrestrict"} ${emp.name}.`);
+        }
     };
 
     const handleSetLimit = async () => {
@@ -194,8 +194,8 @@ export default function EmployeeManagementPage() {
         if (isNaN(val) || val < 0) { toast.error("Enter a valid limit (0 or more)."); return; }
         setLimitSaving(true);
         try {
-            await updateEmployeeLimit(limitTarget.id, val);
-            setEmployees((prev) => prev.map((e) => e.id === limitTarget.id ? { ...e, dailyLimit: val } : e));
+            const updated = await updateEmployeeLimit(limitTarget.id, val);
+            setEmployees((prev) => prev.map((e) => e.id === limitTarget.id ? updated : e));
             toast.success(`Daily limit for ${limitTarget.name} set to ${val}.`);
         } catch {
             toast.error("Failed to update limit.");

@@ -35,7 +35,10 @@ export type EmpQuotaRequest = {
     employeeId: string;
     name: string;
     email: string;
+    /** Amount the employee requested */
     amount: number;
+    /** Amount actually granted — may be less than `amount` when quota is tight */
+    grantedAmount?: number;
     reason: string;
     date: string;
     status: 'PENDING' | 'APPROVED' | 'DENIED';
@@ -115,7 +118,7 @@ const MOCK_ORG_ROLES: OrgRole[] = [
 const MOCK_DEPT_EMPLOYEES: DeptEmployee[] = [
     { id: "1",  name: "Raj Patel",       email: "raj@acme.com",       roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   requests: 320, dailyLimit: 50, lastActive: "Today"      },
     { id: "2",  name: "John Miller",     email: "john@acme.com",      roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   requests: 180, dailyLimit: 30, lastActive: "Today"      },
-    { id: "3",  name: "Alice Brown",     email: "alice@acme.com",     roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   requests: 150, dailyLimit: 30, lastActive: "Yesterday"  },
+    { id: "3",  name: "Alice Brown",     email: "alice@acme.com",     roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   requests: 150, dailyLimit: 25, lastActive: "Yesterday"  },
     { id: "4",  name: "Bob Wilson",      email: "bob@acme.com",       roleId: "role-4", roleName: "DevOps Engineer",  status: "ACTIVE",   requests: 120, dailyLimit: 40, lastActive: "Yesterday"  },
     { id: "5",  name: "Mike Chen",       email: "mike@acme.com",      roleId: "role-3", roleName: "Developer",        status: "INACTIVE", requests:  45, dailyLimit:  0, lastActive: "3 days ago" },
     { id: "6",  name: "Emily Zhao",      email: "emily@acme.com",     roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   requests:  88, dailyLimit: 50, lastActive: "Today"      },
@@ -123,7 +126,7 @@ const MOCK_DEPT_EMPLOYEES: DeptEmployee[] = [
     { id: "8",  name: "Sara Kim",        email: "sara@acme.com",      roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   requests:  95, dailyLimit: 30, lastActive: "Today"      },
     { id: "9",  name: "David Lee",       email: "david@acme.com",     roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   requests:  67, dailyLimit: 25, lastActive: "2 days ago" },
     { id: "10", name: "Priya Singh",     email: "priya@acme.com",     roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   requests: 143, dailyLimit: 30, lastActive: "Today"      },
-    { id: "11", name: "Liam Turner",     email: "liam@acme.com",      roleId: "role-4", roleName: "DevOps Engineer",  status: "ACTIVE",   requests:  78, dailyLimit: 35, lastActive: "Yesterday"  },
+    { id: "11", name: "Liam Turner",     email: "liam@acme.com",      roleId: "role-4", roleName: "DevOps Engineer",  status: "ACTIVE",   requests:  78, dailyLimit: 40, lastActive: "Yesterday"  },
     { id: "12", name: "Olivia Martin",   email: "olivia@acme.com",    roleId: "role-3", roleName: "Developer",        status: "INACTIVE", requests:  12, dailyLimit:  0, lastActive: "1 week ago" },
     { id: "13", name: "James Anderson",  email: "james@acme.com",     roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   requests: 198, dailyLimit: 50, lastActive: "Today"      },
     { id: "14", name: "Mia Thompson",    email: "mia@acme.com",       roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   requests:  56, dailyLimit: 25, lastActive: "Today"      },
@@ -144,7 +147,7 @@ const ALL_MODEL_IDS = MODELS.map((m) => m.id) as LLMModel[];
 const MOCK_EMP_ACCESS: EmpAccessData[] = [
     { id: "1",  name: "Raj Patel",       email: "raj@acme.com",      roleName: "Senior Developer", fileUpload: true,  speechToText: true,  allModels: true,  allowedModels: ALL_MODEL_IDS,                           limit: 50 },
     { id: "2",  name: "John Miller",     email: "john@acme.com",     roleName: "Developer",        fileUpload: true,  speechToText: false, allModels: true,  allowedModels: ALL_MODEL_IDS,                           limit: 30 },
-    { id: "3",  name: "Alice Brown",     email: "alice@acme.com",    roleName: "QA Engineer",      fileUpload: false, speechToText: false, allModels: false, allowedModels: ["gpt-4o", "claude-4-5-haiku"],          limit: 20 },
+    { id: "3",  name: "Alice Brown",     email: "alice@acme.com",    roleName: "QA Engineer",      fileUpload: false, speechToText: false, allModels: false, allowedModels: ["gpt-4o", "claude-4-5-haiku"],          limit: 25 },
     { id: "4",  name: "Bob Wilson",      email: "bob@acme.com",      roleName: "DevOps Engineer",  fileUpload: true,  speechToText: true,  allModels: true,  allowedModels: ALL_MODEL_IDS,                           limit: 40 },
     { id: "5",  name: "Mike Chen",       email: "mike@acme.com",     roleName: "Developer",        fileUpload: false, speechToText: false, allModels: false, allowedModels: ["gpt-4o"],                              limit: 0  },
     { id: "6",  name: "Emily Zhao",      email: "emily@acme.com",    roleName: "Senior Developer", fileUpload: true,  speechToText: true,  allModels: true,  allowedModels: ALL_MODEL_IDS,                           limit: 50 },
@@ -152,7 +155,7 @@ const MOCK_EMP_ACCESS: EmpAccessData[] = [
     { id: "8",  name: "Sara Kim",        email: "sara@acme.com",     roleName: "Developer",        fileUpload: true,  speechToText: false, allModels: false, allowedModels: ["gpt-4o", "gpt-5-1"],                   limit: 30 },
     { id: "9",  name: "David Lee",       email: "david@acme.com",    roleName: "QA Engineer",      fileUpload: false, speechToText: false, allModels: false, allowedModels: ["claude-4-5-haiku"],                    limit: 25 },
     { id: "10", name: "Priya Singh",     email: "priya@acme.com",    roleName: "Developer",        fileUpload: true,  speechToText: true,  allModels: false, allowedModels: ["gpt-4o", "claude-4-6-sonnet"],         limit: 30 },
-    { id: "11", name: "Liam Turner",     email: "liam@acme.com",     roleName: "DevOps Engineer",  fileUpload: true,  speechToText: false, allModels: true,  allowedModels: ALL_MODEL_IDS,                           limit: 35 },
+    { id: "11", name: "Liam Turner",     email: "liam@acme.com",     roleName: "DevOps Engineer",  fileUpload: true,  speechToText: false, allModels: true,  allowedModels: ALL_MODEL_IDS,                           limit: 40 },
     { id: "12", name: "Olivia Martin",   email: "olivia@acme.com",   roleName: "Developer",        fileUpload: false, speechToText: false, allModels: false, allowedModels: ["gpt-4o"],                              limit: 0  },
     { id: "13", name: "James Anderson",  email: "james@acme.com",    roleName: "Senior Developer", fileUpload: true,  speechToText: true,  allModels: true,  allowedModels: ALL_MODEL_IDS,                           limit: 50 },
     { id: "14", name: "Mia Thompson",    email: "mia@acme.com",      roleName: "QA Engineer",      fileUpload: false, speechToText: false, allModels: false, allowedModels: ["claude-4-5-haiku", "gemini-3-1-flash"], limit: 25 },
@@ -181,26 +184,23 @@ const MOCK_DEPT_POLICY: DeptPolicy = {
  * Backend route (future): GET /api/v1/dept/{deptId}
  */
 const MOCK_DEPT_INFO: DeptInfo = {
-    name:     'Engineering Department',
-    subtitle: 'Department overview and team management.',
+    name:          'Engineering Department',
+    subtitle:      'Department overview and team management.',
+    headName:      'Dr. Sarah Mitchell',
+    monthlyQuota:  3000,
+    quotaRenewsAt: '2026-04-01',
 };
 
-/**
- * Department quota configuration — total only; `used` is derived from employees.
- * Backend route (future): GET /api/v1/dept/{deptId}/quota
- */
-const MOCK_DEPT_QUOTA_TOTAL  = 3000;
-const MOCK_DEPT_QUOTA_RENEWS = '2026-04-01';
 
 /**
  * Incoming quota increase requests from employees.
  * Backend route (future): GET /api/v1/dept/{deptId}/quota-requests
  */
 const MOCK_EMP_QUOTA_REQUESTS: EmpQuotaRequest[] = [
-    { id: 'qr-1', name: 'Tom Baker',   email: 'tom@acme.com',   amount: 150, reason: 'Machine learning project requires additional prompt quota.', date: '2025-12-28', status: 'PENDING'  },
-    { id: 'qr-2', name: 'Emily Zhao',  email: 'emily@acme.com', amount:  50, reason: 'Year-end analysis and reporting tasks.',                    date: '2025-12-27', status: 'PENDING'  },
-    { id: 'qr-3', name: 'Raj Patel',   email: 'raj@acme.com',   amount: 100, reason: 'Automated code-review workflows.',                         date: '2025-12-20', status: 'APPROVED' },
-    { id: 'qr-4', name: 'John Miller', email: 'john@acme.com',  amount:  80, reason: 'Documentation generation sprint.',                         date: '2025-12-15', status: 'DENIED'   },
+    { id: 'qr-1', employeeId: '7', name: 'Tom Baker',   email: 'tom@acme.com',   amount: 150, reason: 'Machine learning project requires additional prompt quota.', date: '2025-12-28', status: 'PENDING'  },
+    { id: 'qr-2', employeeId: '6', name: 'Emily Zhao',  email: 'emily@acme.com', amount:  50, reason: 'Year-end analysis and reporting tasks.',                    date: '2025-12-27', status: 'PENDING'  },
+    { id: 'qr-3', employeeId: '1', name: 'Raj Patel',   email: 'raj@acme.com',   amount: 100, reason: 'Automated code-review workflows.',                         date: '2025-12-20', status: 'APPROVED' },
+    { id: 'qr-4', employeeId: '2', name: 'John Miller', email: 'john@acme.com',  amount:  80, reason: 'Documentation generation sprint.',                         date: '2025-12-15', status: 'DENIED'   },
 ];
 
 /**
@@ -211,6 +211,32 @@ const MOCK_ORG_QUOTA_HISTORY: OrgQuotaRequest[] = [
     { id: 'oqr-1', amount: 300, reason: 'Q3 hackathon week',           status: 'APPROVED', date: '2025-10-05', respondedBy: 'Org Admin' },
     { id: 'oqr-2', amount: 200, reason: 'New team members onboarding', status: 'APPROVED', date: '2025-09-12', respondedBy: 'Org Admin' },
     { id: 'oqr-3', amount: 500, reason: 'Load testing project',        status: 'DENIED',   date: '2025-08-20', respondedBy: 'Org Admin' },
+];
+
+/**
+ * Static metadata for each request type: colour, priority, description.
+ * Counts are derived at runtime from MOCK_DEPT_EMPLOYEES.
+ * Backend route (future): GET /api/v1/dept/{deptId}/dashboard/request-types
+ */
+const MOCK_REQUEST_TYPE_META: Omit<RequestTypePoint, 'count' | 'percentage'>[] = [
+    {
+        type:        'Text Query',
+        priority:    'low',
+        description: 'Standard conversational prompts with no file or audio input.',
+        color:       '#10B981',
+    },
+    {
+        type:        'File Upload',
+        priority:    'high',
+        description: 'Requests that include document or file uploads — PII risk is elevated.',
+        color:       '#EF4444',
+    },
+    {
+        type:        'Speech Input',
+        priority:    'high',
+        description: 'Speech-to-text transcription requests — audio data is privacy-sensitive.',
+        color:       '#8B5CF6',
+    },
 ];
 
 // ─── Service functions ────────────────────────────────────────────────────────
@@ -279,6 +305,21 @@ export async function addDeptEmployee(emp: Omit<DeptEmployee, 'id' | 'requests' 
         lastActive: 'Never',
     };
     MOCK_DEPT_EMPLOYEES.push(newEmp);
+    // Also add to MOCK_EMP_ACCESS with dept policy defaults
+    const newAccess: EmpAccessData = {
+        id:           newEmp.id,
+        name:         newEmp.name,
+        email:        newEmp.email,
+        roleName:     newEmp.roleName,
+        fileUpload:   MOCK_DEPT_POLICY.fileUpload,
+        speechToText: MOCK_DEPT_POLICY.speechToText,
+        allModels:    MOCK_DEPT_POLICY.allModels,
+        allowedModels: MOCK_DEPT_POLICY.allModels
+            ? ALL_MODEL_IDS
+            : MOCK_DEPT_POLICY.permittedModels,
+        limit:        newEmp.dailyLimit,
+    };
+    MOCK_EMP_ACCESS.push(newAccess);
     return structuredClone(newEmp);
 }
 
@@ -287,13 +328,52 @@ export async function removeDeptEmployee(empId: string): Promise<void> {
     await delay(350);
     const idx = MOCK_DEPT_EMPLOYEES.findIndex((e) => e.id === empId);
     if (idx !== -1) MOCK_DEPT_EMPLOYEES.splice(idx, 1);
+    // Also remove from MOCK_EMP_ACCESS
+    const accessIdx = MOCK_EMP_ACCESS.findIndex((a) => a.id === empId);
+    if (accessIdx !== -1) MOCK_EMP_ACCESS.splice(accessIdx, 1);
 }
 
 /** PUT /api/v1/dept/{deptId}/employees/{empId}/limit */
-export async function updateEmployeeLimit(empId: string, limit: number): Promise<void> {
+export async function updateEmployeeLimit(empId: string, limit: number): Promise<DeptEmployee> {
     await delay(300);
     const emp = MOCK_DEPT_EMPLOYEES.find((e) => e.id === empId);
-    if (emp) emp.dailyLimit = limit;
+    if (!emp) throw new Error(`Employee ${empId} not found`);
+    emp.dailyLimit = limit;
+    // Also keep MOCK_EMP_ACCESS in sync
+    const access = MOCK_EMP_ACCESS.find((a) => a.id === empId);
+    if (access) access.limit = limit;
+    return structuredClone(emp);
+}
+
+/**
+ * Restrict or unrestrict an employee.
+ * restrict=true  → dailyLimit=0, status='INACTIVE'
+ * restrict=false → restore role's defaultDailyLimit, status='ACTIVE'
+ * Also updates MOCK_EMP_ACCESS limit.
+ * PUT /api/v1/dept/{deptId}/employees/{empId}/restrict
+ */
+export async function setEmployeeRestriction(empId: string, restrict: boolean): Promise<DeptEmployee> {
+    await delay(300);
+    const emp = MOCK_DEPT_EMPLOYEES.find((e) => e.id === empId);
+    if (!emp) throw new Error(`Employee ${empId} not found`);
+    if (restrict) {
+        emp.dailyLimit = 0;
+        emp.status = 'INACTIVE';
+    } else {
+        const role = MOCK_ORG_ROLES.find((r) => r.id === emp.roleId);
+        emp.dailyLimit = role ? role.defaultDailyLimit : 30;
+        emp.status = 'ACTIVE';
+    }
+    // Also keep MOCK_EMP_ACCESS in sync
+    const access = MOCK_EMP_ACCESS.find((a) => a.id === empId);
+    if (access) access.limit = emp.dailyLimit;
+    return structuredClone(emp);
+}
+
+/** GET /api/v1/dept/{deptId}/quota-requests/pending-count */
+export async function getDeptPendingQuotaCount(): Promise<number> {
+    await delay(100);
+    return MOCK_EMP_QUOTA_REQUESTS.filter((r) => r.status === 'PENDING').length;
 }
 
 /** GET /api/v1/dept/{deptId} */
@@ -306,7 +386,7 @@ export async function getDeptInfo(): Promise<DeptInfo> {
 export async function getDeptQuota(): Promise<DeptQuota> {
     await delay(250);
     const used = MOCK_DEPT_EMPLOYEES.reduce((s, e) => s + e.requests, 0);
-    return { used, total: MOCK_DEPT_QUOTA_TOTAL, renewsAt: MOCK_DEPT_QUOTA_RENEWS };
+    return { used, total: MOCK_DEPT_INFO.monthlyQuota, renewsAt: MOCK_DEPT_INFO.quotaRenewsAt };
 }
 
 /** GET /api/v1/dept/{deptId}/quota-requests */
@@ -316,10 +396,26 @@ export async function getDeptEmployeeQuotaRequests(): Promise<EmpQuotaRequest[]>
 }
 
 /** PUT /api/v1/dept/{deptId}/quota-requests/{requestId}/approve */
-export async function approveEmployeeQuotaRequest(requestId: string): Promise<void> {
+export async function approveEmployeeQuotaRequest(
+    requestId: string,
+    grantedAmount?: number,
+): Promise<{ grantedAmount: number }> {
     await delay(300);
     const req = MOCK_EMP_QUOTA_REQUESTS.find((r) => r.id === requestId);
-    if (req) req.status = 'APPROVED';
+    if (!req) throw new Error('Request not found');
+
+    const used      = MOCK_DEPT_EMPLOYEES.reduce((s, e) => s + e.requests, 0);
+    const remaining = MOCK_DEPT_INFO.monthlyQuota - used;
+    const amount    = grantedAmount ?? req.amount;
+
+    if (amount <= 0) throw new Error('Granted amount must be at least 1.');
+    if (amount > remaining) {
+        throw new Error(`Only ${remaining} request${remaining !== 1 ? 's' : ''} remaining in this period.`);
+    }
+
+    req.status        = 'APPROVED';
+    req.grantedAmount = amount;
+    return { grantedAmount: amount };
 }
 
 /** PUT /api/v1/dept/{deptId}/quota-requests/{requestId}/deny */
@@ -360,6 +456,7 @@ export type DeptDashboardStats = {
     modelsInUse: number;
     totalModelsAvailable: number;
     avgRequestsPerEmployee: number;
+    quotaUtilization: number;
 };
 
 export type DailyRequestPoint = {
@@ -385,6 +482,17 @@ export type UsageTrendPoint = {
     date: string;
     requests: number;
     activeUsers: number;
+};
+
+export type RequestTypePoint = {
+    type: string;
+    count: number;
+    percentage: number;
+    /** Privacy / operational importance of this request type */
+    priority: 'high' | 'medium' | 'low';
+    /** Short description shown in tooltips / callouts */
+    description: string;
+    color: string;
 };
 
 // ─── Dashboard analytics mock data builders ─────────────────────────────────
@@ -415,12 +523,13 @@ function buildDailyRequests(employees: DeptEmployee[]): DailyRequestPoint[] {
 function buildModelUsage(employees: DeptEmployee[]): ModelUsageSlice[] {
     const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
     const slices: { name: string; pct: number }[] = [
-        { name: 'Claude 4.6 Sonnet', pct: 0.32 },
-        { name: 'GPT-5.1',           pct: 0.24 },
-        { name: 'GPT-4o',            pct: 0.18 },
-        { name: 'Claude 4.5 Haiku',  pct: 0.12 },
-        { name: 'Gemini 3.1 Pro',    pct: 0.09 },
-        { name: 'Gemini 3.1 Flash',  pct: 0.05 },
+        { name: 'Claude 4.6 Sonnet', pct: 0.27 },
+        { name: 'GPT-5.1',           pct: 0.20 },
+        { name: 'GPT-4o',            pct: 0.16 },
+        { name: 'Claude 4.5 Haiku',  pct: 0.11 },
+        { name: 'Claude 4.6 Opus',   pct: 0.10 },
+        { name: 'Gemini 3.1 Pro',    pct: 0.08 },
+        { name: 'Gemini 3.1 Flash',  pct: 0.08 },
     ];
     return slices.map((s) => ({
         name: s.name,
@@ -483,10 +592,11 @@ export async function getDeptDashboardStats(): Promise<DeptDashboardStats> {
         totalEmployees: employees.length,
         activeEmployees: active.length,
         monthlyRequests: totalRequests,
-        monthlyQuota: MOCK_DEPT_QUOTA_TOTAL,
+        monthlyQuota: MOCK_DEPT_INFO.monthlyQuota,
         modelsInUse: uniqueModels.size,
         totalModelsAvailable: ALL_MODEL_IDS.length,
         avgRequestsPerEmployee: active.length > 0 ? Math.round(totalRequests / active.length) : 0,
+        quotaUtilization: Math.round((totalRequests / MOCK_DEPT_INFO.monthlyQuota) * 100),
     };
 }
 
@@ -520,4 +630,21 @@ export async function getDeptTopUsers(limit: number = 5): Promise<DeptEmployee[]
     return structuredClone(MOCK_DEPT_EMPLOYEES)
         .sort((a, b) => b.requests - a.requests)
         .slice(0, limit);
+}
+
+/**
+ * Breaks the department's total requests down by type (Text, Code, File Upload, etc.).
+ * Counts are derived proportionally from the actual request total so they always sum correctly.
+ * GET /api/v1/dept/{deptId}/dashboard/request-types
+ */
+export async function getDeptRequestTypeBreakdown(): Promise<RequestTypePoint[]> {
+    await delay(250);
+    const total = MOCK_DEPT_EMPLOYEES.reduce((s, e) => s + e.requests, 0);
+    // Distribution weights — must sum to 1.0  (Text Query, File Upload, Speech Input)
+    const weights = [0.55, 0.30, 0.15];
+    return MOCK_REQUEST_TYPE_META.map((meta, i) => ({
+        ...meta,
+        count:      Math.round(total * weights[i]),
+        percentage: Math.round(weights[i] * 100),
+    }));
 }

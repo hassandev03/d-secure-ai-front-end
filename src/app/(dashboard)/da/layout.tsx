@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import {
     LayoutDashboard,
     Users,
@@ -10,23 +10,7 @@ import {
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
-
-const deptAdminNav: NavGroup[] = [
-    {
-        title: "Overview",
-        items: [
-            { label: "Dashboard", href: "/da/dashboard", icon: LayoutDashboard },
-        ],
-    },
-    {
-        title: "Management",
-        items: [
-            { label: "Employee Management", href: "/da/employees", icon: Users },
-            { label: "Quota Requests", href: "/da/quota-requests", icon: BarChart3, badge: 2 },
-            { label: "Access Control", href: "/da/access-control", icon: ShieldCheck },
-        ],
-    },
-];
+import { getDeptPendingQuotaCount } from "@/services/da.service";
 
 export default function DeptAdminLayout({
     children,
@@ -34,6 +18,28 @@ export default function DeptAdminLayout({
     children: React.ReactNode;
 }) {
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    const [pendingCount, setPendingCount] = useState(0);
+
+    useEffect(() => {
+        getDeptPendingQuotaCount().then(setPendingCount).catch(() => {});
+    }, []);
+
+    const deptAdminNav: NavGroup[] = useMemo(() => [
+        {
+            title: "Overview",
+            items: [
+                { label: "Dashboard", href: "/da/dashboard", icon: LayoutDashboard },
+            ],
+        },
+        {
+            title: "Management",
+            items: [
+                { label: "Employee Management", href: "/da/employees", icon: Users },
+                { label: "Quota Requests", href: "/da/quota-requests", icon: BarChart3, badge: pendingCount },
+                { label: "Access Control", href: "/da/access-control", icon: ShieldCheck },
+            ],
+        },
+    ], [pendingCount]);
 
     return (
         <div className="min-h-screen bg-background">

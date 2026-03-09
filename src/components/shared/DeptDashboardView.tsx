@@ -10,7 +10,7 @@ import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend,
-    AreaChart, Area,
+    AreaChart, Area, LabelList,
 } from "recharts";
 import PageHeader from "@/components/layout/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -22,8 +22,10 @@ import { Button } from "@/components/ui/button";
 import {
     getDeptDashboardStats, getDeptDailyRequests, getDeptModelUsage,
     getDeptUsageTrend, getDeptRoleUsage, getDeptTopUsers,
+    getDeptRequestTypeBreakdown,
     type DeptDashboardStats, type DailyRequestPoint, type ModelUsageSlice,
     type UsageTrendPoint, type RoleUsagePoint, type DeptEmployee,
+    type RequestTypePoint,
 } from "@/services/da.service";
 
 interface DeptDashboardViewProps {
@@ -56,6 +58,7 @@ export default function DeptDashboardView({
     const [trendRange, setTrendRange] = useState<7 | 30>(7);
     const [roles, setRoles] = useState<RoleUsagePoint[]>([]);
     const [topUsers, setTopUsers] = useState<DeptEmployee[]>([]);
+    const [requestTypes, setRequestTypes] = useState<RequestTypePoint[]>([]);
 
     useEffect(() => {
         getDeptDashboardStats().then(setStats);
@@ -63,6 +66,7 @@ export default function DeptDashboardView({
         getDeptModelUsage().then(setModels);
         getDeptRoleUsage().then(setRoles);
         getDeptTopUsers(5).then(setTopUsers);
+        getDeptRequestTypeBreakdown().then(setRequestTypes);
     }, []);
 
     const loadTrend = useCallback((range: 7 | 30) => {
@@ -285,6 +289,117 @@ export default function DeptDashboardView({
                     </ResponsiveContainer>
                 </CardContent>
             </Card>
+
+            {/* ── Request Type Breakdown ── */}
+            {requestTypes.length > 0 && (() => {
+                const highPct = requestTypes
+                    .filter((r) => r.priority === 'high')
+                    .reduce((s, r) => s + r.percentage, 0);
+
+                const priorityBadge = (p: RequestTypePoint['priority']) => {
+                    if (p === 'high')   return 'bg-red-100 text-red-700';
+                    if (p === 'medium') return 'bg-amber-100 text-amber-700';
+                    return 'bg-emerald-100 text-emerald-700';
+                };
+                const priorityLabel = (p: RequestTypePoint['priority']) => {
+                    if (p === 'high')   return 'High Priority';
+                    if (p === 'medium') return 'Medium';
+                    return 'Routine';
+                };
+
+                return (
+                    <Card className="mt-6">
+                        <CardHeader>
+                            <CardTitle className="text-base font-semibold">Request Type Breakdown</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="flex flex-col lg:flex-row gap-6">
+                                {/* Horizontal bar chart */}
+                                <div className="flex-1 min-h-[220px]">
+                                    <ResponsiveContainer width="100%" height={220}>
+                                        <BarChart
+                                            data={requestTypes}
+                                            layout="vertical"
+                                            margin={{ top: 0, right: 56, left: 10, bottom: 0 }}
+                                        >
+                                            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                                            <XAxis
+                                                type="number"
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fontSize: 11, fill: "#64748b" }}
+                                            />
+                                            <YAxis
+                                                type="category"
+                                                dataKey="type"
+                                                axisLine={false}
+                                                tickLine={false}
+                                                tick={{ fontSize: 12, fill: "#64748b" }}
+                                                width={95}
+                                            />
+                                            <RechartsTooltip
+                                                cursor={{ fill: "#f1f5f9" }}
+                                                contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }}
+                                                formatter={(value: number | undefined) => [
+                                                    `${(value ?? 0).toLocaleString()} requests`,
+                                                    'Count',
+                                                ]}
+                                            />
+                                            <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
+                                                {requestTypes.map((entry) => (
+                                                    <Cell key={entry.type} fill={entry.color} />
+                                                ))}
+                                                <LabelList
+                                                    dataKey="count"
+                                                    position="right"
+                                                    style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }}
+                                                />
+                                            </Bar>
+                                        </BarChart>
+                                    </ResponsiveContainer>
+                                </div>
+
+                                {/* Priority legend */}
+                                <div className="w-full lg:w-64 space-y-2">
+                                    {requestTypes.map((rt) => (
+                                        <div
+                                            key={rt.type}
+                                            className="flex items-start gap-2.5 rounded-lg border border-border p-3"
+                                        >
+                                            <div
+                                                className="mt-1 h-2.5 w-2.5 shrink-0 rounded-full"
+                                                style={{ backgroundColor: rt.color }}
+                                            />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2 flex-wrap">
+                                                    <span className="text-sm font-medium">{rt.type}</span>
+                                                    <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-full ${priorityBadge(rt.priority)}`}>
+                                                        {priorityLabel(rt.priority)}
+                                                    </span>
+                                                </div>
+                                                <p className="text-xs text-muted-foreground mt-0.5">
+                                                    {rt.count.toLocaleString()} requests &middot; {rt.percentage}%
+                                                </p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+
+                            {/* Actionable callout for high-priority request types */}
+                            {highPct > 0 && (
+                                <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
+                                    <span className="font-semibold">Note:</span> High-priority request types (File Upload &amp; Speech Input) account for <span className="font-semibold">{highPct}%</span> of all requests. Verify that the relevant policies are enabled under{" "}
+                                    <Link href={`${linkPrefix}/access-control`} className="underline underline-offset-2">
+                                        Access Control
+                                    </Link>
+                                    .
+                                </p>
+                            )}
+                        </CardContent>
+                    </Card>
+                );
+            })()}
 
             {/* ── Top Users ── */}
             <Card className="mt-6">

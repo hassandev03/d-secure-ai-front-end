@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Loader2, ArrowUpRight, CheckCircle2, XCircle, Clock, Users } from "lucide-react";
 import { toast } from "sonner";
+import { cn } from "@/lib/utils";
 import {
     getDeptQuota,
     getDeptEmployeeQuotaRequests,
@@ -53,10 +54,18 @@ export default function QuotaRequestsPage() {
     const [empRequests, setEmpRequests] = useState<EmpQuotaRequest[]>([]);
     const [orgRequests, setOrgRequests] = useState<OrgQuotaRequest[]>([]);
 
+    // "Request More Quota" dialog state
     const [submitting, setSubmitting] = useState(false);
     const [newAmount,  setNewAmount]  = useState("");
     const [newReason,  setNewReason]  = useState("");
     const [dialogOpen, setDialogOpen] = useState(false);
+
+    // Allocation dialog state
+    const [allocateTarget, setAllocateTarget] = useState<{
+        id: string; name: string; amount: number;
+    } | null>(null);
+    const [allocateAmount, setAllocateAmount] = useState("");
+    const [allocating, setAllocating] = useState(false);
 
     useEffect(() => {
         let cancelled = false;
@@ -82,22 +91,57 @@ export default function QuotaRequestsPage() {
     }, []);
 
     const pendingCount = empRequests.filter((r) => r.status === "PENDING").length;
+    // Remaining = total quota minus already-consumed requests
+    const remaining    = quota ? quota.total - quota.used : 0;
 
-    // Approve / Deny employee request
-    const handleDecision = async (id: string, decision: "APPROVED" | "DENIED") => {
+    // Open allocation dialog — pre-fill with the lesser of requested vs available
+    const openAllocate = (req: EmpQuotaRequest) => {
+        setAllocateTarget({ id: req.id, name: req.name, amount: req.amount });
+        setAllocateAmount(String(Math.min(req.amount, Math.max(0, remaining))));
+    };
+
+    // Confirm allocation with a custom (or full) amount
+    const handleAllocate = async () => {
+        if (!allocateTarget) return;
+        const val = parseInt(allocateAmount);
+        if (!val || val <= 0) { toast.error("Amount must be at least 1."); return; }
+        setAllocating(true);
+        try {
+            const result = await approveEmployeeQuotaRequest(allocateTarget.id, val);
+            setEmpRequests((prev) =>
+                prev.map((r) =>
+                    r.id === allocateTarget.id
+                        ? { ...r, status: "APPROVED" as const, grantedAmount: result.grantedAmount }
+                        : r,
+                ),
+            );
+            // Reflect the committed quota in the UI immediately
+            setQuota((q) => q ? { ...q, used: q.used + result.grantedAmount } : q);
+            const partial = result.grantedAmount < allocateTarget.amount;
+            toast.success(
+                partial
+                    ? `Partially approved: ${result.grantedAmount} of ${allocateTarget.amount} allocated to ${allocateTarget.name}.`
+                    : `Approved ${result.grantedAmount} requests for ${allocateTarget.name}.`,
+            );
+            setAllocateTarget(null);
+        } catch (e: unknown) {
+            toast.error(e instanceof Error ? e.message : "Failed to approve request.");
+        } finally {
+            setAllocating(false);
+        }
+    };
+
+    // Deny — direct action, no dialog needed
+    const handleDeny = async (id: string) => {
         const name = empRequests.find((r) => r.id === id)?.name;
         try {
-            if (decision === "APPROVED") {
-                await approveEmployeeQuotaRequest(id);
-            } else {
-                await denyEmployeeQuotaRequest(id);
-            }
+            await denyEmployeeQuotaRequest(id);
             setEmpRequests((prev) =>
-                prev.map((r) => r.id === id ? { ...r, status: decision } : r),
+                prev.map((r) => r.id === id ? { ...r, status: "DENIED" as const } : r),
             );
-            toast.success(`Request from ${name} ${decision === "APPROVED" ? "approved" : "denied"}.`);
+            toast.success(`Request from ${name} denied.`);
         } catch {
-            toast.error("Failed to update request.");
+            toast.error("Failed to deny request.");
         }
     };
 
@@ -179,7 +223,7 @@ export default function QuotaRequestsPage() {
                 }
             />
 
-            {/* Current quota */}
+            {/* ── Current quota ──────────────────────────────────── */}
             {quota && (
                 <Card className="mb-6">
                     <CardHeader>
@@ -188,6 +232,17 @@ export default function QuotaRequestsPage() {
                     </CardHeader>
                     <CardContent>
                         <QuotaBar used={quota.used} total={quota.total} label="Monthly AI Requests" />
+                        <p className={cn(
+                            "mt-2 text-xs font-medium",
+                            remaining === 0   ? "text-danger"
+                            : remaining < 200 ? "text-warning"
+                            : "text-success",
+                        )}>
+                            {remaining === 0
+                                ? "No quota remaining — employee requests cannot be approved."
+                                : `${remaining} request${remaining !== 1 ? "s" : ""} available to allocate`
+                            }
+                        </p>
                     </CardContent>
                 </Card>
             )}
@@ -206,7 +261,10 @@ export default function QuotaRequestsPage() {
                             </Badge>
                         )}
                     </div>
-                    <CardDescription>Approve or deny additional quota requests submitted by your team members.</CardDescription>
+                    <CardDescription>
+                        Approve or deny additional quota requests submitted by your team members.
+                        You can grant a custom amount if the full request cannot be fulfilled.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
                     {empRequests.length === 0 ? (
@@ -217,7 +275,7 @@ export default function QuotaRequestsPage() {
                                 <div
                                     key={req.id}
                                     className={`rounded-xl border p-4 ${
-                                        req.status === "PENDING"  ? "border-warning/30 bg-warning/5"
+                                        req.status === "PENDING"   ? "border-warning/30 bg-warning/5"
                                         : req.status === "APPROVED" ? "border-success/20 bg-success/5"
                                         : "border-danger/20 bg-danger/5"
                                     }`}
@@ -234,8 +292,20 @@ export default function QuotaRequestsPage() {
                                                     <p className="text-sm font-semibold">{req.name}</p>
                                                     <p className="text-xs text-muted-foreground">{req.email}</p>
                                                 </div>
-                                                <div className="flex items-center gap-2 mt-0.5">
-                                                    <span className="text-sm font-medium text-brand-700">+{req.amount} requests</span>
+                                                <div className="flex items-center gap-2 mt-0.5 flex-wrap">
+                                                    {/* Show partial grant when grantedAmount differs from requested */}
+                                                    {req.status === "APPROVED"
+                                                        && req.grantedAmount !== undefined
+                                                        && req.grantedAmount !== req.amount ? (
+                                                        <span className="text-sm font-medium">
+                                                            <span className="text-success">+{req.grantedAmount}</span>
+                                                            <span className="text-muted-foreground text-xs"> / {req.amount} requested</span>
+                                                        </span>
+                                                    ) : (
+                                                        <span className="text-sm font-medium text-brand-700">
+                                                            +{req.grantedAmount ?? req.amount} requests
+                                                        </span>
+                                                    )}
                                                     {statusIcon[req.status]}
                                                     <Badge variant="outline" className={`text-xs ${statusColors[req.status]}`}>
                                                         {req.status.charAt(0) + req.status.slice(1).toLowerCase()}
@@ -252,7 +322,7 @@ export default function QuotaRequestsPage() {
                                                     size="sm"
                                                     variant="outline"
                                                     className="border-success/40 text-success hover:bg-success/10 hover:text-success"
-                                                    onClick={() => handleDecision(req.id, "APPROVED")}
+                                                    onClick={() => openAllocate(req)}
                                                 >
                                                     <CheckCircle2 className="mr-1.5 h-3.5 w-3.5" /> Approve
                                                 </Button>
@@ -260,7 +330,7 @@ export default function QuotaRequestsPage() {
                                                     size="sm"
                                                     variant="outline"
                                                     className="border-danger/40 text-danger hover:bg-danger/10 hover:text-danger"
-                                                    onClick={() => handleDecision(req.id, "DENIED")}
+                                                    onClick={() => handleDeny(req.id)}
                                                 >
                                                     <XCircle className="mr-1.5 h-3.5 w-3.5" /> Deny
                                                 </Button>
@@ -308,6 +378,90 @@ export default function QuotaRequestsPage() {
                     </div>
                 </CardContent>
             </Card>
+
+            {/* ── Allocation dialog (opened programmatically) ─────── */}
+            <Dialog
+                open={allocateTarget !== null}
+                onOpenChange={(open) => { if (!open) setAllocateTarget(null); }}
+            >
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Allocate Quota</DialogTitle>
+                    </DialogHeader>
+                    {allocateTarget && (
+                        <div className="space-y-4 py-1">
+                            {/* Context summary */}
+                            <div className="rounded-lg bg-muted/50 border border-border p-3 space-y-1.5 text-sm">
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Employee</span>
+                                    <span className="font-medium">{allocateTarget.name}</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Amount requested</span>
+                                    <span className="font-medium">{allocateTarget.amount} requests</span>
+                                </div>
+                                <div className="flex justify-between">
+                                    <span className="text-muted-foreground">Available quota</span>
+                                    <span className={cn(
+                                        "font-medium",
+                                        remaining === 0                         ? "text-danger"
+                                        : remaining < allocateTarget.amount     ? "text-warning"
+                                        : "text-success",
+                                    )}>
+                                        {remaining} available
+                                    </span>
+                                </div>
+                            </div>
+
+                            {/* Warning banners */}
+                            {remaining === 0 ? (
+                                <div className="rounded-lg bg-danger/10 border border-danger/30 px-3 py-2 text-xs text-danger">
+                                    No quota remaining. Consider requesting more quota from Org Admin before approving.
+                                </div>
+                            ) : remaining < allocateTarget.amount && (
+                                <div className="rounded-lg bg-warning/10 border border-warning/30 px-3 py-2 text-xs text-warning">
+                                    Not enough quota to fulfil the full request. You can allocate up to {remaining}.
+                                </div>
+                            )}
+
+                            {/* Amount input */}
+                            <div className="space-y-1.5">
+                                <Label>Requests to Allocate</Label>
+                                <Input
+                                    type="number"
+                                    min="1"
+                                    max={remaining}
+                                    value={allocateAmount}
+                                    onChange={(e) => setAllocateAmount(e.target.value)}
+                                    disabled={remaining === 0}
+                                    placeholder="Enter amount…"
+                                />
+                                {remaining > 0 && (
+                                    <p className="text-xs text-muted-foreground">
+                                        Requested: {allocateTarget.amount} · Max you can grant: {remaining}
+                                    </p>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                    <DialogFooter>
+                        <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
+                        <Button
+                            className="bg-brand-700 hover:bg-brand-800"
+                            onClick={handleAllocate}
+                            disabled={
+                                allocating
+                                || remaining === 0
+                                || !allocateAmount
+                                || parseInt(allocateAmount) <= 0
+                            }
+                        >
+                            {allocating && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+                            Allocate
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
