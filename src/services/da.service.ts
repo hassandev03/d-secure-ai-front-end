@@ -264,16 +264,15 @@ const MODEL_COLORS: Record<string, string> = {
 
 function buildDailyRequests(employees: DeptEmployee[]): DailyRequestPoint[] {
     const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
+    const activeCount = employees.filter((e) => e.status === 'ACTIVE').length;
     const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
     const weights = [0.18, 0.19, 0.20, 0.17, 0.15, 0.06, 0.05];
-    return days.map((date, i) => {
-        const requests = Math.round(totalRequests * weights[i]);
-        return {
-            date,
-            requests,
-            entitiesAnonymized: Math.round(requests * 1.6),
-        };
-    });
+    const userWeights = [0.85, 0.90, 0.88, 0.82, 0.78, 0.25, 0.18];
+    return days.map((date, i) => ({
+        date,
+        requests: Math.round(totalRequests * weights[i]),
+        activeUsers: Math.round(activeCount * userWeights[i]),
+    }));
 }
 
 function buildModelUsage(employees: DeptEmployee[]): ModelUsageSlice[] {
@@ -293,21 +292,26 @@ function buildModelUsage(employees: DeptEmployee[]): ModelUsageSlice[] {
     }));
 }
 
-function buildEntityTypes(employees: DeptEmployee[]): EntityTypeSlice[] {
+function buildUsageTrend(employees: DeptEmployee[], days: number): UsageTrendPoint[] {
     const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
-    const types: { name: string; pct: number }[] = [
-        { name: 'PERSON',   pct: 0.30 },
-        { name: 'ORG',      pct: 0.22 },
-        { name: 'EMAIL',    pct: 0.18 },
-        { name: 'PROJECT',  pct: 0.14 },
-        { name: 'LOCATION', pct: 0.10 },
-        { name: 'PHONE',    pct: 0.06 },
-    ];
-    const totalEntities = Math.round(totalRequests * 1.6);
-    return types.map((t) => ({
-        name: t.name,
-        count: Math.round(totalEntities * t.pct),
-    }));
+    const activeCount = employees.filter((e) => e.status === 'ACTIVE').length;
+    const avgDaily = totalRequests / 30;
+    const points: UsageTrendPoint[] = [];
+
+    const today = new Date();
+    for (let i = days - 1; i >= 0; i--) {
+        const d = new Date(today);
+        d.setDate(d.getDate() - i);
+        const isWeekend = d.getDay() === 0 || d.getDay() === 6;
+        const factor = isWeekend ? 0.15 + Math.random() * 0.15 : 0.7 + Math.random() * 0.6;
+        const userFactor = isWeekend ? 0.1 + Math.random() * 0.15 : 0.6 + Math.random() * 0.35;
+        points.push({
+            date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            requests: Math.round(avgDaily * factor),
+            activeUsers: Math.max(1, Math.round(activeCount * userFactor)),
+        });
+    }
+    return points;
 }
 
 function buildRoleUsage(employees: DeptEmployee[]): RoleUsagePoint[] {
@@ -336,14 +340,17 @@ export async function getDeptDashboardStats(): Promise<DeptDashboardStats> {
     const employees = structuredClone(MOCK_DEPT_EMPLOYEES);
     const active = employees.filter((e) => e.status === 'ACTIVE');
     const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
+    const quota = 1500;
+    const access = structuredClone(MOCK_EMP_ACCESS);
+    const uniqueModels = new Set(access.flatMap((e) => e.allowedModels));
     return {
         totalEmployees: employees.length,
         activeEmployees: active.length,
         monthlyRequests: totalRequests,
-        monthlyQuota: 1500,
-        anonymizationAccuracy: 99.3,
-        pendingQuotaRequests: 2,
-        entitiesAnonymized: Math.round(totalRequests * 1.6),
+        monthlyQuota: quota,
+        quotaUtilization: Math.round((totalRequests / quota) * 100),
+        modelsInUse: uniqueModels.size,
+        totalModelsAvailable: ALL_MODEL_IDS.length,
         avgRequestsPerEmployee: active.length > 0 ? Math.round(totalRequests / active.length) : 0,
     };
 }
@@ -360,10 +367,10 @@ export async function getDeptModelUsage(): Promise<ModelUsageSlice[]> {
     return buildModelUsage(structuredClone(MOCK_DEPT_EMPLOYEES));
 }
 
-/** GET /api/v1/dept/{deptId}/dashboard/entity-types */
-export async function getDeptEntityTypes(): Promise<EntityTypeSlice[]> {
+/** GET /api/v1/dept/{deptId}/dashboard/usage-trend?days=7|30 */
+export async function getDeptUsageTrend(days: 7 | 30 = 7): Promise<UsageTrendPoint[]> {
     await delay(200);
-    return buildEntityTypes(structuredClone(MOCK_DEPT_EMPLOYEES));
+    return buildUsageTrend(structuredClone(MOCK_DEPT_EMPLOYEES), days);
 }
 
 /** GET /api/v1/dept/{deptId}/dashboard/role-usage */

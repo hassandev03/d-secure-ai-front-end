@@ -1,15 +1,16 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
-    Users, Activity, Shield, BarChart3, TrendingUp,
-    AlertCircle, Brain,
+    Users, Activity,
+    Gauge, Brain,
 } from "lucide-react";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
     Tooltip as RechartsTooltip, ResponsiveContainer,
     PieChart, Pie, Cell, Legend,
+    AreaChart, Area,
 } from "recharts";
 import PageHeader from "@/components/layout/PageHeader";
 import StatCard from "@/components/shared/StatCard";
@@ -20,9 +21,9 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
 import {
     getDeptDashboardStats, getDeptDailyRequests, getDeptModelUsage,
-    getDeptEntityTypes, getDeptRoleUsage, getDeptTopUsers,
+    getDeptUsageTrend, getDeptRoleUsage, getDeptTopUsers,
     type DeptDashboardStats, type DailyRequestPoint, type ModelUsageSlice,
-    type EntityTypeSlice, type RoleUsagePoint, type DeptEmployee,
+    type UsageTrendPoint, type RoleUsagePoint, type DeptEmployee,
 } from "@/services/da.service";
 
 interface DeptDashboardViewProps {
@@ -51,7 +52,8 @@ export default function DeptDashboardView({
     const [stats, setStats] = useState<DeptDashboardStats | null>(null);
     const [daily, setDaily] = useState<DailyRequestPoint[]>([]);
     const [models, setModels] = useState<ModelUsageSlice[]>([]);
-    const [entities, setEntities] = useState<EntityTypeSlice[]>([]);
+    const [usageTrend, setUsageTrend] = useState<UsageTrendPoint[]>([]);
+    const [trendRange, setTrendRange] = useState<7 | 30>(7);
     const [roles, setRoles] = useState<RoleUsagePoint[]>([]);
     const [topUsers, setTopUsers] = useState<DeptEmployee[]>([]);
 
@@ -59,10 +61,16 @@ export default function DeptDashboardView({
         getDeptDashboardStats().then(setStats);
         getDeptDailyRequests().then(setDaily);
         getDeptModelUsage().then(setModels);
-        getDeptEntityTypes().then(setEntities);
         getDeptRoleUsage().then(setRoles);
         getDeptTopUsers(5).then(setTopUsers);
     }, []);
+
+    const loadTrend = useCallback((range: 7 | 30) => {
+        setTrendRange(range);
+        getDeptUsageTrend(range).then(setUsageTrend);
+    }, []);
+
+    useEffect(() => { loadTrend(7); }, [loadTrend]);
 
     if (!stats) return null;
 
@@ -90,22 +98,25 @@ export default function DeptDashboardView({
                     title="Monthly Requests"
                     value={stats.monthlyRequests.toLocaleString()}
                     icon={Activity}
-                    delta={{ value: `of ${stats.monthlyQuota.toLocaleString()} quota`, trend: "up" }}
+                    delta={{ value: `Avg ${stats.avgRequestsPerEmployee} per user`, trend: "up" }}
                     iconColor="text-info bg-info/10"
                 />
                 <StatCard
-                    title="Anonymization Accuracy"
-                    value={`${stats.anonymizationAccuracy}%`}
-                    icon={Shield}
-                    delta={{ value: `${stats.entitiesAnonymized.toLocaleString()} entities`, trend: "flat" }}
-                    iconColor="text-success bg-success/10"
+                    title="Quota Utilization"
+                    value={`${stats.quotaUtilization}%`}
+                    icon={Gauge}
+                    delta={{
+                        value: stats.quotaUtilization >= 90 ? "Near limit" : stats.quotaUtilization >= 70 ? "Moderate usage" : "Healthy",
+                        trend: stats.quotaUtilization >= 90 ? "down" : stats.quotaUtilization >= 70 ? "flat" : "up",
+                    }}
+                    iconColor={stats.quotaUtilization >= 90 ? "text-danger bg-danger/10" : stats.quotaUtilization >= 70 ? "text-warning bg-warning/10" : "text-success bg-success/10"}
                 />
                 <StatCard
-                    title="Pending Requests"
-                    value={stats.pendingQuotaRequests}
-                    icon={AlertCircle}
-                    delta={{ value: `Avg ${stats.avgRequestsPerEmployee} req/user`, trend: "flat" }}
-                    iconColor="text-warning bg-warning/10"
+                    title="Models in Use"
+                    value={stats.modelsInUse}
+                    icon={Brain}
+                    delta={{ value: `of ${stats.totalModelsAvailable} available`, trend: "flat" }}
+                    iconColor="text-info bg-info/10"
                 />
             </div>
 
@@ -147,7 +158,7 @@ export default function DeptDashboardView({
                                 />
                                 <Legend wrapperStyle={{ paddingTop: "20px", fontSize: "12px" }} />
                                 <Bar dataKey="requests" name="AI Requests" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
-                                <Bar dataKey="entitiesAnonymized" name="Entities Anonymized" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
+                                <Bar dataKey="activeUsers" name="Active Users" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
                             </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
@@ -193,63 +204,97 @@ export default function DeptDashboardView({
                 </Card>
             </div>
 
-            {/* ── Row 2: Entity Types + Role-based Usage ── */}
-            <div className="mt-6 grid gap-6 lg:grid-cols-2 items-stretch">
-                {/* Entity Types Anonymized */}
-                <Card className="flex flex-col">
-                    <CardHeader>
-                        <CardTitle className="text-base font-semibold">Entity Types Anonymized</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex-1 min-h-[260px] w-full pb-4">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={entities} layout="vertical" margin={{ top: 0, right: 30, left: 10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                                <XAxis type="number" hide />
-                                <YAxis
-                                    dataKey="name"
-                                    type="category"
-                                    axisLine={false}
-                                    tickLine={false}
-                                    tick={{ fontSize: 11, fill: "#475569" }}
-                                    width={70}
-                                />
-                                <RechartsTooltip
-                                    cursor={{ fill: "#f1f5f9" }}
-                                    contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }}
-                                />
-                                <Bar dataKey="count" name="Entities" fill="#8b5cf6" radius={[0, 4, 4, 0]} barSize={16}>
-                                    {entities.map((_entry, index) => (
-                                        <Cell key={`cell-${index}`} fill={`hsl(260, 70%, ${45 + index * 6}%)`} />
-                                    ))}
-                                </Bar>
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
+            {/* ── Usage Trend (filterable) ── */}
+            <Card className="mt-6">
+                <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
+                    <CardTitle className="text-base font-semibold">Usage Trend</CardTitle>
+                    <div className="flex gap-1">
+                        <Button
+                            variant={trendRange === 7 ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => loadTrend(7)}
+                        >
+                            7 Days
+                        </Button>
+                        <Button
+                            variant={trendRange === 30 ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => loadTrend(30)}
+                        >
+                            30 Days
+                        </Button>
+                    </div>
+                </CardHeader>
+                <CardContent className="min-h-[300px] w-full pb-4">
+                    <ResponsiveContainer width="100%" height={300}>
+                        <AreaChart data={usageTrend} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
+                            <defs>
+                                <linearGradient id="gradRequests" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                                </linearGradient>
+                                <linearGradient id="gradUsers" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.2} />
+                                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                                </linearGradient>
+                            </defs>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                            <XAxis
+                                dataKey="date"
+                                axisLine={false}
+                                tickLine={false}
+                                tick={{ fontSize: 11, fill: "#64748b" }}
+                                dy={10}
+                                interval={trendRange === 30 ? 4 : 0}
+                            />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
+                            <RechartsTooltip
+                                contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                            />
+                            <Legend wrapperStyle={{ paddingTop: "16px", fontSize: "12px" }} />
+                            <Area
+                                type="monotone"
+                                dataKey="requests"
+                                name="Requests"
+                                stroke="#3b82f6"
+                                strokeWidth={2}
+                                fill="url(#gradRequests)"
+                            />
+                            <Area
+                                type="monotone"
+                                dataKey="activeUsers"
+                                name="Active Users"
+                                stroke="#10b981"
+                                strokeWidth={2}
+                                fill="url(#gradUsers)"
+                            />
+                        </AreaChart>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
 
-                {/* Usage by Role */}
-                <Card className="flex flex-col">
-                    <CardHeader>
-                        <CardTitle className="text-base font-semibold">Usage by Role</CardTitle>
-                    </CardHeader>
-                    <CardContent className="flex-1 min-h-[260px] w-full pb-4">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={roles} margin={{ top: 10, right: 30, left: -10, bottom: 0 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
-                                <XAxis dataKey="role" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={10} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
-                                <RechartsTooltip
-                                    cursor={{ fill: "#f1f5f9" }}
-                                    contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
-                                />
-                                <Legend wrapperStyle={{ paddingTop: "16px", fontSize: "12px" }} />
-                                <Bar dataKey="totalRequests" name="Total Requests" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={18} />
-                                <Bar dataKey="avgRequests" name="Avg / Employee" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={18} />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
-            </div>
+            {/* ── Usage by Role ── */}
+            <Card className="mt-6 flex flex-col">
+                <CardHeader>
+                    <CardTitle className="text-base font-semibold">Usage by Role</CardTitle>
+                </CardHeader>
+                <CardContent className="min-h-[280px] w-full pb-4">
+                    <ResponsiveContainer width="100%" height={280}>
+                        <BarChart data={roles} margin={{ top: 10, right: 30, left: -10, bottom: 0 }}>
+                            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
+                            <XAxis dataKey="role" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#64748b" }} dy={10} />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
+                            <RechartsTooltip
+                                cursor={{ fill: "#f1f5f9" }}
+                                contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                            />
+                            <Legend wrapperStyle={{ paddingTop: "16px", fontSize: "12px" }} />
+                            <Bar dataKey="totalRequests" name="Total Requests" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={24} />
+                            <Bar dataKey="avgRequests" name="Avg / Employee" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={24} />
+                        </BarChart>
+                    </ResponsiveContainer>
+                </CardContent>
+            </Card>
 
             {/* ── Top Users ── */}
             <Card className="mt-6">
