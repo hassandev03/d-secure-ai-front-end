@@ -8,6 +8,7 @@ import type { LLMModel } from "@/types/chat.types";
 import {
     getDeptAccessData,
     getDeptPolicy,
+    saveDeptPolicy,
     applyPolicyToSelected,
     type EmpAccessData,
     type DeptPolicy,
@@ -131,11 +132,11 @@ export default function AccessControlPage() {
     const [applying, setApplying]   = useState(false);
     const [employees, setEmployees] = useState<EmpAccessData[]>([]);
     const [policy, setPolicy]       = useState<DeptPolicy>({
-        fileUpload:      true,
+        fileUpload:      false,
         speechToText:    false,
-        allModels:       true,
-        permittedModels: MODELS.map((m) => m.id) as LLMModel[],
-        dailyLimit:      30,
+        allModels:       false,
+        permittedModels: [],
+        dailyLimit:      0,
     });
 
     const [search, setSearch]             = useState("");
@@ -204,9 +205,10 @@ export default function AccessControlPage() {
     const handleSave = async () => {
         setSaving(true);
         try {
-            // saveDeptPolicy(policy) — wired to service when backend is ready
-            await new Promise((r) => setTimeout(r, 700));
+            await saveDeptPolicy(policy);
             toast.success("Access policies saved.");
+        } catch {
+            toast.error("Failed to save policies.");
         } finally { setSaving(false); }
     };
 

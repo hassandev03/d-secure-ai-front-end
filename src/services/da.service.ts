@@ -10,6 +10,46 @@ import type { LLMModel } from '@/types/chat.types';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type DeptInfo = {
+    /** Department display name */
+    name: string;
+    /** Subtitle shown below the name in the dashboard header */
+    subtitle: string;
+    /** Name of the department head */
+    headName: string;
+    /** Monthly AI request quota allocated to this department */
+    monthlyQuota: number;
+    /** ISO date string — next quota renewal date */
+    quotaRenewsAt: string;
+};
+
+export type DeptQuota = {
+    used: number;
+    total: number;
+    renewsAt: string;
+};
+
+export type EmpQuotaRequest = {
+    id: string;
+    /** Links to DeptEmployee.id */
+    employeeId: string;
+    name: string;
+    email: string;
+    amount: number;
+    reason: string;
+    date: string;
+    status: 'PENDING' | 'APPROVED' | 'DENIED';
+};
+
+export type OrgQuotaRequest = {
+    id: string;
+    amount: number;
+    reason: string;
+    status: 'PENDING' | 'APPROVED' | 'DENIED';
+    date: string;
+    respondedBy: string;
+};
+
 export type OrgRole = {
     id: string;
     name: string;
@@ -136,6 +176,43 @@ const MOCK_DEPT_POLICY: DeptPolicy = {
     dailyLimit:      30,
 };
 
+/**
+ * Department identity (name, subtitle shown in the dashboard header).
+ * Backend route (future): GET /api/v1/dept/{deptId}
+ */
+const MOCK_DEPT_INFO: DeptInfo = {
+    name:     'Engineering Department',
+    subtitle: 'Department overview and team management.',
+};
+
+/**
+ * Department quota configuration — total only; `used` is derived from employees.
+ * Backend route (future): GET /api/v1/dept/{deptId}/quota
+ */
+const MOCK_DEPT_QUOTA_TOTAL  = 3000;
+const MOCK_DEPT_QUOTA_RENEWS = '2026-04-01';
+
+/**
+ * Incoming quota increase requests from employees.
+ * Backend route (future): GET /api/v1/dept/{deptId}/quota-requests
+ */
+const MOCK_EMP_QUOTA_REQUESTS: EmpQuotaRequest[] = [
+    { id: 'qr-1', name: 'Tom Baker',   email: 'tom@acme.com',   amount: 150, reason: 'Machine learning project requires additional prompt quota.', date: '2025-12-28', status: 'PENDING'  },
+    { id: 'qr-2', name: 'Emily Zhao',  email: 'emily@acme.com', amount:  50, reason: 'Year-end analysis and reporting tasks.',                    date: '2025-12-27', status: 'PENDING'  },
+    { id: 'qr-3', name: 'Raj Patel',   email: 'raj@acme.com',   amount: 100, reason: 'Automated code-review workflows.',                         date: '2025-12-20', status: 'APPROVED' },
+    { id: 'qr-4', name: 'John Miller', email: 'john@acme.com',  amount:  80, reason: 'Documentation generation sprint.',                         date: '2025-12-15', status: 'DENIED'   },
+];
+
+/**
+ * Dept Admin's own requests submitted to the Org Admin.
+ * Backend route (future): GET /api/v1/dept/{deptId}/org-quota-requests
+ */
+const MOCK_ORG_QUOTA_HISTORY: OrgQuotaRequest[] = [
+    { id: 'oqr-1', amount: 300, reason: 'Q3 hackathon week',           status: 'APPROVED', date: '2025-10-05', respondedBy: 'Org Admin' },
+    { id: 'oqr-2', amount: 200, reason: 'New team members onboarding', status: 'APPROVED', date: '2025-09-12', respondedBy: 'Org Admin' },
+    { id: 'oqr-3', amount: 500, reason: 'Load testing project',        status: 'DENIED',   date: '2025-08-20', respondedBy: 'Org Admin' },
+];
+
 // ─── Service functions ────────────────────────────────────────────────────────
 
 /** GET /api/v1/org/roles */
@@ -212,6 +289,67 @@ export async function removeDeptEmployee(empId: string): Promise<void> {
     if (idx !== -1) MOCK_DEPT_EMPLOYEES.splice(idx, 1);
 }
 
+/** PUT /api/v1/dept/{deptId}/employees/{empId}/limit */
+export async function updateEmployeeLimit(empId: string, limit: number): Promise<void> {
+    await delay(300);
+    const emp = MOCK_DEPT_EMPLOYEES.find((e) => e.id === empId);
+    if (emp) emp.dailyLimit = limit;
+}
+
+/** GET /api/v1/dept/{deptId} */
+export async function getDeptInfo(): Promise<DeptInfo> {
+    await delay(150);
+    return structuredClone(MOCK_DEPT_INFO);
+}
+
+/** GET /api/v1/dept/{deptId}/quota */
+export async function getDeptQuota(): Promise<DeptQuota> {
+    await delay(250);
+    const used = MOCK_DEPT_EMPLOYEES.reduce((s, e) => s + e.requests, 0);
+    return { used, total: MOCK_DEPT_QUOTA_TOTAL, renewsAt: MOCK_DEPT_QUOTA_RENEWS };
+}
+
+/** GET /api/v1/dept/{deptId}/quota-requests */
+export async function getDeptEmployeeQuotaRequests(): Promise<EmpQuotaRequest[]> {
+    await delay(300);
+    return structuredClone(MOCK_EMP_QUOTA_REQUESTS);
+}
+
+/** PUT /api/v1/dept/{deptId}/quota-requests/{requestId}/approve */
+export async function approveEmployeeQuotaRequest(requestId: string): Promise<void> {
+    await delay(300);
+    const req = MOCK_EMP_QUOTA_REQUESTS.find((r) => r.id === requestId);
+    if (req) req.status = 'APPROVED';
+}
+
+/** PUT /api/v1/dept/{deptId}/quota-requests/{requestId}/deny */
+export async function denyEmployeeQuotaRequest(requestId: string): Promise<void> {
+    await delay(300);
+    const req = MOCK_EMP_QUOTA_REQUESTS.find((r) => r.id === requestId);
+    if (req) req.status = 'DENIED';
+}
+
+/** GET /api/v1/dept/{deptId}/org-quota-requests */
+export async function getDeptOrgQuotaHistory(): Promise<OrgQuotaRequest[]> {
+    await delay(250);
+    return structuredClone(MOCK_ORG_QUOTA_HISTORY);
+}
+
+/** POST /api/v1/dept/{deptId}/org-quota-requests */
+export async function submitOrgQuotaRequest(amount: number, reason: string): Promise<OrgQuotaRequest> {
+    await delay(700);
+    const newReq: OrgQuotaRequest = {
+        id:          `oqr-${Date.now()}`,
+        amount,
+        reason,
+        status:      'PENDING',
+        date:        new Date().toISOString().split('T')[0],
+        respondedBy: '—',
+    };
+    MOCK_ORG_QUOTA_HISTORY.unshift(newReq);
+    return structuredClone(newReq);
+}
+
 // ─── Dashboard analytics types ──────────────────────────────────────────────
 
 export type DeptDashboardStats = {
@@ -219,7 +357,6 @@ export type DeptDashboardStats = {
     activeEmployees: number;
     monthlyRequests: number;
     monthlyQuota: number;
-    quotaUtilization: number;
     modelsInUse: number;
     totalModelsAvailable: number;
     avgRequestsPerEmployee: number;
@@ -340,15 +477,13 @@ export async function getDeptDashboardStats(): Promise<DeptDashboardStats> {
     const employees = structuredClone(MOCK_DEPT_EMPLOYEES);
     const active = employees.filter((e) => e.status === 'ACTIVE');
     const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
-    const quota = 1500;
     const access = structuredClone(MOCK_EMP_ACCESS);
     const uniqueModels = new Set(access.flatMap((e) => e.allowedModels));
     return {
         totalEmployees: employees.length,
         activeEmployees: active.length,
         monthlyRequests: totalRequests,
-        monthlyQuota: quota,
-        quotaUtilization: Math.round((totalRequests / quota) * 100),
+        monthlyQuota: MOCK_DEPT_QUOTA_TOTAL,
         modelsInUse: uniqueModels.size,
         totalModelsAvailable: ALL_MODEL_IDS.length,
         avgRequestsPerEmployee: active.length > 0 ? Math.round(totalRequests / active.length) : 0,

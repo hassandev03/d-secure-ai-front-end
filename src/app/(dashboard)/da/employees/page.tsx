@@ -11,6 +11,7 @@ import {
     getOrgRoles,
     addDeptEmployee,
     removeDeptEmployee,
+    updateEmployeeLimit,
     type DeptEmployee,
     type OrgRole,
 } from "@/services/da.service";
@@ -192,11 +193,16 @@ export default function EmployeeManagementPage() {
         const val = parseInt(editLimit);
         if (isNaN(val) || val < 0) { toast.error("Enter a valid limit (0 or more)."); return; }
         setLimitSaving(true);
-        await new Promise((r) => setTimeout(r, 300)); // simulate PUT /employees/{id}/limit
-        setEmployees((prev) => prev.map((e) => e.id === limitTarget.id ? { ...e, dailyLimit: val } : e));
-        toast.success(`Daily limit for ${limitTarget.name} set to ${val}.`);
-        setLimitSaving(false);
-        setLimitTarget(null);
+        try {
+            await updateEmployeeLimit(limitTarget.id, val);
+            setEmployees((prev) => prev.map((e) => e.id === limitTarget.id ? { ...e, dailyLimit: val } : e));
+            toast.success(`Daily limit for ${limitTarget.name} set to ${val}.`);
+        } catch {
+            toast.error("Failed to update limit.");
+        } finally {
+            setLimitSaving(false);
+            setLimitTarget(null);
+        }
     };
 
     // ── Render ───────────────────────────────────────────────────────────

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import {
     Users, Activity,
-    Gauge, Brain,
+    Brain,
 } from "lucide-react";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid,
@@ -87,7 +87,7 @@ export default function DeptDashboardView({
             />
 
             {/* ── KPI cards ── */}
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <StatCard
                     title="Team Members"
                     value={stats.totalEmployees}
@@ -100,16 +100,6 @@ export default function DeptDashboardView({
                     icon={Activity}
                     delta={{ value: `Avg ${stats.avgRequestsPerEmployee} per user`, trend: "up" }}
                     iconColor="text-info bg-info/10"
-                />
-                <StatCard
-                    title="Quota Utilization"
-                    value={`${stats.quotaUtilization}%`}
-                    icon={Gauge}
-                    delta={{
-                        value: stats.quotaUtilization >= 90 ? "Near limit" : stats.quotaUtilization >= 70 ? "Moderate usage" : "Healthy",
-                        trend: stats.quotaUtilization >= 90 ? "down" : stats.quotaUtilization >= 70 ? "flat" : "up",
-                    }}
-                    iconColor={stats.quotaUtilization >= 90 ? "text-danger bg-danger/10" : stats.quotaUtilization >= 70 ? "text-warning bg-warning/10" : "text-success bg-success/10"}
                 />
                 <StatCard
                     title="Models in Use"

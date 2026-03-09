@@ -1,8 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Loader2, ArrowUpRight, CheckCircle2, XCircle, Clock, Users } from "lucide-react";
 import { toast } from "sonner";
+import {
+    getDeptQuota,
+    getDeptEmployeeQuotaRequests,
+    getDeptOrgQuotaHistory,
+    approveEmployeeQuotaRequest,
+    denyEmployeeQuotaRequest,
+    submitOrgQuotaRequest,
+    type DeptQuota,
+    type EmpQuotaRequest,
+    type OrgQuotaRequest,
+} from "@/services/da.service";
 import PageHeader from "@/components/layout/PageHeader";
 import QuotaBar from "@/components/shared/QuotaBar";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -16,45 +27,9 @@ import {
     DialogTrigger, DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
 
-// ── Types ─────────────────────────────────────────────────────
+// ── Helpers ───────────────────────────────────────────────────
 type RequestStatus = "PENDING" | "APPROVED" | "DENIED";
 
-type EmployeeRequest = {
-    id: number;
-    name: string;
-    email: string;
-    amount: number;
-    reason: string;
-    date: string;
-    status: RequestStatus;
-};
-
-type OrgRequest = {
-    id: number;
-    amount: number;
-    reason: string;
-    status: RequestStatus;
-    date: string;
-    respondedBy: string;
-};
-
-// ── Mock data ─────────────────────────────────────────────────
-const currentQuota = { used: 1200, total: 1500, renewsAt: "2026-01-01" };
-
-const initialEmployeeRequests: EmployeeRequest[] = [
-    { id: 1, name: "Tom Baker",    email: "tom@acme.com",   amount: 150, reason: "Machine learning project requires additional prompt quota.",     date: "2025-12-28", status: "PENDING" },
-    { id: 2, name: "Emily Zhao",   email: "emily@acme.com", amount:  50, reason: "Year-end analysis and reporting tasks.",                        date: "2025-12-27", status: "PENDING" },
-    { id: 3, name: "Raj Patel",    email: "raj@acme.com",   amount: 100, reason: "Automated code-review workflows.",                             date: "2025-12-20", status: "APPROVED" },
-    { id: 4, name: "John Miller",  email: "john@acme.com",  amount:  80, reason: "Documentation generation sprint.",                             date: "2025-12-15", status: "DENIED" },
-];
-
-const initialOrgRequests: OrgRequest[] = [
-    { id: 1, amount: 300, reason: "Q3 hackathon week",              status: "APPROVED", date: "2025-10-05", respondedBy: "Org Admin" },
-    { id: 2, amount: 200, reason: "New team members onboarding",    status: "APPROVED", date: "2025-09-12", respondedBy: "Org Admin" },
-    { id: 3, amount: 500, reason: "Load testing project",           status: "DENIED",   date: "2025-08-20", respondedBy: "Org Admin" },
-];
-
-// ── Helpers ───────────────────────────────────────────────────
 const statusColors: Record<RequestStatus, string> = {
     APPROVED: "bg-success/10 text-success border-success/20",
     DENIED:   "bg-danger/10 text-danger border-danger/20",
@@ -73,23 +48,57 @@ function initials(name: string) {
 
 // ─────────────────────────────────────────────────────────────
 export default function QuotaRequestsPage() {
+    const [loading, setLoading] = useState(true);
+    const [quota, setQuota]     = useState<DeptQuota | null>(null);
+    const [empRequests, setEmpRequests] = useState<EmpQuotaRequest[]>([]);
+    const [orgRequests, setOrgRequests] = useState<OrgQuotaRequest[]>([]);
+
     const [submitting, setSubmitting] = useState(false);
     const [newAmount,  setNewAmount]  = useState("");
     const [newReason,  setNewReason]  = useState("");
     const [dialogOpen, setDialogOpen] = useState(false);
 
-    const [empRequests, setEmpRequests] = useState<EmployeeRequest[]>(initialEmployeeRequests);
-    const [orgRequests, setOrgRequests] = useState<OrgRequest[]>(initialOrgRequests);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const [q, emp, org] = await Promise.all([
+                    getDeptQuota(),
+                    getDeptEmployeeQuotaRequests(),
+                    getDeptOrgQuotaHistory(),
+                ]);
+                if (!cancelled) {
+                    setQuota(q);
+                    setEmpRequests(emp);
+                    setOrgRequests(org);
+                }
+            } catch {
+                toast.error("Failed to load quota data.");
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
     const pendingCount = empRequests.filter((r) => r.status === "PENDING").length;
 
     // Approve / Deny employee request
-    const handleDecision = (id: number, decision: "APPROVED" | "DENIED") => {
-        setEmpRequests((prev) =>
-            prev.map((r) => r.id === id ? { ...r, status: decision } : r),
-        );
+    const handleDecision = async (id: string, decision: "APPROVED" | "DENIED") => {
         const name = empRequests.find((r) => r.id === id)?.name;
-        toast.success(`Request from ${name} ${decision === "APPROVED" ? "approved" : "denied"}.`);
+        try {
+            if (decision === "APPROVED") {
+                await approveEmployeeQuotaRequest(id);
+            } else {
+                await denyEmployeeQuotaRequest(id);
+            }
+            setEmpRequests((prev) =>
+                prev.map((r) => r.id === id ? { ...r, status: decision } : r),
+            );
+            toast.success(`Request from ${name} ${decision === "APPROVED" ? "approved" : "denied"}.`);
+        } catch {
+            toast.error("Failed to update request.");
+        }
     };
 
     // Submit new request to Org Admin
@@ -99,21 +108,33 @@ export default function QuotaRequestsPage() {
             return;
         }
         setSubmitting(true);
-        await new Promise((r) => setTimeout(r, 700));
-        const newReq: OrgRequest = {
-            id: Date.now(),
-            amount: parseInt(newAmount),
-            reason: newReason.trim(),
-            status: "PENDING",
-            date: new Date().toISOString().split("T")[0],
-            respondedBy: "—",
-        };
-        setOrgRequests((prev) => [newReq, ...prev]);
-        setNewAmount(""); setNewReason("");
-        setDialogOpen(false);
-        setSubmitting(false);
-        toast.success("Quota request submitted to Org Admin!");
+        try {
+            const newReq = await submitOrgQuotaRequest(parseInt(newAmount), newReason.trim());
+            setOrgRequests((prev) => [newReq, ...prev]);
+            setNewAmount(""); setNewReason("");
+            setDialogOpen(false);
+            toast.success("Quota request submitted to Org Admin!");
+        } catch {
+            toast.error("Failed to submit request.");
+        } finally {
+            setSubmitting(false);
+        }
     };
+
+    if (loading) {
+        return (
+            <div className="mx-auto max-w-5xl">
+                <PageHeader
+                    title="Quota Requests"
+                    subtitle="Review employee requests and request additional quota from Org Admin."
+                    breadcrumbs={[{ label: "Dept Admin", href: "/da/dashboard" }, { label: "Quota Requests" }]}
+                />
+                <div className="flex items-center justify-center py-32">
+                    <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="mx-auto max-w-5xl">
@@ -159,15 +180,17 @@ export default function QuotaRequestsPage() {
             />
 
             {/* Current quota */}
-            <Card className="mb-6">
-                <CardHeader>
-                    <CardTitle className="text-base font-semibold">Current Department Quota</CardTitle>
-                    <CardDescription>Renews {currentQuota.renewsAt}</CardDescription>
-                </CardHeader>
-                <CardContent>
-                    <QuotaBar used={currentQuota.used} total={currentQuota.total} label="Monthly AI Requests" />
-                </CardContent>
-            </Card>
+            {quota && (
+                <Card className="mb-6">
+                    <CardHeader>
+                        <CardTitle className="text-base font-semibold">Current Department Quota</CardTitle>
+                        <CardDescription>Renews {quota.renewsAt}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <QuotaBar used={quota.used} total={quota.total} label="Monthly AI Requests" />
+                    </CardContent>
+                </Card>
+            )}
 
             {/* ── Incoming employee requests ──────────────────────── */}
             <Card className="mb-6">

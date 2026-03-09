@@ -1,12 +1,12 @@
-"use client";
-
 import DeptDashboardView from "@/components/shared/DeptDashboardView";
+import { getDeptInfo } from "@/services/da.service";
 
-export default function DeptAdminDashboard() {
+export default async function DeptAdminDashboard() {
+    const info = await getDeptInfo();
     return (
         <DeptDashboardView
-            deptName="Engineering Department"
-            subtitle="Department overview and team management."
+            deptName={info.name}
+            subtitle={info.subtitle}
             linkPrefix="/da"
             showQuotaRequestLink
         />
