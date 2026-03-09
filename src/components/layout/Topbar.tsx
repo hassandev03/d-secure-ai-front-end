@@ -15,7 +15,11 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { Badge } from "@/components/ui/badge";
 
-export default function Topbar() {
+interface TopbarProps {
+    showProfile?: boolean;
+}
+
+export default function Topbar({ showProfile = true }: TopbarProps) {
     const router = useRouter();
     const { user, logout } = useAuthStore();
 
@@ -68,10 +72,14 @@ export default function Topbar() {
                             <p className="text-xs text-muted-foreground">{user?.email}</p>
                         </div>
                         <DropdownMenuSeparator />
-                        <DropdownMenuItem onClick={() => router.push('/profile')} className="cursor-pointer">
-                            <User className="mr-2 h-4 w-4" /> Profile
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
+                        {showProfile && (
+                            <>
+                                <DropdownMenuItem onClick={() => router.push('/profile')} className="cursor-pointer">
+                                    <User className="mr-2 h-4 w-4" /> Profile
+                                </DropdownMenuItem>
+                                <DropdownMenuSeparator />
+                            </>
+                        )}
                         <DropdownMenuItem onClick={handleLogout} className="text-danger focus:text-danger cursor-pointer">
                             <LogOut className="mr-2 h-4 w-4" /> Sign Out
                         </DropdownMenuItem>

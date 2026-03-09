@@ -21,7 +21,7 @@ const deptAdminNav: NavGroup[] = [
     {
         title: "Management",
         items: [
-            { label: "Employees", href: "/da/employees", icon: Users },
+            { label: "Employee Management", href: "/da/employees", icon: Users },
             { label: "Quota Requests", href: "/da/quota-requests", icon: BarChart3, badge: 2 },
             { label: "Access Control", href: "/da/access-control", icon: ShieldCheck },
         ],
@@ -45,7 +45,7 @@ export default function DeptAdminLayout({
                 onCollapse={setSidebarCollapsed}
             />
             <div className={cn("transition-all duration-300", sidebarCollapsed ? "pl-16" : "pl-64")}>
-                <Topbar />
+                <Topbar showProfile={false} />
                 <main className="p-6">{children}</main>
             </div>
         </div>
