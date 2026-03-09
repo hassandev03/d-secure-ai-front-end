@@ -1,8 +1,17 @@
 "use client";
 
-import { useState, useMemo } from "react";
-import { Save, Loader2, ShieldCheck, Search, X } from "lucide-react";
+import { useState, useMemo, useEffect } from "react";
+import { Save, Loader2, ShieldCheck, Search, X, Check } from "lucide-react";
 import { toast } from "sonner";
+import { MODELS } from "@/lib/constants";
+import type { LLMModel } from "@/types/chat.types";
+import {
+    getDeptAccessData,
+    getDeptPolicy,
+    applyPolicyToSelected,
+    type EmpAccessData,
+    type DeptPolicy,
+} from "@/services/da.service";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -13,64 +22,161 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-type EmpAccess = {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    fileUpload: boolean;
-    speechToText: boolean;
-    allModels: boolean;
-    limit: number;
-};
-
-const initialAccess: EmpAccess[] = [
-    { id: "1",  name: "Raj Patel",       email: "raj@acme.com",      role: "Senior Developer", fileUpload: true,  speechToText: true,  allModels: true,  limit: 50 },
-    { id: "2",  name: "John Miller",      email: "john@acme.com",     role: "Developer",        fileUpload: true,  speechToText: false, allModels: true,  limit: 30 },
-    { id: "3",  name: "Alice Brown",      email: "alice@acme.com",    role: "QA Engineer",      fileUpload: false, speechToText: false, allModels: false, limit: 20 },
-    { id: "4",  name: "Bob Wilson",       email: "bob@acme.com",      role: "DevOps Engineer",  fileUpload: true,  speechToText: true,  allModels: true,  limit: 40 },
-    { id: "5",  name: "Mike Chen",        email: "mike@acme.com",     role: "Developer",        fileUpload: false, speechToText: false, allModels: false, limit: 0  },
-    { id: "6",  name: "Emily Zhao",       email: "emily@acme.com",    role: "Senior Developer", fileUpload: true,  speechToText: true,  allModels: true,  limit: 50 },
-    { id: "7",  name: "Tom Baker",        email: "tom@acme.com",      role: "Tech Lead",        fileUpload: true,  speechToText: true,  allModels: true,  limit: 60 },
-    { id: "8",  name: "Sara Kim",         email: "sara@acme.com",     role: "Developer",        fileUpload: true,  speechToText: false, allModels: false, limit: 30 },
-    { id: "9",  name: "David Lee",        email: "david@acme.com",    role: "QA Engineer",      fileUpload: false, speechToText: false, allModels: false, limit: 25 },
-    { id: "10", name: "Priya Singh",      email: "priya@acme.com",    role: "Developer",        fileUpload: true,  speechToText: true,  allModels: false, limit: 30 },
-    { id: "11", name: "Liam Turner",      email: "liam@acme.com",     role: "DevOps Engineer",  fileUpload: true,  speechToText: false, allModels: true,  limit: 35 },
-    { id: "12", name: "Olivia Martin",    email: "olivia@acme.com",   role: "Developer",        fileUpload: false, speechToText: false, allModels: false, limit: 0  },
-    { id: "13", name: "James Anderson",   email: "james@acme.com",    role: "Senior Developer", fileUpload: true,  speechToText: true,  allModels: true,  limit: 50 },
-    { id: "14", name: "Mia Thompson",     email: "mia@acme.com",      role: "QA Engineer",      fileUpload: false, speechToText: false, allModels: false, limit: 25 },
-    { id: "15", name: "Noah Garcia",      email: "noah@acme.com",     role: "Developer",        fileUpload: true,  speechToText: false, allModels: false, limit: 30 },
-    { id: "16", name: "Ava Martinez",     email: "ava@acme.com",      role: "Tech Lead",        fileUpload: true,  speechToText: true,  allModels: true,  limit: 60 },
-    { id: "17", name: "William Jackson",  email: "william@acme.com",  role: "Developer",        fileUpload: true,  speechToText: false, allModels: false, limit: 30 },
-    { id: "18", name: "Isabella White",   email: "isabella@acme.com", role: "Senior Developer", fileUpload: true,  speechToText: true,  allModels: true,  limit: 50 },
-    { id: "19", name: "Ethan Harris",     email: "ethan@acme.com",    role: "Developer",        fileUpload: false, speechToText: false, allModels: false, limit: 0  },
-    { id: "20", name: "Sophia Clark",     email: "sophia@acme.com",   role: "DevOps Engineer",  fileUpload: true,  speechToText: false, allModels: true,  limit: 40 },
-];
-
 const PAGE_SIZE = 6;
 
 function initials(name: string) {
     return name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2);
 }
 
-export default function AccessControlPage() {
-    const [saving, setSaving]       = useState(false);
-    const [employees, setEmployees] = useState<EmpAccess[]>(initialAccess);
-    const [search, setSearch]       = useState("");
-    const [accessFilter, setAccessFilter] = useState("all");
-    const [page, setPage]           = useState(1);
+// ── Inline model checkbox grid grouped by provider ────────────────────────
+function ModelCheckboxGrid({
+    available,
+    selected,
+    onChange,
+}: {
+    available: typeof MODELS;
+    selected: LLMModel[];
+    onChange: (v: LLMModel[]) => void;
+}) {
+    const toggle = (id: LLMModel) =>
+        onChange(selected.includes(id) ? selected.filter((m) => m !== id) : [...selected, id]);
 
-    // Department policy (controlled)
-    const [policy, setPolicy] = useState({
-        fileUpload:     true,
-        speechToText:   false,
-        allModels:      true,
-        dailyLimit:     30,
-        maxPromptLen:   5000,
+    const byProvider = Object.values(
+        available.reduce<Record<string, typeof MODELS>>((acc, m) => {
+            if (!acc[m.provider]) acc[m.provider] = [];
+            acc[m.provider].push(m);
+            return acc;
+        }, {}),
+    );
+
+    return (
+        <div className="space-y-3">
+            {byProvider.map((group) => (
+                <div key={group[0].provider}>
+                    <p className="text-xs font-semibold text-muted-foreground mb-1.5 uppercase tracking-wide">
+                        {group[0].providerName}
+                    </p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5">
+                        {group.map((m) => {
+                            const checked = selected.includes(m.id as LLMModel);
+                            return (
+                                <button
+                                    key={m.id}
+                                    type="button"
+                                    onClick={() => toggle(m.id as LLMModel)}
+                                    className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs transition-colors text-left ${
+                                        checked
+                                            ? "border-brand-700/50 bg-brand-50 text-brand-700"
+                                            : "border-border hover:bg-muted/60"
+                                    }`}
+                                >
+                                    <div className={`h-3.5 w-3.5 shrink-0 rounded-sm border flex items-center justify-center ${
+                                        checked ? "bg-brand-700 border-brand-700" : "border-muted-foreground/40"
+                                    }`}>
+                                        {checked && <Check className="h-2.5 w-2.5 text-white" />}
+                                    </div>
+                                    {m.name}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ── Compact per-employee model selector ──────────────────────────────────────
+function EmpModelSelect({
+    available,
+    selected,
+    onChange,
+}: {
+    available: typeof MODELS;
+    selected: LLMModel[];
+    onChange: (v: LLMModel[]) => void;
+}) {
+    const toggle = (id: LLMModel) =>
+        onChange(selected.includes(id) ? selected.filter((m) => m !== id) : [...selected, id]);
+
+    return (
+        <div className="flex flex-wrap gap-1.5 mt-2.5 pt-2.5 border-t border-border">
+            <span className="text-xs text-muted-foreground self-center mr-1">Models:</span>
+            {available.map((m) => {
+                const active = selected.includes(m.id as LLMModel);
+                return (
+                    <button
+                        key={m.id}
+                        type="button"
+                        onClick={() => toggle(m.id as LLMModel)}
+                        className={`flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] transition-colors ${
+                            active
+                                ? "bg-brand-700 border-brand-700 text-white"
+                                : "border-border text-muted-foreground hover:border-brand-700/50"
+                        }`}
+                    >
+                        {active && <Check className="h-2.5 w-2.5" />}
+                        {m.name}
+                    </button>
+                );
+            })}
+        </div>
+    );
+}
+
+// ── Page ─────────────────────────────────────────────────────────────────────
+export default function AccessControlPage() {
+    const [loading, setLoading]     = useState(true);
+    const [saving, setSaving]       = useState(false);
+    const [applying, setApplying]   = useState(false);
+    const [employees, setEmployees] = useState<EmpAccessData[]>([]);
+    const [policy, setPolicy]       = useState<DeptPolicy>({
+        fileUpload:      true,
+        speechToText:    false,
+        allModels:       true,
+        permittedModels: MODELS.map((m) => m.id) as LLMModel[],
+        dailyLimit:      30,
     });
 
-    const update = (id: string, key: keyof EmpAccess, value: boolean | number) =>
+    const [search, setSearch]             = useState("");
+    const [accessFilter, setAccessFilter] = useState("all");
+    const [page, setPage]                 = useState(1);
+    const [selectedIds, setSelectedIds]   = useState<Set<string>>(new Set());
+
+    // Load data from service (simulates API call)
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const [empData, policyData] = await Promise.all([getDeptAccessData(), getDeptPolicy()]);
+                if (!cancelled) {
+                    setEmployees(empData);
+                    setPolicy(policyData);
+                }
+            } catch {
+                toast.error("Failed to load access data.");
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
+
+    const update = <K extends keyof EmpAccessData>(id: string, key: K, value: EmpAccessData[K]) =>
         setEmployees((prev) => prev.map((e) => e.id === id ? { ...e, [key]: value } : e));
+
+    // ── Selection helpers ──────────────────────────────────────────────────────
+    const toggleSelect = (id: string) =>
+        setSelectedIds((prev) => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+    const selectAll  = () => setSelectedIds(new Set(employees.map((e) => e.id)));
+    const selectNone = () => setSelectedIds(new Set());
+    const allSelected = employees.length > 0 && selectedIds.size === employees.length;
+
+    // Seed models when turning off "All Models" for an employee:
+    // pre-select the dept-permitted set so they inherit policy, then admin can adjust individually.
+    const policyModelSeed: LLMModel[] = policy.allModels
+        ? (MODELS.map((m) => m.id) as LLMModel[])
+        : policy.permittedModels;
 
     const filtered = useMemo(() => {
         let list = [...employees];
@@ -78,7 +184,7 @@ export default function AccessControlPage() {
         if (q) list = list.filter(
             (e) => e.name.toLowerCase().includes(q)
                 || e.email.toLowerCase().includes(q)
-                || e.role.toLowerCase().includes(q),
+                || e.roleName.toLowerCase().includes(q),
         );
         if (accessFilter === "restricted") list = list.filter((e) => e.limit === 0);
         else if (accessFilter === "full")  list = list.filter((e) => e.fileUpload && e.speechToText && e.allModels && e.limit > 0);
@@ -86,18 +192,59 @@ export default function AccessControlPage() {
         return list;
     }, [employees, search, accessFilter]);
 
-    const totalPages    = Math.ceil(filtered.length / PAGE_SIZE);
-    const paginated     = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    // selects only the currently visible (filtered) employees
+    const selectFiltered = () => setSelectedIds((prev) => new Set([...prev, ...filtered.map((e) => e.id)]));
+
+    const totalPages      = Math.ceil(filtered.length / PAGE_SIZE);
+    const paginated       = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
     const restrictedCount = employees.filter((e) => e.limit === 0).length;
     const fullCount       = employees.filter((e) => e.fileUpload && e.speechToText && e.allModels && e.limit > 0).length;
     const customCount     = employees.length - restrictedCount - fullCount;
 
     const handleSave = async () => {
         setSaving(true);
-        await new Promise((r) => setTimeout(r, 700));
-        setSaving(false);
-        toast.success("Access policies saved successfully!");
+        try {
+            // saveDeptPolicy(policy) — wired to service when backend is ready
+            await new Promise((r) => setTimeout(r, 700));
+            toast.success("Access policies saved.");
+        } finally { setSaving(false); }
     };
+
+    const handleApplyPolicy = async () => {
+        if (selectedIds.size === 0) return;
+        setApplying(true);
+        try {
+            const ids     = [...selectedIds];
+            const updated = await applyPolicyToSelected(policy, ids);
+            setEmployees(updated);
+            const isAll      = ids.length === employees.length;
+            const modelNote  = !policy.allModels
+                ? ` · ${policy.permittedModels.length} model${policy.permittedModels.length !== 1 ? "s" : ""} permitted`
+                : "";
+            toast.success(
+                isAll
+                    ? `Policy applied to all ${ids.length} employees${modelNote}.`
+                    : `Policy applied to ${ids.length} employee${ids.length !== 1 ? "s" : ""}${modelNote}.`,
+            );
+        } catch {
+            toast.error("Failed to apply policy.");
+        } finally { setApplying(false); }
+    };
+
+    if (loading) {
+        return (
+            <div className="mx-auto max-w-6xl">
+                <PageHeader
+                    title="Access Control"
+                    subtitle="Manage employee permissions and AI access policies."
+                    breadcrumbs={[{ label: "Dept Admin", href: "/da/dashboard" }, { label: "Access Control" }]}
+                />
+                <div className="flex items-center justify-center py-32">
+                    <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="mx-auto max-w-6xl">
@@ -113,7 +260,7 @@ export default function AccessControlPage() {
                 }
             />
 
-            {/* Summary */}
+            {/* Summary stats */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-6">
                 <Card><CardContent className="p-4 text-center">
                     <p className="text-2xl font-bold">{employees.length}</p>
@@ -140,10 +287,15 @@ export default function AccessControlPage() {
                         <ShieldCheck className="h-4 w-4 text-brand-700" />
                         <CardTitle className="text-base">Department-Level Policies</CardTitle>
                     </div>
-                    <CardDescription>Default settings applied to all employees unless overridden below.</CardDescription>
+                    <CardDescription>
+                        Configure default access settings. Select employees below, then click{" "}
+                        <span className="font-medium text-foreground">Apply</span>{" "}
+                        to enforce this policy on the chosen team members only.
+                    </CardDescription>
                 </CardHeader>
-                <CardContent>
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-5">
+                <CardContent className="space-y-5">
+                    {/* 4 policy toggles */}
+                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
                         <div className="flex items-center justify-between rounded-lg border border-border p-3.5">
                             <div>
                                 <p className="text-sm font-medium">File Uploads</p>
@@ -158,25 +310,77 @@ export default function AccessControlPage() {
                             </div>
                             <Switch checked={policy.speechToText} onCheckedChange={(v) => setPolicy((p) => ({ ...p, speechToText: v }))} />
                         </div>
-                        <div className="flex items-center justify-between rounded-lg border border-border p-3.5">
+                        <div className={`flex items-center justify-between rounded-lg border p-3.5 transition-colors ${
+                            policy.allModels ? "border-border" : "border-warning/40 bg-warning/5"
+                        }`}>
                             <div>
                                 <p className="text-sm font-medium">All AI Models</p>
-                                <p className="text-xs text-muted-foreground">Access to all models</p>
+                                <p className="text-xs text-muted-foreground">
+                                    {policy.allModels
+                                        ? "All providers & models"
+                                        : <span className="text-warning font-medium">{policy.permittedModels.length} model{policy.permittedModels.length !== 1 ? "s" : ""} permitted</span>
+                                    }
+                                </p>
                             </div>
                             <Switch checked={policy.allModels} onCheckedChange={(v) => setPolicy((p) => ({ ...p, allModels: v }))} />
                         </div>
                     </div>
-                    <div className="grid gap-4 sm:grid-cols-2">
-                        <div className="space-y-2">
+
+                    {/* Model picker — visible only when allModels is OFF */}
+                    {!policy.allModels && (
+                        <div className="rounded-lg border border-warning/30 bg-warning/5 p-4">
+                            <div className="flex items-center justify-between mb-3">
+                                <div>
+                                    <p className="text-sm font-medium">Permitted Models</p>
+                                    <p className="text-xs text-muted-foreground">
+                                        Employees will only be able to use the selected models.
+                                    </p>
+                                </div>
+                                <div className="flex gap-2">
+                                    <Button size="sm" variant="outline" className="text-xs h-7 px-2"
+                                        onClick={() => setPolicy((p) => ({ ...p, permittedModels: MODELS.map((m) => m.id) as LLMModel[] }))}>
+                                        All
+                                    </Button>
+                                    <Button size="sm" variant="outline" className="text-xs h-7 px-2"
+                                        onClick={() => setPolicy((p) => ({ ...p, permittedModels: [] }))}>
+                                        None
+                                    </Button>
+                                </div>
+                            </div>
+                            <ModelCheckboxGrid
+                                available={MODELS}
+                                selected={policy.permittedModels}
+                                onChange={(v) => setPolicy((p) => ({ ...p, permittedModels: v }))}
+                            />
+                        </div>
+                    )}
+
+                    {/* Daily limit + Apply button */}
+                    <div className="flex flex-col sm:flex-row sm:items-end gap-3">
+                        <div className="space-y-1.5 flex-1 max-w-xs">
                             <Label>Default Daily Limit (requests)</Label>
-                            <Input type="number" value={policy.dailyLimit} min="0"
-                                onChange={(e) => setPolicy((p) => ({ ...p, dailyLimit: parseInt(e.target.value) || 0 }))} />
+                            <Input
+                                type="number"
+                                value={policy.dailyLimit}
+                                min="0"
+                                onChange={(e) => setPolicy((p) => ({ ...p, dailyLimit: parseInt(e.target.value) || 0 }))}
+                            />
                         </div>
-                        <div className="space-y-2">
-                            <Label>Max Prompt Length (characters)</Label>
-                            <Input type="number" value={policy.maxPromptLen} min="0"
-                                onChange={(e) => setPolicy((p) => ({ ...p, maxPromptLen: parseInt(e.target.value) || 0 }))} />
-                        </div>
+                        <Button
+                            onClick={handleApplyPolicy}
+                            disabled={applying || selectedIds.size === 0 || (!policy.allModels && policy.permittedModels.length === 0)}
+                            className="bg-brand-700 hover:bg-brand-800 shrink-0 self-end"
+                        >
+                            {applying ? (
+                                <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Applying…</>
+                            ) : selectedIds.size === 0 ? (
+                                <><Save className="mr-2 h-4 w-4" />Apply Policy</>
+                            ) : selectedIds.size === employees.length ? (
+                                <><Save className="mr-2 h-4 w-4" />Apply to All ({employees.length})</>
+                            ) : (
+                                <><Save className="mr-2 h-4 w-4" />Apply to Selected ({selectedIds.size})</>
+                            )}
+                        </Button>
                     </div>
                 </CardContent>
             </Card>
@@ -185,10 +389,12 @@ export default function AccessControlPage() {
             <Card>
                 <CardHeader>
                     <CardTitle className="text-base">Employee Access Overrides</CardTitle>
-                    <CardDescription>Customise access for individual employees. These override department defaults.</CardDescription>
+                    <CardDescription>
+                        Select employees to apply the department policy, or tweak individual settings directly.
+                    </CardDescription>
                 </CardHeader>
                 <CardContent>
-                    {/* Search + filter bar */}
+                    {/* Search + filter */}
                     <div className="flex flex-col gap-3 sm:flex-row sm:items-center mb-4">
                         <div className="relative flex-1">
                             <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -210,7 +416,7 @@ export default function AccessControlPage() {
                         </Select>
                     </div>
 
-                    {/* Active chips */}
+                    {/* Filter chips */}
                     {(search || accessFilter !== "all") && (
                         <div className="mb-3 flex items-center gap-2 flex-wrap">
                             <span className="text-xs text-muted-foreground">{filtered.length} result{filtered.length !== 1 && "s"}</span>
@@ -227,6 +433,49 @@ export default function AccessControlPage() {
                         </div>
                     )}
 
+                    {/* Selection toolbar */}
+                    <div className="flex items-center justify-between py-2 px-3 rounded-lg bg-muted/40 border border-border mb-3">
+                        <div className="flex items-center gap-0.5">
+                            <Button
+                                variant="ghost" size="sm"
+                                className="h-7 text-xs px-2.5 gap-1.5"
+                                onClick={selectAll}
+                            >
+                                <div className={`h-3.5 w-3.5 rounded-sm border-2 flex items-center justify-center shrink-0 transition-colors ${
+                                    allSelected ? "bg-brand-700 border-brand-700" : "border-muted-foreground/40"
+                                }`}>
+                                    {allSelected && <Check className="h-2.5 w-2.5 text-white" />}
+                                </div>
+                                All ({employees.length})
+                            </Button>
+                            <span className="text-muted-foreground/30 select-none">|</span>
+                            <Button
+                                variant="ghost" size="sm"
+                                className="h-7 text-xs px-2.5"
+                                onClick={selectFiltered}
+                                disabled={filtered.length === 0 || filtered.every((e) => selectedIds.has(e.id))}
+                            >
+                                Visible ({filtered.length})
+                            </Button>
+                            <span className="text-muted-foreground/30 select-none">|</span>
+                            <Button
+                                variant="ghost" size="sm"
+                                className="h-7 text-xs px-2.5 text-muted-foreground"
+                                onClick={selectNone}
+                                disabled={selectedIds.size === 0}
+                            >
+                                None
+                            </Button>
+                        </div>
+                        <span className="text-xs">
+                            {selectedIds.size > 0 ? (
+                                <span className="font-medium text-brand-700">{selectedIds.size} of {employees.length} selected</span>
+                            ) : (
+                                <span className="text-muted-foreground">No selection</span>
+                            )}
+                        </span>
+                    </div>
+
                     {filtered.length === 0 ? (
                         <div className="py-12 text-center">
                             <ShieldCheck className="mx-auto h-10 w-10 text-muted-foreground/30 mb-2" />
@@ -237,18 +486,36 @@ export default function AccessControlPage() {
                             {paginated.map((emp) => {
                                 const isRestricted  = emp.limit === 0;
                                 const isFullAccess  = emp.fileUpload && emp.speechToText && emp.allModels && emp.limit > 0;
+                                const allowedCount  = emp.allModels
+                                    ? MODELS.length
+                                    : emp.allowedModels.length;
+
                                 return (
                                     <div
                                         key={emp.id}
-                                        className={`rounded-xl border p-4 transition-colors ${
-                                            isRestricted ? "border-danger/30 bg-danger/5"
-                                            : isFullAccess ? "border-success/20 bg-success/5"
-                                            : "border-border hover:bg-muted/30"
+                                        className={`rounded-xl border p-4 transition-all ${
+                                            selectedIds.has(emp.id)
+                                                ? "border-brand-700/50 bg-brand-50/40 ring-1 ring-brand-700/20"
+                                                : isRestricted  ? "border-danger/30 bg-danger/5"
+                                                : isFullAccess  ? "border-success/20 bg-success/5"
+                                                : "border-border hover:bg-muted/30"
                                         }`}
                                     >
-                                        {/* Header row */}
+                                        {/* Header */}
                                         <div className="flex items-center justify-between mb-3.5">
                                             <div className="flex items-center gap-3">
+                                                {/* Selection checkbox */}
+                                                <button
+                                                    type="button"
+                                                    onClick={() => toggleSelect(emp.id)}
+                                                    className={`h-4 w-4 shrink-0 rounded-sm border-2 flex items-center justify-center transition-colors ${
+                                                        selectedIds.has(emp.id)
+                                                            ? "bg-brand-700 border-brand-700"
+                                                            : "border-muted-foreground/30 hover:border-brand-700/60"
+                                                    }`}
+                                                >
+                                                    {selectedIds.has(emp.id) && <Check className="h-2.5 w-2.5 text-white" />}
+                                                </button>
                                                 <Avatar className="h-9 w-9">
                                                     <AvatarFallback className="bg-brand-50 text-xs font-semibold text-brand-700">
                                                         {initials(emp.name)}
@@ -256,39 +523,40 @@ export default function AccessControlPage() {
                                                 </Avatar>
                                                 <div>
                                                     <p className="text-sm font-semibold">{emp.name}</p>
-                                                    <p className="text-xs text-muted-foreground">{emp.email} · {emp.role}</p>
+                                                    <p className="text-xs text-muted-foreground">{emp.email} · {emp.roleName}</p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-2 flex-wrap justify-end">
+                                                {!emp.allModels && (
+                                                    <Badge variant="outline" className="bg-brand-50 text-brand-700 border-brand-700/20 text-xs">
+                                                        {allowedCount} / {MODELS.length} model{allowedCount !== 1 ? "s" : ""}
+                                                    </Badge>
+                                                )}
                                                 {isRestricted  && <Badge variant="outline" className="bg-danger/10 text-danger border-danger/20 text-xs">Restricted</Badge>}
                                                 {isFullAccess  && <Badge variant="outline" className="bg-success/10 text-success border-success/20 text-xs">Full Access</Badge>}
                                                 {!isRestricted && !isFullAccess && <Badge variant="outline" className="bg-warning/10 text-warning border-warning/20 text-xs">Custom</Badge>}
                                             </div>
                                         </div>
 
-                                        {/* Controls */}
+                                        {/* Controls row */}
                                         <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
                                             <div className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-2">
                                                 <span className="text-xs text-muted-foreground">File Uploads</span>
-                                                <Switch
-                                                    checked={emp.fileUpload}
-                                                    onCheckedChange={(v) => update(emp.id, "fileUpload", v)}
-                                                    className="scale-90"
-                                                />
+                                                <Switch checked={emp.fileUpload} onCheckedChange={(v) => update(emp.id, "fileUpload", v)} className="scale-90" />
                                             </div>
                                             <div className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-2">
                                                 <span className="text-xs text-muted-foreground">Speech</span>
-                                                <Switch
-                                                    checked={emp.speechToText}
-                                                    onCheckedChange={(v) => update(emp.id, "speechToText", v)}
-                                                    className="scale-90"
-                                                />
+                                                <Switch checked={emp.speechToText} onCheckedChange={(v) => update(emp.id, "speechToText", v)} className="scale-90" />
                                             </div>
                                             <div className="flex items-center justify-between rounded-lg bg-muted/60 px-3 py-2">
                                                 <span className="text-xs text-muted-foreground">All Models</span>
                                                 <Switch
                                                     checked={emp.allModels}
-                                                    onCheckedChange={(v) => update(emp.id, "allModels", v)}
+                                                    onCheckedChange={(v) => {
+                                                        // When turning off, seed with dept-level permitted models
+                                                        if (!v) update(emp.id, "allowedModels", policyModelSeed);
+                                                        update(emp.id, "allModels", v);
+                                                    }}
                                                     className="scale-90"
                                                 />
                                             </div>
@@ -303,6 +571,15 @@ export default function AccessControlPage() {
                                                 />
                                             </div>
                                         </div>
+
+                                        {/* Per-employee model selector — shown when allModels is OFF; shows all models */}
+                                        {!emp.allModels && (
+                                            <EmpModelSelect
+                                                available={MODELS}
+                                                selected={emp.allowedModels}
+                                                onChange={(v) => update(emp.id, "allowedModels", v)}
+                                            />
+                                        )}
                                     </div>
                                 );
                             })}
@@ -316,9 +593,7 @@ export default function AccessControlPage() {
                                 {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
                             </span>
                             <div className="flex items-center gap-1">
-                                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
-                                    Prev
-                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>Prev</Button>
                                 {Array.from({ length: totalPages }, (_, i) => i + 1).map((n) => (
                                     <Button
                                         key={n}
@@ -326,13 +601,9 @@ export default function AccessControlPage() {
                                         size="sm"
                                         className={n === page ? "bg-brand-700 text-white w-8" : "w-8"}
                                         onClick={() => setPage(n)}
-                                    >
-                                        {n}
-                                    </Button>
+                                    >{n}</Button>
                                 ))}
-                                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
-                                    Next
-                                </Button>
+                                <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>Next</Button>
                             </div>
                         </div>
                     )}

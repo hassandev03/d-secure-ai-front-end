@@ -1,11 +1,19 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
     Search, Users, MoreHorizontal, Trash2, Activity,
-    Shield, ChevronLeft, ChevronRight, UserPlus, X,
+    Shield, ChevronLeft, ChevronRight, UserPlus, X, Loader2,
 } from "lucide-react";
 import { toast } from "sonner";
+import {
+    getDeptEmployees,
+    getOrgRoles,
+    addDeptEmployee,
+    removeDeptEmployee,
+    type DeptEmployee,
+    type OrgRole,
+} from "@/services/da.service";
 import PageHeader from "@/components/layout/PageHeader";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
@@ -20,41 +28,6 @@ import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
-type Employee = {
-    id: string;
-    name: string;
-    email: string;
-    role: string;
-    status: string;
-    requests: number;
-    dailyLimit: number;
-    lastActive: string;
-};
-
-const initialEmployees: Employee[] = [
-    { id: "1",  name: "Raj Patel",        email: "raj@acme.com",       role: "Senior Developer",  status: "ACTIVE",   requests: 320, dailyLimit: 50, lastActive: "Today"        },
-    { id: "2",  name: "John Miller",       email: "john@acme.com",      role: "Developer",         status: "ACTIVE",   requests: 180, dailyLimit: 30, lastActive: "Today"        },
-    { id: "3",  name: "Alice Brown",       email: "alice@acme.com",     role: "QA Engineer",       status: "ACTIVE",   requests: 150, dailyLimit: 30, lastActive: "Yesterday"    },
-    { id: "4",  name: "Bob Wilson",        email: "bob@acme.com",       role: "DevOps Engineer",   status: "ACTIVE",   requests: 120, dailyLimit: 40, lastActive: "Yesterday"    },
-    { id: "5",  name: "Mike Chen",         email: "mike@acme.com",      role: "Developer",         status: "INACTIVE", requests:  45, dailyLimit:  0, lastActive: "3 days ago"   },
-    { id: "6",  name: "Emily Zhao",        email: "emily@acme.com",     role: "Senior Developer",  status: "ACTIVE",   requests:  88, dailyLimit: 50, lastActive: "Today"        },
-    { id: "7",  name: "Tom Baker",         email: "tom@acme.com",       role: "Tech Lead",         status: "ACTIVE",   requests: 210, dailyLimit: 60, lastActive: "Today"        },
-    { id: "8",  name: "Sara Kim",          email: "sara@acme.com",      role: "Developer",         status: "ACTIVE",   requests:  95, dailyLimit: 30, lastActive: "Today"        },
-    { id: "9",  name: "David Lee",         email: "david@acme.com",     role: "QA Engineer",       status: "ACTIVE",   requests:  67, dailyLimit: 25, lastActive: "2 days ago"   },
-    { id: "10", name: "Priya Singh",       email: "priya@acme.com",     role: "Developer",         status: "ACTIVE",   requests: 143, dailyLimit: 30, lastActive: "Today"        },
-    { id: "11", name: "Liam Turner",       email: "liam@acme.com",      role: "DevOps Engineer",   status: "ACTIVE",   requests:  78, dailyLimit: 35, lastActive: "Yesterday"    },
-    { id: "12", name: "Olivia Martin",     email: "olivia@acme.com",    role: "Developer",         status: "INACTIVE", requests:  12, dailyLimit:  0, lastActive: "1 week ago"   },
-    { id: "13", name: "James Anderson",    email: "james@acme.com",     role: "Senior Developer",  status: "ACTIVE",   requests: 198, dailyLimit: 50, lastActive: "Today"        },
-    { id: "14", name: "Mia Thompson",      email: "mia@acme.com",       role: "QA Engineer",       status: "ACTIVE",   requests:  56, dailyLimit: 25, lastActive: "Today"        },
-    { id: "15", name: "Noah Garcia",       email: "noah@acme.com",      role: "Developer",         status: "ACTIVE",   requests: 167, dailyLimit: 30, lastActive: "Today"        },
-    { id: "16", name: "Ava Martinez",      email: "ava@acme.com",       role: "Tech Lead",         status: "ACTIVE",   requests: 245, dailyLimit: 60, lastActive: "Yesterday"    },
-    { id: "17", name: "William Jackson",   email: "william@acme.com",   role: "Developer",         status: "ACTIVE",   requests:  89, dailyLimit: 30, lastActive: "Today"        },
-    { id: "18", name: "Isabella White",    email: "isabella@acme.com",  role: "Senior Developer",  status: "ACTIVE",   requests: 134, dailyLimit: 50, lastActive: "Today"        },
-    { id: "19", name: "Ethan Harris",      email: "ethan@acme.com",     role: "Developer",         status: "INACTIVE", requests:  23, dailyLimit:  0, lastActive: "5 days ago"   },
-    { id: "20", name: "Sophia Clark",      email: "sophia@acme.com",    role: "DevOps Engineer",   status: "ACTIVE",   requests: 102, dailyLimit: 40, lastActive: "Today"        },
-];
-
-const ROLES = Array.from(new Set(initialEmployees.map((e) => e.role)));
 const PAGE_SIZE = 8;
 
 function initials(name: string) {
@@ -62,85 +35,147 @@ function initials(name: string) {
 }
 
 export default function EmployeeManagementPage() {
-    const [employees, setEmployees] = useState<Employee[]>(initialEmployees);
+    // ── Data from service ───────────────────────────────────────────────
+    const [loading, setLoading]       = useState(true);
+    const [employees, setEmployees]   = useState<DeptEmployee[]>([]);
+    const [orgRoles, setOrgRoles]     = useState<OrgRole[]>([]);
+    const [rolesLoading, setRolesLoading] = useState(false);
 
-    // Filters
-    const [search, setSearch]           = useState("");
-    const [statusFilter, setStatusFilter] = useState("all");
-    const [roleFilter, setRoleFilter]   = useState("all");
-    const [sortBy, setSortBy]           = useState<"requests" | "name">("requests");
-    const [page, setPage]               = useState(1);
+    useEffect(() => {
+        let cancelled = false;
+        (async () => {
+            try {
+                const data = await getDeptEmployees();
+                if (!cancelled) setEmployees(data);
+            } catch {
+                toast.error("Failed to load employees.");
+            } finally {
+                if (!cancelled) setLoading(false);
+            }
+        })();
+        return () => { cancelled = true; };
+    }, []);
 
-    // Dialogs
-    const [addOpen, setAddOpen]             = useState(false);
-    const [removeTarget, setRemoveTarget]   = useState<Employee | null>(null);
-    const [limitTarget, setLimitTarget]     = useState<Employee | null>(null);
-    const [activityTarget, setActivityTarget] = useState<Employee | null>(null);
+    // Load org roles lazily when the Add dialog opens
+    const loadOrgRoles = async () => {
+        if (orgRoles.length > 0) return; // already loaded
+        setRolesLoading(true);
+        try {
+            const roles = await getOrgRoles();
+            setOrgRoles(roles);
+            // Seed the default role selection with the first role
+            if (roles.length > 0) {
+                setNewRoleId(roles[0].id);
+                setNewLimit(String(roles[0].defaultDailyLimit));
+            }
+        } catch {
+            toast.error("Failed to load organisation roles.");
+        } finally {
+            setRolesLoading(false);
+        }
+    };
 
-    // Add-employee form state
-    const [newName,  setNewName]   = useState("");
-    const [newEmail, setNewEmail]  = useState("");
-    const [newRole,  setNewRole]   = useState("Developer");
-    const [newLimit, setNewLimit]  = useState("30");
+    // ── Filters ─────────────────────────────────────────────────────────
+    const [search, setSearch]               = useState("");
+    const [statusFilter, setStatusFilter]   = useState("all");
+    const [roleFilter, setRoleFilter]       = useState("all");
+    const [sortBy, setSortBy]               = useState<"requests" | "name">("requests");
+    const [page, setPage]                   = useState(1);
 
-    // Set-limit dialog
-    const [editLimit, setEditLimit] = useState("");
+    // ── Dialogs ──────────────────────────────────────────────────────────
+    const [addOpen, setAddOpen]               = useState(false);
+    const [removeTarget, setRemoveTarget]     = useState<DeptEmployee | null>(null);
+    const [limitTarget, setLimitTarget]       = useState<DeptEmployee | null>(null);
+    const [activityTarget, setActivityTarget] = useState<DeptEmployee | null>(null);
 
-    // ── Derived ──────────────────────────────────────────────
+    // ── Add-employee form state ──────────────────────────────────────────
+    const [newName,   setNewName]   = useState("");
+    const [newEmail,  setNewEmail]  = useState("");
+    const [newRoleId, setNewRoleId] = useState("");
+    const [newLimit,  setNewLimit]  = useState("30");
+    const [addSaving, setAddSaving] = useState(false);
+
+    // ── Set-limit dialog ─────────────────────────────────────────────────
+    const [editLimit,  setEditLimit]  = useState("");
+    const [limitSaving, setLimitSaving] = useState(false);
+
+    // Distinct role names for the filter dropdown (derived from loaded employees)
+    const roleNames = useMemo(
+        () => Array.from(new Set(employees.map((e) => e.roleName))).sort(),
+        [employees],
+    );
+
+    // ── Derived ──────────────────────────────────────────────────────────
     const filtered = useMemo(() => {
         let list = [...employees];
         const q = search.toLowerCase();
         if (q) list = list.filter(
             (e) => e.name.toLowerCase().includes(q)
                 || e.email.toLowerCase().includes(q)
-                || e.role.toLowerCase().includes(q),
+                || e.roleName.toLowerCase().includes(q),
         );
         if (statusFilter !== "all") list = list.filter((e) => e.status.toLowerCase() === statusFilter);
-        if (roleFilter   !== "all") list = list.filter((e) => e.role === roleFilter);
+        if (roleFilter   !== "all") list = list.filter((e) => e.roleName === roleFilter);
         if (sortBy === "name")     list.sort((a, b) => a.name.localeCompare(b.name));
         else                       list.sort((a, b) => b.requests - a.requests);
         return list;
     }, [employees, search, statusFilter, roleFilter, sortBy]);
 
-    const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
-    const paginated  = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
-
+    const totalPages    = Math.ceil(filtered.length / PAGE_SIZE);
+    const paginated     = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
     const activeCount   = employees.filter((e) => e.status === "ACTIVE").length;
     const inactiveCount = employees.filter((e) => e.status === "INACTIVE").length;
     const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
+    const resetPage     = () => setPage(1);
 
-    const resetPage = () => setPage(1);
-
-    // ── Actions ──────────────────────────────────────────────
-    const handleAdd = () => {
+    // ── Actions ──────────────────────────────────────────────────────────
+    const handleAdd = async () => {
         if (!newName.trim() || !newEmail.trim()) {
             toast.error("Name and email are required.");
             return;
         }
-        const emp: Employee = {
-            id: Date.now().toString(),
-            name: newName.trim(),
-            email: newEmail.trim(),
-            role: newRole,
-            status: "ACTIVE",
-            requests: 0,
-            dailyLimit: parseInt(newLimit) || 30,
-            lastActive: "Never",
-        };
-        setEmployees((prev) => [emp, ...prev]);
-        setNewName(""); setNewEmail(""); setNewRole("Developer"); setNewLimit("30");
-        setAddOpen(false);
-        toast.success(`${emp.name} added to the department.`);
+        if (!newRoleId) {
+            toast.error("Please select a role.");
+            return;
+        }
+        const role = orgRoles.find((r) => r.id === newRoleId);
+        if (!role) return;
+
+        setAddSaving(true);
+        try {
+            const emp = await addDeptEmployee({
+                name:      newName.trim(),
+                email:     newEmail.trim(),
+                roleId:    role.id,
+                roleName:  role.name,
+                status:    "ACTIVE",
+                dailyLimit: parseInt(newLimit) || role.defaultDailyLimit,
+            });
+            setEmployees((prev) => [emp, ...prev]);
+            setNewName(""); setNewEmail(""); setNewLimit("30");
+            setAddOpen(false);
+            toast.success(`${emp.name} added to the department.`);
+        } catch {
+            toast.error("Failed to add employee.");
+        } finally {
+            setAddSaving(false);
+        }
     };
 
-    const handleRemove = () => {
+    const handleRemove = async () => {
         if (!removeTarget) return;
-        setEmployees((prev) => prev.filter((e) => e.id !== removeTarget.id));
-        toast.success(`${removeTarget.name} removed from the department.`);
-        setRemoveTarget(null);
+        try {
+            await removeDeptEmployee(removeTarget.id);
+            setEmployees((prev) => prev.filter((e) => e.id !== removeTarget.id));
+            toast.success(`${removeTarget.name} removed from the department.`);
+        } catch {
+            toast.error("Failed to remove employee.");
+        } finally {
+            setRemoveTarget(null);
+        }
     };
 
-    const handleRestrictToggle = (emp: Employee) => {
+    const handleRestrictToggle = (emp: DeptEmployee) => {
         const restricting = emp.dailyLimit !== 0;
         setEmployees((prev) =>
             prev.map((e) =>
@@ -152,16 +187,34 @@ export default function EmployeeManagementPage() {
         toast.success(`${emp.name} has been ${restricting ? "restricted" : "unrestricted"}.`);
     };
 
-    const handleSetLimit = () => {
+    const handleSetLimit = async () => {
         if (!limitTarget) return;
         const val = parseInt(editLimit);
         if (isNaN(val) || val < 0) { toast.error("Enter a valid limit (0 or more)."); return; }
+        setLimitSaving(true);
+        await new Promise((r) => setTimeout(r, 300)); // simulate PUT /employees/{id}/limit
         setEmployees((prev) => prev.map((e) => e.id === limitTarget.id ? { ...e, dailyLimit: val } : e));
         toast.success(`Daily limit for ${limitTarget.name} set to ${val}.`);
+        setLimitSaving(false);
         setLimitTarget(null);
     };
 
-    // ── Render ───────────────────────────────────────────────
+    // ── Render ───────────────────────────────────────────────────────────
+    if (loading) {
+        return (
+            <div className="mx-auto max-w-7xl">
+                <PageHeader
+                    title="Employee Management"
+                    subtitle="Loading…"
+                    breadcrumbs={[{ label: "Dept Admin", href: "/da/dashboard" }, { label: "Employee Management" }]}
+                />
+                <div className="flex items-center justify-center py-32">
+                    <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                </div>
+            </div>
+        );
+    }
+
     return (
         <div className="mx-auto max-w-7xl">
             <PageHeader
@@ -169,7 +222,7 @@ export default function EmployeeManagementPage() {
                 subtitle={`${employees.length} team members · ${activeCount} active · ${inactiveCount} inactive`}
                 breadcrumbs={[{ label: "Dept Admin", href: "/da/dashboard" }, { label: "Employee Management" }]}
                 actions={
-                    <Button className="bg-brand-700 hover:bg-brand-800" onClick={() => setAddOpen(true)}>
+                    <Button className="bg-brand-700 hover:bg-brand-800" onClick={() => { setAddOpen(true); loadOrgRoles(); }}>
                         <UserPlus className="mr-2 h-4 w-4" /> Add Employee
                     </Button>
                 }
@@ -208,7 +261,6 @@ export default function EmployeeManagementPage() {
                                 onChange={(e) => { setSearch(e.target.value); resetPage(); }}
                             />
                         </div>
-
                         <div className="flex gap-2 flex-wrap">
                             <Select value={statusFilter} onValueChange={(v) => { setStatusFilter(v); resetPage(); }}>
                                 <SelectTrigger className="w-36"><SelectValue placeholder="Status" /></SelectTrigger>
@@ -218,15 +270,13 @@ export default function EmployeeManagementPage() {
                                     <SelectItem value="inactive">Inactive</SelectItem>
                                 </SelectContent>
                             </Select>
-
                             <Select value={roleFilter} onValueChange={(v) => { setRoleFilter(v); resetPage(); }}>
                                 <SelectTrigger className="w-44"><SelectValue placeholder="All Roles" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Roles</SelectItem>
-                                    {ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
+                                    {roleNames.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
                                 </SelectContent>
                             </Select>
-
                             <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
                                 <SelectTrigger className="w-36"><SelectValue placeholder="Sort" /></SelectTrigger>
                                 <SelectContent>
@@ -237,7 +287,6 @@ export default function EmployeeManagementPage() {
                         </div>
                     </div>
 
-                    {/* Active filter chips */}
                     {(search || statusFilter !== "all" || roleFilter !== "all") && (
                         <div className="mt-2.5 flex items-center gap-2 flex-wrap">
                             <span className="text-xs text-muted-foreground">{filtered.length} result{filtered.length !== 1 && "s"}</span>
@@ -292,9 +341,7 @@ export default function EmployeeManagementPage() {
                                             </div>
                                         </div>
                                     </TableCell>
-                                    <TableCell>
-                                        <span className="text-sm text-muted-foreground">{m.role}</span>
-                                    </TableCell>
+                                    <TableCell><span className="text-sm text-muted-foreground">{m.roleName}</span></TableCell>
                                     <TableCell><StatusBadge status={m.status} /></TableCell>
                                     <TableCell className="text-center">
                                         <span className="text-sm font-medium">{m.requests.toLocaleString()}</span>
@@ -355,9 +402,7 @@ export default function EmployeeManagementPage() {
             {/* Pagination */}
             {totalPages > 1 && (
                 <div className="mt-4 flex items-center justify-between text-sm text-muted-foreground">
-                    <span>
-                        Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}
-                    </span>
+                    <span>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
                     <div className="flex items-center gap-1">
                         <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
                             <ChevronLeft className="h-4 w-4" />
@@ -369,9 +414,7 @@ export default function EmployeeManagementPage() {
                                 size="sm"
                                 className={n === page ? "bg-brand-700 text-white w-8" : "w-8"}
                                 onClick={() => setPage(n)}
-                            >
-                                {n}
-                            </Button>
+                            >{n}</Button>
                         ))}
                         <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.min(totalPages, p + 1))} disabled={page === totalPages}>
                             <ChevronRight className="h-4 w-4" />
@@ -380,8 +423,8 @@ export default function EmployeeManagementPage() {
                 </div>
             )}
 
-            {/* ── Add Employee Dialog ─────────────────────────────── */}
-            <Dialog open={addOpen} onOpenChange={setAddOpen}>
+            {/* ── Add Employee Dialog ─────────────────────────────────────── */}
+            <Dialog open={addOpen} onOpenChange={(o) => { if (!o) { setNewName(""); setNewEmail(""); setNewLimit("30"); } setAddOpen(o); }}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Add Employee</DialogTitle></DialogHeader>
                     <div className="grid gap-4 py-2">
@@ -394,27 +437,56 @@ export default function EmployeeManagementPage() {
                             <Input type="email" value={newEmail} onChange={(e) => setNewEmail(e.target.value)} placeholder="jane@acme.com" />
                         </div>
                         <div className="space-y-2">
-                            <Label>Role</Label>
-                            <Select value={newRole} onValueChange={setNewRole}>
-                                <SelectTrigger><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {ROLES.map((r) => <SelectItem key={r} value={r}>{r}</SelectItem>)}
-                                </SelectContent>
-                            </Select>
+                            <Label>Role <span className="text-danger">*</span></Label>
+                            {rolesLoading ? (
+                                <div className="flex items-center gap-2 h-10 px-3 rounded-md border border-input text-sm text-muted-foreground">
+                                    <Loader2 className="h-3.5 w-3.5 animate-spin" /> Loading roles…
+                                </div>
+                            ) : (
+                                <Select
+                                    value={newRoleId}
+                                    onValueChange={(v) => {
+                                        setNewRoleId(v);
+                                        const role = orgRoles.find((r) => r.id === v);
+                                        if (role) setNewLimit(String(role.defaultDailyLimit));
+                                    }}
+                                >
+                                    <SelectTrigger><SelectValue placeholder="Select role…" /></SelectTrigger>
+                                    <SelectContent>
+                                        {orgRoles.map((r) => (
+                                            <SelectItem key={r.id} value={r.id}>
+                                                <div>
+                                                    <span>{r.name}</span>
+                                                    <span className="ml-2 text-xs text-muted-foreground">{r.description}</span>
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            )}
                         </div>
                         <div className="space-y-2">
                             <Label>Daily Request Limit</Label>
-                            <Input type="number" value={newLimit} onChange={(e) => setNewLimit(e.target.value)} min="0" />
+                            <Input
+                                type="number"
+                                value={newLimit}
+                                onChange={(e) => setNewLimit(e.target.value)}
+                                min="0"
+                                placeholder="Auto-filled from role"
+                            />
+                            <p className="text-xs text-muted-foreground">Default is filled from the role's standard limit.</p>
                         </div>
                     </div>
                     <DialogFooter>
-                        <DialogClose asChild><Button variant="outline">Cancel</Button></DialogClose>
-                        <Button className="bg-brand-700 hover:bg-brand-800" onClick={handleAdd}>Add Employee</Button>
+                        <DialogClose asChild><Button variant="outline" disabled={addSaving}>Cancel</Button></DialogClose>
+                        <Button className="bg-brand-700 hover:bg-brand-800" onClick={handleAdd} disabled={addSaving}>
+                            {addSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Adding…</> : "Add Employee"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* ── Remove Confirm Dialog ───────────────────────────── */}
+            {/* ── Remove Confirm Dialog ───────────────────────────────────── */}
             <Dialog open={!!removeTarget} onOpenChange={(o) => !o && setRemoveTarget(null)}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Remove Employee</DialogTitle></DialogHeader>
@@ -429,7 +501,7 @@ export default function EmployeeManagementPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* ── Set Limit Dialog ────────────────────────────────── */}
+            {/* ── Set Limit Dialog ────────────────────────────────────────── */}
             <Dialog open={!!limitTarget} onOpenChange={(o) => !o && setLimitTarget(null)}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Set Daily Limit</DialogTitle></DialogHeader>
@@ -443,13 +515,15 @@ export default function EmployeeManagementPage() {
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button variant="outline" onClick={() => setLimitTarget(null)}>Cancel</Button>
-                        <Button className="bg-brand-700 hover:bg-brand-800" onClick={handleSetLimit}>Save Limit</Button>
+                        <Button variant="outline" onClick={() => setLimitTarget(null)} disabled={limitSaving}>Cancel</Button>
+                        <Button className="bg-brand-700 hover:bg-brand-800" onClick={handleSetLimit} disabled={limitSaving}>
+                            {limitSaving ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : "Save Limit"}
+                        </Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
 
-            {/* ── Activity Dialog ─────────────────────────────────── */}
+            {/* ── Activity Dialog ──────────────────────────────────────────── */}
             <Dialog open={!!activityTarget} onOpenChange={(o) => !o && setActivityTarget(null)}>
                 <DialogContent>
                     <DialogHeader><DialogTitle>Activity — {activityTarget?.name}</DialogTitle></DialogHeader>
@@ -474,7 +548,7 @@ export default function EmployeeManagementPage() {
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Role</span>
-                                <span className="font-medium">{activityTarget?.role}</span>
+                                <span className="font-medium">{activityTarget?.roleName}</span>
                             </div>
                             <div className="flex justify-between">
                                 <span className="text-muted-foreground">Email</span>
