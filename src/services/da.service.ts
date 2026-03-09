@@ -211,3 +211,171 @@ export async function removeDeptEmployee(empId: string): Promise<void> {
     const idx = MOCK_DEPT_EMPLOYEES.findIndex((e) => e.id === empId);
     if (idx !== -1) MOCK_DEPT_EMPLOYEES.splice(idx, 1);
 }
+
+// ─── Dashboard analytics types ──────────────────────────────────────────────
+
+export type DeptDashboardStats = {
+    totalEmployees: number;
+    activeEmployees: number;
+    monthlyRequests: number;
+    monthlyQuota: number;
+    quotaUtilization: number;
+    modelsInUse: number;
+    totalModelsAvailable: number;
+    avgRequestsPerEmployee: number;
+};
+
+export type DailyRequestPoint = {
+    date: string;
+    requests: number;
+    activeUsers: number;
+};
+
+export type ModelUsageSlice = {
+    name: string;
+    value: number;
+    color: string;
+};
+
+export type RoleUsagePoint = {
+    role: string;
+    employees: number;
+    totalRequests: number;
+    avgRequests: number;
+};
+
+export type UsageTrendPoint = {
+    date: string;
+    requests: number;
+    activeUsers: number;
+};
+
+// ─── Dashboard analytics mock data builders ─────────────────────────────────
+
+const MODEL_COLORS: Record<string, string> = {
+    'Claude 4.6 Sonnet': '#3B82F6',
+    'GPT-5.1':           '#10B981',
+    'GPT-4o':            '#F59E0B',
+    'Claude 4.5 Haiku':  '#8B5CF6',
+    'Claude 4.6 Opus':   '#EF4444',
+    'Gemini 3.1 Pro':    '#06B6D4',
+    'Gemini 3.1 Flash':  '#F97316',
+};
+
+function buildDailyRequests(employees: DeptEmployee[]): DailyRequestPoint[] {
+    const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const weights = [0.18, 0.19, 0.20, 0.17, 0.15, 0.06, 0.05];
+    return days.map((date, i) => {
+        const requests = Math.round(totalRequests * weights[i]);
+        return {
+            date,
+            requests,
+            entitiesAnonymized: Math.round(requests * 1.6),
+        };
+    });
+}
+
+function buildModelUsage(employees: DeptEmployee[]): ModelUsageSlice[] {
+    const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
+    const slices: { name: string; pct: number }[] = [
+        { name: 'Claude 4.6 Sonnet', pct: 0.32 },
+        { name: 'GPT-5.1',           pct: 0.24 },
+        { name: 'GPT-4o',            pct: 0.18 },
+        { name: 'Claude 4.5 Haiku',  pct: 0.12 },
+        { name: 'Gemini 3.1 Pro',    pct: 0.09 },
+        { name: 'Gemini 3.1 Flash',  pct: 0.05 },
+    ];
+    return slices.map((s) => ({
+        name: s.name,
+        value: Math.round(totalRequests * s.pct),
+        color: MODEL_COLORS[s.name] || '#94A3B8',
+    }));
+}
+
+function buildEntityTypes(employees: DeptEmployee[]): EntityTypeSlice[] {
+    const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
+    const types: { name: string; pct: number }[] = [
+        { name: 'PERSON',   pct: 0.30 },
+        { name: 'ORG',      pct: 0.22 },
+        { name: 'EMAIL',    pct: 0.18 },
+        { name: 'PROJECT',  pct: 0.14 },
+        { name: 'LOCATION', pct: 0.10 },
+        { name: 'PHONE',    pct: 0.06 },
+    ];
+    const totalEntities = Math.round(totalRequests * 1.6);
+    return types.map((t) => ({
+        name: t.name,
+        count: Math.round(totalEntities * t.pct),
+    }));
+}
+
+function buildRoleUsage(employees: DeptEmployee[]): RoleUsagePoint[] {
+    const byRole = new Map<string, { employees: number; totalRequests: number }>();
+    employees.forEach((e) => {
+        const entry = byRole.get(e.roleName) || { employees: 0, totalRequests: 0 };
+        entry.employees++;
+        entry.totalRequests += e.requests;
+        byRole.set(e.roleName, entry);
+    });
+    return Array.from(byRole.entries())
+        .map(([role, data]) => ({
+            role,
+            employees: data.employees,
+            totalRequests: data.totalRequests,
+            avgRequests: Math.round(data.totalRequests / data.employees),
+        }))
+        .sort((a, b) => b.totalRequests - a.totalRequests);
+}
+
+// ─── Dashboard service functions ────────────────────────────────────────────
+
+/** GET /api/v1/dept/{deptId}/dashboard/stats */
+export async function getDeptDashboardStats(): Promise<DeptDashboardStats> {
+    await delay(300);
+    const employees = structuredClone(MOCK_DEPT_EMPLOYEES);
+    const active = employees.filter((e) => e.status === 'ACTIVE');
+    const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
+    return {
+        totalEmployees: employees.length,
+        activeEmployees: active.length,
+        monthlyRequests: totalRequests,
+        monthlyQuota: 1500,
+        anonymizationAccuracy: 99.3,
+        pendingQuotaRequests: 2,
+        entitiesAnonymized: Math.round(totalRequests * 1.6),
+        avgRequestsPerEmployee: active.length > 0 ? Math.round(totalRequests / active.length) : 0,
+    };
+}
+
+/** GET /api/v1/dept/{deptId}/dashboard/daily-requests */
+export async function getDeptDailyRequests(): Promise<DailyRequestPoint[]> {
+    await delay(250);
+    return buildDailyRequests(structuredClone(MOCK_DEPT_EMPLOYEES));
+}
+
+/** GET /api/v1/dept/{deptId}/dashboard/model-usage */
+export async function getDeptModelUsage(): Promise<ModelUsageSlice[]> {
+    await delay(200);
+    return buildModelUsage(structuredClone(MOCK_DEPT_EMPLOYEES));
+}
+
+/** GET /api/v1/dept/{deptId}/dashboard/entity-types */
+export async function getDeptEntityTypes(): Promise<EntityTypeSlice[]> {
+    await delay(200);
+    return buildEntityTypes(structuredClone(MOCK_DEPT_EMPLOYEES));
+}
+
+/** GET /api/v1/dept/{deptId}/dashboard/role-usage */
+export async function getDeptRoleUsage(): Promise<RoleUsagePoint[]> {
+    await delay(250);
+    return buildRoleUsage(structuredClone(MOCK_DEPT_EMPLOYEES));
+}
+
+/** GET /api/v1/dept/{deptId}/dashboard/top-users */
+export async function getDeptTopUsers(limit: number = 5): Promise<DeptEmployee[]> {
+    await delay(300);
+    return structuredClone(MOCK_DEPT_EMPLOYEES)
+        .sort((a, b) => b.requests - a.requests)
+        .slice(0, limit);
+}
