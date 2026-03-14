@@ -16,17 +16,10 @@ export type OrgDashboardStats = {
     monthlyRequests: number;
     monthlyQuota: number;
     quotaUtilization: number;
-    avgRequestsPerEmployee: number;
-    anonymizationOps: number;
-    anonymizationAccuracy: number;
-    activeSessions: number;
+    unallocatedQuota: number;
     pendingQuotaRequests: number;
-};
-
-export type DailyOrgRequestPoint = {
-    date: string;
-    requests: number;
-    activeUsers: number;
+    adoptionRate: number;
+    avgRequestsPerEmployee: number;
 };
 
 export type DeptUsageRow = {
@@ -47,15 +40,6 @@ export type OrgModelUsageSlice = {
 export type OrgUsageTrendPoint = {
     date: string;
     requests: number;
-    activeUsers: number;
-};
-
-export type DeptComparisonPoint = {
-    dept: string;
-    requests: number;
-    quota: number;
-    employees: number;
-    color: string;
 };
 
 export type RecentActivityItem = {
@@ -65,24 +49,6 @@ export type RecentActivityItem = {
     description: string;
     timestamp: string;
     icon: 'user-plus' | 'user-minus' | 'check-circle' | 'x-circle' | 'shield' | 'building' | 'alert-triangle';
-};
-
-export type TopEmployeeRow = {
-    id: string;
-    name: string;
-    email: string;
-    department: string;
-    requests: number;
-    status: string;
-    lastActive: string;
-};
-
-export type SecurityOverview = {
-    twoFAEnabled: number;
-    twoFATotal: number;
-    failedLogins24h: number;
-    activeSessions: number;
-    restrictedAccounts: number;
 };
 
 // ─── Mock source data ─────────────────────────────────────────────────────────
@@ -117,31 +83,7 @@ const RECENT_ACTIVITIES: RecentActivityItem[] = [
     { id: "a8", type: "employee_added",   title: "New employee added",      description: "Mia Thompson joined the Engineering department",      timestamp: "2 days ago",   icon: "user-plus" },
 ];
 
-const TOP_EMPLOYEES: TopEmployeeRow[] = [
-    { id: "1",  name: "Raj Patel",       email: "raj@acme.com",     department: "Engineering", requests: 320, status: "ACTIVE", lastActive: "Today" },
-    { id: "7",  name: "Tom Baker",       email: "tom@acme.com",     department: "Engineering", requests: 245, status: "ACTIVE", lastActive: "Today" },
-    { id: "16", name: "Ava Martinez",    email: "ava@acme.com",     department: "Engineering", requests: 210, status: "ACTIVE", lastActive: "Yesterday" },
-    { id: "13", name: "James Anderson",  email: "james@acme.com",   department: "Engineering", requests: 198, status: "ACTIVE", lastActive: "Today" },
-    { id: "2",  name: "John Miller",     email: "john@acme.com",    department: "Engineering", requests: 180, status: "ACTIVE", lastActive: "Today" },
-    { id: "15", name: "Noah Garcia",     email: "noah@acme.com",    department: "Marketing",   requests: 167, status: "ACTIVE", lastActive: "Today" },
-    { id: "10", name: "Priya Singh",     email: "priya@acme.com",   department: "Sales",       requests: 143, status: "ACTIVE", lastActive: "Today" },
-    { id: "18", name: "Isabella White",  email: "isabella@acme.com",department: "Finance",     requests: 134, status: "ACTIVE", lastActive: "Today" },
-];
-
 // ─── Mock data builders ───────────────────────────────────────────────────────
-
-function buildOrgDailyRequests(): DailyOrgRequestPoint[] {
-    const totalRequests = DEPT_DATA.reduce((s, d) => s + d.used, 0);
-    const totalEmployees = DEPT_DATA.reduce((s, d) => s + d.employees, 0);
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const weights = [0.18, 0.19, 0.20, 0.17, 0.15, 0.06, 0.05];
-    const userWeights = [0.85, 0.90, 0.88, 0.82, 0.78, 0.25, 0.18];
-    return days.map((date, i) => ({
-        date,
-        requests: Math.round(totalRequests * weights[i]),
-        activeUsers: Math.round(totalEmployees * userWeights[i]),
-    }));
-}
 
 function buildOrgModelUsage(): OrgModelUsageSlice[] {
     const totalRequests = DEPT_DATA.reduce((s, d) => s + d.used, 0);
@@ -163,7 +105,6 @@ function buildOrgModelUsage(): OrgModelUsageSlice[] {
 
 function buildOrgUsageTrend(days: number): OrgUsageTrendPoint[] {
     const totalRequests = DEPT_DATA.reduce((s, d) => s + d.used, 0);
-    const totalEmployees = DEPT_DATA.reduce((s, d) => s + d.employees, 0);
     const avgDaily = totalRequests / 30;
     const points: OrgUsageTrendPoint[] = [];
     const today = new Date();
@@ -172,24 +113,12 @@ function buildOrgUsageTrend(days: number): OrgUsageTrendPoint[] {
         d.setDate(d.getDate() - i);
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
         const factor = isWeekend ? 0.15 + Math.random() * 0.15 : 0.7 + Math.random() * 0.6;
-        const userFactor = isWeekend ? 0.10 + Math.random() * 0.15 : 0.55 + Math.random() * 0.40;
         points.push({
             date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
             requests: Math.round(avgDaily * factor),
-            activeUsers: Math.max(1, Math.round(totalEmployees * userFactor)),
         });
     }
     return points;
-}
-
-function buildDeptComparison(): DeptComparisonPoint[] {
-    return DEPT_DATA.map((d) => ({
-        dept: d.name,
-        requests: d.used,
-        quota: d.total,
-        employees: d.employees,
-        color: d.color,
-    }));
 }
 
 // ─── Service functions ────────────────────────────────────────────────────────
@@ -201,6 +130,8 @@ export async function getOrgDashboardStats(): Promise<OrgDashboardStats> {
     const monthlyRequests = DEPT_DATA.reduce((s, d) => s + d.used, 0);
     const monthlyQuota = DEPT_DATA.reduce((s, d) => s + d.total, 0);
     const activeEmployees = Math.round(totalEmployees * 0.93);
+    const totalAllocated = DEPT_DATA.reduce((s, d) => s + d.total, 0);
+    const orgQuota = 8000; // matches ORG_QUOTA.total in quota page
     return {
         totalEmployees,
         activeEmployees,
@@ -209,18 +140,11 @@ export async function getOrgDashboardStats(): Promise<OrgDashboardStats> {
         monthlyRequests,
         monthlyQuota,
         quotaUtilization: Math.round((monthlyRequests / monthlyQuota) * 100),
-        avgRequestsPerEmployee: Math.round(monthlyRequests / activeEmployees),
-        anonymizationOps: Math.round(monthlyRequests * 0.82),
-        anonymizationAccuracy: 99.1,
-        activeSessions: 47,
+        unallocatedQuota: orgQuota - totalAllocated,
         pendingQuotaRequests: 2,
+        adoptionRate: Math.round((activeEmployees / totalEmployees) * 100),
+        avgRequestsPerEmployee: Math.round((monthlyRequests / activeEmployees) * 10) / 10,
     };
-}
-
-/** GET /api/v1/org/{orgId}/dashboard/daily-requests */
-export async function getOrgDailyRequests(): Promise<DailyOrgRequestPoint[]> {
-    await delay(250);
-    return buildOrgDailyRequests();
 }
 
 /** GET /api/v1/org/{orgId}/dashboard/department-usage */
@@ -241,33 +165,8 @@ export async function getOrgUsageTrend(days: 7 | 30 = 7): Promise<OrgUsageTrendP
     return buildOrgUsageTrend(days);
 }
 
-/** GET /api/v1/org/{orgId}/dashboard/dept-comparison */
-export async function getOrgDeptComparison(): Promise<DeptComparisonPoint[]> {
-    await delay(200);
-    return buildDeptComparison();
-}
-
 /** GET /api/v1/org/{orgId}/dashboard/recent-activity */
 export async function getOrgRecentActivity(): Promise<RecentActivityItem[]> {
     await delay(250);
     return structuredClone(RECENT_ACTIVITIES);
-}
-
-/** GET /api/v1/org/{orgId}/dashboard/top-employees */
-export async function getOrgTopEmployees(limit: number = 5): Promise<TopEmployeeRow[]> {
-    await delay(300);
-    return structuredClone(TOP_EMPLOYEES).slice(0, limit);
-}
-
-/** GET /api/v1/org/{orgId}/dashboard/security-overview */
-export async function getOrgSecurityOverview(): Promise<SecurityOverview> {
-    await delay(200);
-    const totalEmployees = DEPT_DATA.reduce((s, d) => s + d.employees, 0);
-    return {
-        twoFAEnabled: Math.round(totalEmployees * 0.78),
-        twoFATotal: totalEmployees,
-        failedLogins24h: 5,
-        activeSessions: 47,
-        restrictedAccounts: 3,
-    };
 }
