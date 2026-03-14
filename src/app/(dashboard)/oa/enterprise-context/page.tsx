@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useEffect } from "react";
 import {
     Plus, BookText, Upload, Trash2, FileText, Globe, Loader2, Info,
     Search, Tag, Code, Clock, CheckCircle2,
@@ -25,32 +25,19 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
+import {
+    getOAGlossaryTerms, getOAContextDocuments, getOACustomPatterns,
+    type OAGlossaryTerm, type OAContextDocument, type OACustomPattern,
+} from "@/services/oa.service";
+
 /* ------------------------------------------------------------------ */
-/* Types                                                                */
+/* Type aliases (keep existing variable names working)                  */
 /* ------------------------------------------------------------------ */
-interface GlossaryTerm {
-    id: number;
-    term: string;
-    definition: string;
-    category: string;
-}
+type GlossaryTerm    = OAGlossaryTerm;
+type ContextDocument = OAContextDocument;
+type CustomPattern   = OACustomPattern;
 
-interface ContextDocument {
-    id: number;
-    name: string;
-    size: string;
-    uploadedAt: string;
-    type: "PDF" | "TXT";
-}
-
-interface CustomPattern {
-    id: number;
-    label: string;
-    pattern: string;
-    example: string;
-    active: boolean;
-}
-
+// Page-only types (no backend equivalent needed)
 interface StagedDoc {
     id: number;
     name: string;
@@ -65,29 +52,6 @@ interface ExtractedEntity {
     description: string;
     checked: boolean;
 }
-
-/* ------------------------------------------------------------------ */
-/* Initial data                                                         */
-/* ------------------------------------------------------------------ */
-const INITIAL_TERMS: GlossaryTerm[] = [
-    { id: 1, term: "D-SecureAI",           definition: "Our privacy-preserving AI gateway platform",                                        category: "Product"    },
-    { id: 2, term: "Entity Masking Engine", definition: "Core component that detects and replaces personally identifiable information",       category: "Technical"  },
-    { id: 3, term: "Project Falcon",        definition: "Internal codename for upcoming enterprise analytics module",                         category: "Internal"   },
-    { id: 4, term: "CTRL Protocol",         definition: "Internal data handling standard v2.3",                                              category: "Compliance" },
-    { id: 5, term: "QuotaSync",             definition: "Real-time quota tracking and allocation system",                                     category: "Technical"  },
-];
-
-const INITIAL_DOCUMENTS: ContextDocument[] = [
-    { id: 1, name: "Company Style Guide.pdf",  size: "2.4 MB", uploadedAt: "2025-11-20", type: "PDF" },
-    { id: 2, name: "Product Terminology.txt",  size: "340 KB", uploadedAt: "2025-11-15", type: "TXT" },
-    { id: 3, name: "Compliance Glossary.pdf",  size: "1.1 MB", uploadedAt: "2025-10-28", type: "PDF" },
-];
-
-const INITIAL_PATTERNS: CustomPattern[] = [
-    { id: 1, label: "Employee ID",      pattern: "EMP-[0-9]{6}",          example: "EMP-001234",  active: true  },
-    { id: 2, label: "Project Code",     pattern: "PRJ-[A-Z]{2}-[0-9]{4}", example: "PRJ-EN-2025", active: true  },
-    { id: 3, label: "Internal Doc Ref", pattern: "DOC-[A-Z]{3}-[0-9]+",   example: "DOC-FIN-42",  active: false },
-];
 
 /* ------------------------------------------------------------------ */
 /* Helpers                                                              */
@@ -120,7 +84,7 @@ function fileSizeStr(bytes: number): string {
 /* ------------------------------------------------------------------ */
 export default function EnterpriseContextPage() {
     /* ---- Glossary ---- */
-    const [terms,         setTerms]         = useState<GlossaryTerm[]>(INITIAL_TERMS);
+    const [terms,         setTerms]         = useState<GlossaryTerm[]>([]);
     const [termOpen,      setTermOpen]       = useState(false);
     const [newTerm,       setNewTerm]        = useState("");
     const [newDef,        setNewDef]         = useState("");
@@ -130,7 +94,7 @@ export default function EnterpriseContextPage() {
     const [termCatFilter, setTermCatFilter]  = useState("all");
 
     /* ---- Documents ---- */
-    const [documents,   setDocuments]   = useState<ContextDocument[]>(INITIAL_DOCUMENTS);
+    const [documents,   setDocuments]   = useState<ContextDocument[]>([]);
     const [stagedDocs,  setStagedDocs]  = useState<StagedDoc[]>([]);
 
     /* ---- Entity extraction ---- */
@@ -141,12 +105,18 @@ export default function EnterpriseContextPage() {
     const [editEntityForm,   setEditEntityForm]   = useState<Partial<ExtractedEntity>>({});
 
     /* ---- Patterns ---- */
-    const [patterns,    setPatterns]    = useState<CustomPattern[]>(INITIAL_PATTERNS);
+    const [patterns,    setPatterns]    = useState<CustomPattern[]>([]);
     const [patternOpen, setPatternOpen] = useState(false);
     const [patLabel,    setPatLabel]    = useState("");
     const [patRegex,    setPatRegex]    = useState("");
     const [patExample,  setPatExample]  = useState("");
     const [patSaving,   setPatSaving]   = useState(false);
+
+    useEffect(() => {
+        getOAGlossaryTerms().then(setTerms);
+        getOAContextDocuments().then(setDocuments);
+        getOACustomPatterns().then(setPatterns);
+    }, []);
 
     /* ---- Derived ---- */
     const uniqueCategories = useMemo(

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import Link from "next/link";
 import {
     Plus, Layers, Users, Search, MoreHorizontal, Edit2, Trash2,
@@ -27,33 +27,12 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
+import { getOADepartments, DEPT_COLORS, type OADepartment } from "@/services/oa.service";
+
 /* ------------------------------------------------------------------ */
-/* Types & initial data                                                 */
+/* Types & constants                                                    */
 /* ------------------------------------------------------------------ */
-interface Department {
-    id: string;
-    name: string;
-    head: string;
-    headEmail: string;
-    employees: number;
-    quota: { used: number; total: number };
-    color: string;
-}
-
-const DEPT_COLORS = [
-    "#3B82F6", "#10B981", "#F59E0B", "#8B5CF6",
-    "#EF4444", "#06B6D4", "#F97316", "#EC4899",
-];
-
-const INITIAL_DEPARTMENTS: Department[] = [
-    { id: "dept-001", name: "Engineering",  head: "Sarah Johnson", headEmail: "sarah@acme.com",  employees: 45, quota: { used: 1200, total: 1500 }, color: "#3B82F6" },
-    { id: "dept-002", name: "Marketing",    head: "Emma Davis",    headEmail: "emma@acme.com",   employees: 20, quota: { used: 600,  total: 800  }, color: "#10B981" },
-    { id: "dept-003", name: "Sales",        head: "David Kim",     headEmail: "david@acme.com",  employees: 25, quota: { used: 500,  total: 700  }, color: "#F59E0B" },
-    { id: "dept-004", name: "Finance",      head: "Aisha Patel",   headEmail: "aisha@acme.com",  employees: 12, quota: { used: 400,  total: 600  }, color: "#8B5CF6" },
-    { id: "dept-005", name: "HR",           head: "Lisa Chen",     headEmail: "lisa@acme.com",   employees: 10, quota: { used: 200,  total: 400  }, color: "#EF4444" },
-    { id: "dept-006", name: "Operations",   head: "James Wilson",  headEmail: "james@acme.com",  employees: 8,  quota: { used: 300,  total: 1000 }, color: "#06B6D4" },
-];
-
+type Department  = OADepartment;
 type QuotaFilter = "all" | "normal" | "warning" | "critical";
 type SortField   = "name" | "employees" | "quota";
 
@@ -72,7 +51,11 @@ function quotaHealth(dept: Department): { label: string; className: string } {
 /* ------------------------------------------------------------------ */
 export default function DepartmentsPage() {
     /* ---- data ---- */
-    const [departments, setDepartments] = useState<Department[]>(INITIAL_DEPARTMENTS);
+    const [departments, setDepartments] = useState<Department[]>([]);
+
+    useEffect(() => {
+        getOADepartments().then(setDepartments);
+    }, []);
 
     /* ---- filters ---- */
     const [search,      setSearch]      = useState("");

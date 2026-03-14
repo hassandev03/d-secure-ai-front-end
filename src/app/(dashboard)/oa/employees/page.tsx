@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
     Search, Plus, Users, Download, MoreHorizontal,
     Activity, Shield, Trash2, ChevronLeft, ChevronRight,
@@ -29,41 +29,13 @@ import {
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
+import { getOAEmployees, getOADepartmentNames, type OAEmployee } from "@/services/oa.service";
+
 // ── Types ────────────────────────────────────────────────────────────────────
 
-type EmployeeStatus = "ACTIVE" | "INACTIVE" | "PENDING";
-type EmployeeRole   = "EMPLOYEE" | "DEPT_ADMIN";
-
-interface OrgEmployee {
-    id:          string;
-    name:        string;
-    email:       string;
-    department:  string;
-    role:        EmployeeRole;
-    status:      EmployeeStatus;
-    requests:    number;
-    dailyLimit:  number;
-    lastActive:  string;
-}
-
-// ── Mock Data ────────────────────────────────────────────────────────────────
-
-const INITIAL_EMPLOYEES: OrgEmployee[] = [
-    { id: "emp-001", name: "John Miller",     email: "john@acme.com",    department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   requests: 180, dailyLimit: 50,  lastActive: "2025-12-01" },
-    { id: "emp-002", name: "Emma Davis",      email: "emma@acme.com",    department: "Marketing",   role: "DEPT_ADMIN", status: "ACTIVE",   requests: 95,  dailyLimit: 100, lastActive: "2025-12-01" },
-    { id: "emp-003", name: "Carlos Ruiz",     email: "carlos@acme.com",  department: "Sales",       role: "EMPLOYEE",   status: "PENDING",  requests: 0,   dailyLimit: 30,  lastActive: "—" },
-    { id: "emp-004", name: "Aisha Patel",     email: "aisha@acme.com",   department: "Finance",     role: "DEPT_ADMIN", status: "ACTIVE",   requests: 210, dailyLimit: 100, lastActive: "2025-11-30" },
-    { id: "emp-005", name: "Mike Chen",       email: "mike@acme.com",    department: "Engineering", role: "EMPLOYEE",   status: "INACTIVE", requests: 45,  dailyLimit: 0,   lastActive: "2025-11-15" },
-    { id: "emp-006", name: "Sophie Laurent",  email: "sophie@acme.com",  department: "HR",          role: "EMPLOYEE",   status: "ACTIVE",   requests: 60,  dailyLimit: 30,  lastActive: "2025-12-01" },
-    { id: "emp-007", name: "Raj Patel",       email: "raj@acme.com",     department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   requests: 320, dailyLimit: 50,  lastActive: "2025-12-01" },
-    { id: "emp-008", name: "Lisa Wang",       email: "lisa@acme.com",    department: "Operations",  role: "EMPLOYEE",   status: "ACTIVE",   requests: 78,  dailyLimit: 30,  lastActive: "2025-11-29" },
-    { id: "emp-009", name: "Tom Brennan",     email: "tom@acme.com",     department: "Sales",       role: "DEPT_ADMIN", status: "ACTIVE",   requests: 134, dailyLimit: 100, lastActive: "2025-12-01" },
-    { id: "emp-010", name: "Nina Hoffmann",   email: "nina@acme.com",    department: "Finance",     role: "EMPLOYEE",   status: "ACTIVE",   requests: 88,  dailyLimit: 30,  lastActive: "2025-11-28" },
-    { id: "emp-011", name: "David Kim",       email: "david@acme.com",   department: "Engineering", role: "EMPLOYEE",   status: "PENDING",  requests: 0,   dailyLimit: 30,  lastActive: "—" },
-    { id: "emp-012", name: "Priya Sharma",    email: "priya@acme.com",   department: "HR",          role: "DEPT_ADMIN", status: "ACTIVE",   requests: 112, dailyLimit: 100, lastActive: "2025-12-01" },
-];
-
-const DEPARTMENTS = ["Engineering", "Marketing", "Sales", "Finance", "HR", "Operations"];
+type OrgEmployee    = OAEmployee;
+type EmployeeStatus = OAEmployee["status"];
+type EmployeeRole   = OAEmployee["role"];
 
 const PAGE_SIZE = 8;
 
@@ -75,7 +47,13 @@ function initials(name: string) {
 
 export default function EmployeesPage() {
     // ── Data ─────────────────────────────────────────────────────────────
-    const [employees, setEmployees] = useState<OrgEmployee[]>(INITIAL_EMPLOYEES);
+    const [employees, setEmployees] = useState<OrgEmployee[]>([]);
+    const [deptNames, setDeptNames] = useState<string[]>([]);
+
+    useEffect(() => {
+        getOAEmployees().then(setEmployees);
+        getOADepartmentNames().then(setDeptNames);
+    }, []);
 
     // ── Filters ──────────────────────────────────────────────────────────
     const [search,       setSearch]       = useState("");
@@ -299,7 +277,7 @@ export default function EmployeesPage() {
                                 </SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="all">All Departments</SelectItem>
-                                    {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                                    {deptNames.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                                 </SelectContent>
                             </Select>
 
@@ -565,7 +543,7 @@ export default function EmployeesPage() {
                             <Select value={newDept} onValueChange={setNewDept}>
                                 <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                                 <SelectContent>
-                                    {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                                    {deptNames.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>
@@ -660,7 +638,7 @@ export default function EmployeesPage() {
                             <Select value={newDeptChange} onValueChange={setNewDeptChange}>
                                 <SelectTrigger><SelectValue placeholder="Select department" /></SelectTrigger>
                                 <SelectContent>
-                                    {DEPARTMENTS.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
+                                    {deptNames.map((d) => <SelectItem key={d} value={d}>{d}</SelectItem>)}
                                 </SelectContent>
                             </Select>
                         </div>

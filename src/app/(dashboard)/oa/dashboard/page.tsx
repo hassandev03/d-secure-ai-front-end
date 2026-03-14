@@ -26,7 +26,7 @@ import {
     getOrgUsageTrend,
     getOrgRecentActivity,
     type OrgDashboardStats,
-    type DeptUsageRow,
+    type OADepartment,
     type OrgModelUsageSlice,
     type OrgUsageTrendPoint,
     type RecentActivityItem,
@@ -52,7 +52,7 @@ const TOOLTIP_STYLE = { borderRadius: "8px", border: "1px solid #e2e8f0", boxSha
 
 export default function OrgAdminDashboard() {
     const [stats, setStats] = useState<OrgDashboardStats | null>(null);
-    const [depts, setDepts] = useState<DeptUsageRow[]>([]);
+    const [depts, setDepts] = useState<OADepartment[]>([]);
     const [models, setModels] = useState<OrgModelUsageSlice[]>([]);
     const [usageTrend, setUsageTrend] = useState<OrgUsageTrendPoint[]>([]);
     const [trendRange, setTrendRange] = useState<7 | 30>(7);
@@ -79,16 +79,16 @@ export default function OrgAdminDashboard() {
             .map(d => ({
                 name: d.name,
                 color: d.color,
-                perEmployee: d.employees > 0 ? Math.round((d.used / d.employees) * 10) / 10 : 0,
+                perEmployee: d.employees > 0 ? Math.round((d.quota.used / d.employees) * 10) / 10 : 0,
             }))
             .sort((a, b) => b.perEmployee - a.perEmployee),
         [depts],
     );
 
     const quotaAlerts = useMemo(() => ({
-        critical:       depts.filter(d => d.total > 0 && (d.used / d.total) >= 0.9),
-        warning:        depts.filter(d => d.total > 0 && (d.used / d.total) >= 0.7 && (d.used / d.total) < 0.9),
-        underutilized:  depts.filter(d => d.total > 0 && (d.used / d.total) < 0.4),
+        critical:       depts.filter(d => d.quota.total > 0 && (d.quota.used / d.quota.total) >= 0.9),
+        warning:        depts.filter(d => d.quota.total > 0 && (d.quota.used / d.quota.total) >= 0.7 && (d.quota.used / d.quota.total) < 0.9),
+        underutilized:  depts.filter(d => d.quota.total > 0 && (d.quota.used / d.quota.total) < 0.4),
     }), [depts]);
 
     if (!stats) return null;
@@ -273,7 +273,7 @@ export default function OrgAdminDashboard() {
                             <div>
                                 <p className="text-xs font-semibold text-danger mb-2">Critical — Over 90% used, may run out</p>
                                 {quotaAlerts.critical.map(d => {
-                                    const pct = Math.round((d.used / d.total) * 100);
+                                    const pct = Math.round((d.quota.used / d.quota.total) * 100);
                                     return (
                                         <div key={d.name} className="flex items-center justify-between rounded-lg border border-danger/20 bg-danger/5 px-3 py-2.5 mb-2 last:mb-0">
                                             <div className="flex items-center gap-2">
@@ -282,7 +282,7 @@ export default function OrgAdminDashboard() {
                                             </div>
                                             <div className="text-right">
                                                 <span className="text-sm font-bold text-danger">{pct}%</span>
-                                                <p className="text-[10px] text-muted-foreground">{d.total - d.used} remaining</p>
+                                                <p className="text-[10px] text-muted-foreground">{d.quota.total - d.quota.used} remaining</p>
                                             </div>
                                         </div>
                                     );
@@ -294,7 +294,7 @@ export default function OrgAdminDashboard() {
                             <div>
                                 <p className="text-xs font-semibold text-warning mb-2">Warning — 70–90% used, monitor closely</p>
                                 {quotaAlerts.warning.map(d => {
-                                    const pct = Math.round((d.used / d.total) * 100);
+                                    const pct = Math.round((d.quota.used / d.quota.total) * 100);
                                     return (
                                         <div key={d.name} className="flex items-center justify-between rounded-lg border border-warning/20 bg-warning/5 px-3 py-2.5 mb-2 last:mb-0">
                                             <div className="flex items-center gap-2">
@@ -303,7 +303,7 @@ export default function OrgAdminDashboard() {
                                             </div>
                                             <div className="text-right">
                                                 <span className="text-sm font-bold text-warning">{pct}%</span>
-                                                <p className="text-[10px] text-muted-foreground">{d.total - d.used} remaining</p>
+                                                <p className="text-[10px] text-muted-foreground">{d.quota.total - d.quota.used} remaining</p>
                                             </div>
                                         </div>
                                     );
@@ -315,7 +315,7 @@ export default function OrgAdminDashboard() {
                             <div>
                                 <p className="text-xs font-semibold text-info mb-2">Underutilized — Below 40%, consider redistributing</p>
                                 {quotaAlerts.underutilized.map(d => {
-                                    const pct = Math.round((d.used / d.total) * 100);
+                                    const pct = Math.round((d.quota.used / d.quota.total) * 100);
                                     return (
                                         <div key={d.name} className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 mb-2 last:mb-0">
                                             <div className="flex items-center gap-2">
@@ -324,7 +324,7 @@ export default function OrgAdminDashboard() {
                                             </div>
                                             <div className="text-right">
                                                 <span className="text-sm font-bold text-info">{pct}%</span>
-                                                <p className="text-[10px] text-muted-foreground">{d.total - d.used} unused</p>
+                                                <p className="text-[10px] text-muted-foreground">{d.quota.total - d.quota.used} unused</p>
                                             </div>
                                         </div>
                                     );

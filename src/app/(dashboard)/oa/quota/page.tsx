@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
     Loader2, ArrowUpRight, CheckCircle2, XCircle, Clock,
     Building2, TrendingUp, Pencil, Activity, Users,
@@ -24,72 +24,16 @@ import {
     DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+import {
+    getOAOrgConfig, getOADepartments, getOAQuotaRequests,
+    type OAOrgConfig, type OADepartment, type OAQuotaRequest,
+} from "@/services/oa.service";
 
-type ReqStatus = "PENDING" | "APPROVED" | "DENIED";
+// ── Type aliases (keep existing variable names working) ───────────────────────
 
-interface DeptAllocation {
-    id: string;
-    name: string;
-    head: string;
-    employees: number;
-    color: string;           // Tailwind bg colour class for avatar dot / icon
-    quota: { used: number; total: number };
-}
-
-interface DeptQuotaRequest {
-    id: string;
-    deptId: string;
-    deptName: string;
-    requestedBy: string;
-    amount: number;
-    reason: string;
-    date: string;
-    status: ReqStatus;
-    grantedAmount?: number;
-    respondedAt?: string;
-}
-
-// ── Seed data ─────────────────────────────────────────────────────────────────
-
-const ORG_QUOTA = { total: 8_000, plan: "Enterprise", renewsAt: "2026-04-01" };
-
-const SEED_DEPTS: DeptAllocation[] = [
-    { id: "dept-001", name: "Engineering", head: "Sarah Johnson", employees: 45, color: "bg-blue-500",    quota: { used: 1_200, total: 2_000 } },
-    { id: "dept-002", name: "Marketing",   head: "Emma Davis",    employees: 20, color: "bg-pink-500",    quota: { used: 600,   total: 900  } },
-    { id: "dept-003", name: "Sales",       head: "David Kim",     employees: 25, color: "bg-orange-500",  quota: { used: 500,   total: 800  } },
-    { id: "dept-004", name: "Finance",     head: "Aisha Patel",   employees: 12, color: "bg-emerald-500", quota: { used: 400,   total: 600  } },
-    { id: "dept-005", name: "HR",          head: "Lisa Chen",     employees: 10, color: "bg-violet-500",  quota: { used: 200,   total: 400  } },
-    { id: "dept-006", name: "Operations",  head: "James Wilson",  employees: 8,  color: "bg-amber-500",   quota: { used: 300,   total: 600  } },
-];
-
-const SEED_REQUESTS: DeptQuotaRequest[] = [
-    {
-        id: "req-001", deptId: "dept-001", deptName: "Engineering", requestedBy: "Sarah Johnson",
-        amount: 800, reason: "Year-end sprint — extra capacity for code reviews and documentation generation.",
-        date: "2026-03-12", status: "PENDING",
-    },
-    {
-        id: "req-002", deptId: "dept-002", deptName: "Marketing", requestedBy: "Emma Davis",
-        amount: 300, reason: "Q1 campaign content generation — blog posts, social media, email sequences.",
-        date: "2026-03-13", status: "PENDING",
-    },
-    {
-        id: "req-003", deptId: "dept-003", deptName: "Sales", requestedBy: "David Kim",
-        amount: 400, reason: "Black Friday outreach and proposal generation.",
-        date: "2026-02-20", status: "APPROVED", grantedAmount: 400, respondedAt: "2026-02-21",
-    },
-    {
-        id: "req-004", deptId: "dept-004", deptName: "Finance", requestedBy: "Aisha Patel",
-        amount: 200, reason: "End-of-year audit report generation.",
-        date: "2026-02-15", status: "DENIED", respondedAt: "2026-02-16",
-    },
-    {
-        id: "req-005", deptId: "dept-001", deptName: "Engineering", requestedBy: "Sarah Johnson",
-        amount: 600, reason: "Platform migration scripting — extra AI calls required.",
-        date: "2026-01-28", status: "APPROVED", grantedAmount: 500, respondedAt: "2026-01-29",
-    },
-];
+type ReqStatus      = OAQuotaRequest["status"];
+type DeptAllocation = OADepartment;
+type DeptQuotaRequest = OAQuotaRequest;
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -119,8 +63,15 @@ function quotaHealth(used: number, total: number) {
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function QuotaManagementPage() {
-    const [depts,    setDepts]    = useState<DeptAllocation[]>(SEED_DEPTS);
-    const [requests, setRequests] = useState<DeptQuotaRequest[]>(SEED_REQUESTS);
+    const [orgConfig, setOrgConfig] = useState<OAOrgConfig | null>(null);
+    const [depts,    setDepts]    = useState<DeptAllocation[]>([]);
+    const [requests, setRequests] = useState<DeptQuotaRequest[]>([]);
+
+    useEffect(() => {
+        getOAOrgConfig().then(setOrgConfig);
+        getOADepartments().then(setDepts);
+        getOAQuotaRequests().then(setRequests);
+    }, []);
 
     // Approve dialog
     const [approveTarget,  setApproveTarget]  = useState<DeptQuotaRequest | null>(null);
@@ -146,7 +97,7 @@ export default function QuotaManagementPage() {
 
     const totalAllocated = useMemo(() => depts.reduce((s, d) => s + d.quota.total, 0), [depts]);
     const totalUsed      = useMemo(() => depts.reduce((s, d) => s + d.quota.used,  0), [depts]);
-    const unallocated    = ORG_QUOTA.total - totalAllocated;
+    const unallocated    = (orgConfig?.totalQuota ?? 0) - totalAllocated;
 
     const pendingRequests  = requests.filter((r) => r.status === "PENDING");
     const historyRequests  = requests.filter((r) => r.status !== "PENDING");
@@ -244,6 +195,8 @@ export default function QuotaManagementPage() {
 
     // ── JSX ─────────────────────────────────────────────────────────────────
 
+    if (!orgConfig || depts.length === 0) return null;
+
     return (
         <div className="mx-auto max-w-6xl">
             <PageHeader
@@ -261,7 +214,7 @@ export default function QuotaManagementPage() {
             <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <StatCard
                     title="Total Org Quota"
-                    value={ORG_QUOTA.total.toLocaleString()}
+                    value={orgConfig.totalQuota.toLocaleString()}
                     icon={Activity}
                     iconColor="text-brand-700 bg-brand-50"
                 />
@@ -291,17 +244,17 @@ export default function QuotaManagementPage() {
                     <div className="flex items-center justify-between">
                         <div>
                             <CardTitle className="text-base font-semibold">Organisation Quota Overview</CardTitle>
-                            <CardDescription>{ORG_QUOTA.plan} Plan · Renews {ORG_QUOTA.renewsAt}</CardDescription>
+                            <CardDescription>{orgConfig.plan} Plan · Renews {orgConfig.quotaRenewsAt}</CardDescription>
                         </div>
-                        <Badge variant="outline" className="text-xs font-medium">{ORG_QUOTA.plan}</Badge>
+                        <Badge variant="outline" className="text-xs font-medium">{orgConfig.plan}</Badge>
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <QuotaBar used={totalUsed} total={ORG_QUOTA.total} label="Monthly AI Requests (used across departments)" />
+                    <QuotaBar used={totalUsed} total={orgConfig.totalQuota} label="Monthly AI Requests (used across departments)" />
                     <div className="grid grid-cols-3 gap-3">
                         <div className="rounded-lg border border-border bg-muted/40 p-3 text-center">
                             <p className="mb-1 text-xs text-muted-foreground">Total Quota</p>
-                            <p className="text-xl font-bold">{ORG_QUOTA.total.toLocaleString()}</p>
+                            <p className="text-xl font-bold">{orgConfig.totalQuota.toLocaleString()}</p>
                         </div>
                         <div className="rounded-lg border border-border bg-muted/40 p-3 text-center">
                             <p className="mb-1 text-xs text-muted-foreground">Allocated to Depts</p>
@@ -348,10 +301,10 @@ export default function QuotaManagementPage() {
                                         <div className="flex items-start justify-between gap-4">
                                             <div className="flex min-w-0 items-center gap-3">
                                                 {dept && (
-                                                    <div className={cn(
-                                                        "flex h-10 w-10 shrink-0 items-center justify-center rounded-lg",
-                                                        dept.color,
-                                                    )}>
+                                                    <div
+                                                        className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg"
+                                                        style={{ backgroundColor: dept.color }}
+                                                    >
                                                         <Building2 className="h-5 w-5 text-white" />
                                                     </div>
                                                 )}
@@ -408,7 +361,7 @@ export default function QuotaManagementPage() {
                             <CardDescription>
                                 Distribute and adjust quota across departments. Allocated&nbsp;
                                 <span className="font-medium text-foreground">{totalAllocated.toLocaleString()}</span>
-                                &nbsp;/&nbsp;{ORG_QUOTA.total.toLocaleString()} ·{" "}
+                                &nbsp;/&nbsp;{orgConfig.totalQuota.toLocaleString()} ·{" "}
                                 <span className={cn("font-medium", unallocated < 500 ? "text-danger" : "text-success")}>
                                     {unallocated.toLocaleString()} unallocated
                                 </span>
@@ -440,7 +393,7 @@ export default function QuotaManagementPage() {
                                     <TableRow key={dept.id}>
                                         <TableCell>
                                             <div className="flex items-center gap-2">
-                                                <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full", dept.color)} />
+                                                <div className={cn("h-2.5 w-2.5 shrink-0 rounded-full")} style={{ backgroundColor: dept.color }} />
                                                 <span className="text-sm font-medium">{dept.name}</span>
                                             </div>
                                         </TableCell>
