@@ -1,7 +1,10 @@
 "use client";
 
-import { useState } from "react";
-import { Plus, BookText, Upload, Trash2, FileText, Globe, Loader2, Info } from "lucide-react";
+import { useState, useMemo } from "react";
+import {
+    Plus, BookText, Upload, Trash2, FileText, Globe, Loader2, Info,
+    Search, Tag, Code, ToggleLeft, ToggleRight,
+} from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -11,49 +14,217 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
+} from "@/components/ui/dialog";
+import {
+    Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
+} from "@/components/ui/select";
 
-const mockTerms = [
-    { id: 1, term: "D-SecureAI", definition: "Our privacy-preserving AI gateway platform", category: "Product" },
-    { id: 2, term: "Entity Masking Engine", definition: "Core component that detects and replaces personally identifiable information", category: "Technical" },
-    { id: 3, term: "Project Falcon", definition: "Internal codename for upcoming enterprise analytics module", category: "Internal" },
-    { id: 4, term: "CTRL Protocol", definition: "Internal data handling standard v2.3", category: "Compliance" },
-    { id: 5, term: "QuotaSync", definition: "Real-time quota tracking and allocation system", category: "Technical" },
+/* ------------------------------------------------------------------ */
+/* Types & initial data                                                 */
+/* ------------------------------------------------------------------ */
+interface GlossaryTerm {
+    id: number;
+    term: string;
+    definition: string;
+    category: string;
+}
+
+interface ContextDocument {
+    id: number;
+    name: string;
+    size: string;
+    uploadedAt: string;
+    type: "PDF" | "TXT" | "XLSX" | "DOCX";
+}
+
+interface CustomPattern {
+    id: number;
+    label: string;
+    pattern: string;
+    example: string;
+    active: boolean;
+}
+
+const INITIAL_TERMS: GlossaryTerm[] = [
+    { id: 1, term: "D-SecureAI",           definition: "Our privacy-preserving AI gateway platform",                                          category: "Product" },
+    { id: 2, term: "Entity Masking Engine", definition: "Core component that detects and replaces personally identifiable information",         category: "Technical" },
+    { id: 3, term: "Project Falcon",        definition: "Internal codename for upcoming enterprise analytics module",                           category: "Internal" },
+    { id: 4, term: "CTRL Protocol",         definition: "Internal data handling standard v2.3",                                                category: "Compliance" },
+    { id: 5, term: "QuotaSync",             definition: "Real-time quota tracking and allocation system",                                       category: "Technical" },
 ];
 
-const mockDocuments = [
-    { id: 1, name: "Company Style Guide.pdf", size: "2.4 MB", uploadedAt: "2025-11-20", type: "PDF" },
-    { id: 2, name: "Product Terminology.txt", size: "340 KB", uploadedAt: "2025-11-15", type: "TXT" },
-    { id: 3, name: "Compliance Glossary.pdf", size: "1.1 MB", uploadedAt: "2025-10-28", type: "PDF" },
+const INITIAL_DOCUMENTS: ContextDocument[] = [
+    { id: 1, name: "Company Style Guide.pdf",   size: "2.4 MB", uploadedAt: "2025-11-20", type: "PDF" },
+    { id: 2, name: "Product Terminology.txt",   size: "340 KB", uploadedAt: "2025-11-15", type: "TXT" },
+    { id: 3, name: "Compliance Glossary.pdf",   size: "1.1 MB", uploadedAt: "2025-10-28", type: "PDF" },
 ];
 
+const INITIAL_PATTERNS: CustomPattern[] = [
+    { id: 1, label: "Employee ID",     pattern: "EMP-[0-9]{6}",         example: "EMP-001234",  active: true  },
+    { id: 2, label: "Project Code",    pattern: "PRJ-[A-Z]{2}-[0-9]{4}", example: "PRJ-EN-2025", active: true  },
+    { id: 3, label: "Internal Doc Ref", pattern: "DOC-[A-Z]{3}-[0-9]+", example: "DOC-FIN-42",  active: false },
+];
+
+const CATEGORY_COLORS: Record<string, string> = {
+    Product:    "bg-brand-50 text-brand-700 border-brand-200",
+    Technical:  "bg-blue-50 text-blue-700 border-blue-200",
+    Internal:   "bg-purple-50 text-purple-700 border-purple-200",
+    Compliance: "bg-orange-50 text-orange-700 border-orange-200",
+    General:    "bg-muted text-muted-foreground border-border",
+};
+
+function getCategoryColor(cat: string): string {
+    return CATEGORY_COLORS[cat] ?? "bg-muted text-muted-foreground border-border";
+}
+
+const TYPE_COLORS: Record<string, string> = {
+    PDF:  "bg-red-50 text-red-600",
+    TXT:  "bg-gray-50 text-gray-600",
+    XLSX: "bg-green-50 text-green-600",
+    DOCX: "bg-blue-50 text-blue-600",
+};
+
+/* ------------------------------------------------------------------ */
+/* Page                                                                 */
+/* ------------------------------------------------------------------ */
 export default function EnterpriseContextPage() {
-    const [newTerm, setNewTerm] = useState("");
-    const [newDef, setNewDef] = useState("");
+    /* ---- Glossary state ---- */
+    const [terms,          setTerms]         = useState<GlossaryTerm[]>(INITIAL_TERMS);
+    const [termOpen,       setTermOpen]       = useState(false);
+    const [newTerm,        setNewTerm]        = useState("");
+    const [newDef,         setNewDef]         = useState("");
+    const [newCategory,    setNewCategory]    = useState("");
+    const [termSaving,     setTermSaving]     = useState(false);
+    const [termSearch,     setTermSearch]     = useState("");
+    const [termCatFilter,  setTermCatFilter]  = useState("all");
 
+    /* ---- Documents state ---- */
+    const [documents, setDocuments] = useState<ContextDocument[]>(INITIAL_DOCUMENTS);
+    const [uploading, setUploading] = useState(false);
+
+    /* ---- Patterns state ---- */
+    const [patterns,     setPatterns]      = useState<CustomPattern[]>(INITIAL_PATTERNS);
+    const [patternOpen,  setPatternOpen]   = useState(false);
+    const [patLabel,     setPatLabel]      = useState("");
+    const [patRegex,     setPatRegex]      = useState("");
+    const [patExample,   setPatExample]    = useState("");
+    const [patSaving,    setPatSaving]     = useState(false);
+
+    /* ---- Derived ---- */
+    const uniqueCategories = useMemo(
+        () => Array.from(new Set(terms.map(t => t.category).filter(Boolean))).sort(),
+        [terms]
+    );
+
+    const filteredTerms = useMemo(() => {
+        let list = [...terms];
+        if (termSearch.trim()) {
+            const q = termSearch.toLowerCase();
+            list = list.filter(t =>
+                t.term.toLowerCase().includes(q) || t.definition.toLowerCase().includes(q)
+            );
+        }
+        if (termCatFilter !== "all") {
+            list = list.filter(t => t.category === termCatFilter);
+        }
+        return list;
+    }, [terms, termSearch, termCatFilter]);
+
+    /* ---- Handlers: Glossary ---- */
     const handleAddTerm = () => {
-        if (!newTerm || !newDef) return;
-        toast.success(`Term "${newTerm}" added!`);
-        setNewTerm("");
-        setNewDef("");
+        if (!newTerm.trim() || !newDef.trim()) {
+            toast.error("Term and definition are required");
+            return;
+        }
+        setTermSaving(true);
+        setTimeout(() => {
+            setTerms(prev => [
+                ...prev,
+                { id: Date.now(), term: newTerm.trim(), definition: newDef.trim(), category: newCategory.trim() || "General" },
+            ]);
+            toast.success(`Term "${newTerm.trim()}" added`);
+            setNewTerm(""); setNewDef(""); setNewCategory("");
+            setTermSaving(false);
+            setTermOpen(false);
+        }, 400);
     };
 
+    const handleDeleteTerm = (id: number, name: string) => {
+        setTerms(prev => prev.filter(t => t.id !== id));
+        toast.success(`Term "${name}" removed`);
+    };
+
+    /* ---- Handlers: Documents ---- */
+    const handleUploadClick = () => {
+        setUploading(true);
+        setTimeout(() => {
+            setUploading(false);
+            toast.info("File upload is simulated — no backend connected");
+        }, 800);
+    };
+
+    const handleDeleteDocument = (id: number, name: string) => {
+        setDocuments(prev => prev.filter(d => d.id !== id));
+        toast.success(`"${name}" removed`);
+    };
+
+    /* ---- Handlers: Patterns ---- */
+    const handleTogglePattern = (id: number) => {
+        setPatterns(prev =>
+            prev.map(p => p.id === id ? { ...p, active: !p.active } : p)
+        );
+    };
+
+    const handleDeletePattern = (id: number, label: string) => {
+        setPatterns(prev => prev.filter(p => p.id !== id));
+        toast.success(`Pattern "${label}" removed`);
+    };
+
+    const handleAddPattern = () => {
+        if (!patLabel.trim() || !patRegex.trim()) {
+            toast.error("Label and pattern are required");
+            return;
+        }
+        setPatSaving(true);
+        setTimeout(() => {
+            setPatterns(prev => [
+                ...prev,
+                { id: Date.now(), label: patLabel.trim(), pattern: patRegex.trim(), example: patExample.trim(), active: true },
+            ]);
+            toast.success(`Pattern "${patLabel.trim()}" added`);
+            setPatLabel(""); setPatRegex(""); setPatExample("");
+            setPatSaving(false);
+            setPatternOpen(false);
+        }, 500);
+    };
+
+    /* ================================================================ */
+    /* Render                                                             */
+    /* ================================================================ */
     return (
-        <div className="mx-auto max-w-5xl">
+        <div className="mx-auto max-w-5xl space-y-6">
             <PageHeader
                 title="Enterprise Context"
-                subtitle="Teach the AI about your organization's specific terminology and documents."
-                breadcrumbs={[{ label: "Organization", href: "/oa/dashboard" }, { label: "Enterprise Context" }]}
+                subtitle="Teach the AI about your organisation's specific terminology and documents."
+                breadcrumbs={[
+                    { label: "Organization", href: "/oa/dashboard" },
+                    { label: "Enterprise Context" },
+                ]}
             />
 
             {/* Info banner */}
-            <Card className="mb-6 border-brand-200 bg-brand-50/50">
+            <Card className="border-brand-200 bg-brand-50/50">
                 <CardContent className="flex items-start gap-3 p-4">
                     <Info className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
                     <div>
                         <p className="text-sm font-medium text-brand-800">How Enterprise Context Works</p>
-                        <p className="text-sm text-brand-700 mt-1">
-                            Define terms and upload documents so D-SecureAI can better understand your organization&apos;s specific language.
-                            This improves anonymization accuracy by recognizing internal project names, product codes, and jargon that standard NLP models might miss.
+                        <p className="mt-1 text-sm text-brand-700">
+                            Define terms and upload documents so D-SecureAI can better understand your
+                            organisation&apos;s specific language. This improves anonymization accuracy by
+                            recognizing internal project names, product codes, and jargon that standard
+                            NLP models might miss.
                         </p>
                     </div>
                 </CardContent>
@@ -61,122 +232,381 @@ export default function EnterpriseContextPage() {
 
             <Tabs defaultValue="glossary">
                 <TabsList>
-                    <TabsTrigger value="glossary" className="gap-2"><BookText className="h-4 w-4" />Glossary</TabsTrigger>
-                    <TabsTrigger value="documents" className="gap-2"><FileText className="h-4 w-4" />Documents</TabsTrigger>
-                    <TabsTrigger value="patterns" className="gap-2"><Globe className="h-4 w-4" />Custom Patterns</TabsTrigger>
+                    <TabsTrigger value="glossary"   className="gap-2">
+                        <BookText className="h-4 w-4" />Glossary
+                        <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">{terms.length}</Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="documents"  className="gap-2">
+                        <FileText className="h-4 w-4" />Documents
+                        <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">{documents.length}</Badge>
+                    </TabsTrigger>
+                    <TabsTrigger value="patterns"   className="gap-2">
+                        <Globe className="h-4 w-4" />Custom Patterns
+                        <Badge variant="secondary" className="ml-1 h-4 px-1.5 text-[10px]">{patterns.length}</Badge>
+                    </TabsTrigger>
                 </TabsList>
 
-                {/* Glossary */}
+                {/* ============================================================ */}
+                {/* Glossary tab                                                   */}
+                {/* ============================================================ */}
                 <TabsContent value="glossary" className="mt-6 space-y-6">
-                    {/* Add term */}
-                    <Card>
-                        <CardHeader><CardTitle className="text-base">Add Term</CardTitle></CardHeader>
-                        <CardContent className="flex flex-col gap-3 sm:flex-row">
-                            <Input placeholder="Term" value={newTerm} onChange={(e) => setNewTerm(e.target.value)} className="sm:w-48" />
-                            <Input placeholder="Definition" value={newDef} onChange={(e) => setNewDef(e.target.value)} className="flex-1" />
-                            <Button onClick={handleAddTerm} className="bg-brand-700 hover:bg-brand-800"><Plus className="mr-2 h-4 w-4" />Add</Button>
-                        </CardContent>
-                    </Card>
-
                     {/* Existing terms */}
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-base">Organization Glossary</CardTitle>
-                            <CardDescription>{mockTerms.length} terms defined</CardDescription>
+                            <div className="flex items-center justify-between gap-3">
+                                <div>
+                                    <CardTitle className="text-base">Organisation Glossary</CardTitle>
+                                    <CardDescription>{filteredTerms.length} of {terms.length} terms</CardDescription>
+                                </div>
+                                <Button
+                                    size="sm"
+                                    className="bg-brand-700 hover:bg-brand-800 shrink-0"
+                                    onClick={() => setTermOpen(true)}
+                                >
+                                    <Plus className="mr-2 h-4 w-4" />Add Term
+                                </Button>
+                            </div>
+                            {/* Filter bar */}
+                            <div className="mt-3 flex flex-wrap gap-2">
+                                <div className="relative min-w-45 flex-1">
+                                    <Search className="absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
+                                    <Input
+                                        className="h-8 pl-8 text-sm"
+                                        placeholder="Search terms…"
+                                        value={termSearch}
+                                        onChange={e => setTermSearch(e.target.value)}
+                                    />
+                                </div>
+                                {uniqueCategories.length > 0 && (
+                                    <Select value={termCatFilter} onValueChange={setTermCatFilter}>
+                                        <SelectTrigger className="h-8 w-36 text-sm">
+                                            <SelectValue placeholder="Category" />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            <SelectItem value="all">All Categories</SelectItem>
+                                            {uniqueCategories.map(c => (
+                                                <SelectItem key={c} value={c}>{c}</SelectItem>
+                                            ))}
+                                        </SelectContent>
+                                    </Select>
+                                )}
+                            </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-3">
-                                {mockTerms.map((entry) => (
-                                    <div key={entry.id} className="flex items-start justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/50">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-sm font-semibold text-foreground">{entry.term}</p>
-                                                <Badge variant="outline" className="text-[10px]">{entry.category}</Badge>
+                            {filteredTerms.length === 0 ? (
+                                <div className="py-10 text-center text-sm text-muted-foreground">
+                                    No terms match your search
+                                </div>
+                            ) : (
+                                <div className="space-y-2">
+                                    {filteredTerms.map((entry) => (
+                                        <div
+                                            key={entry.id}
+                                            className="flex items-start justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/40"
+                                        >
+                                            <div className="flex-1 min-w-0">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-sm font-semibold text-foreground">{entry.term}</p>
+                                                    {entry.category && (
+                                                        <Badge
+                                                            variant="outline"
+                                                            className={`text-[10px] border ${getCategoryColor(entry.category)}`}
+                                                        >
+                                                            {entry.category}
+                                                        </Badge>
+                                                    )}
+                                                </div>
+                                                <p className="mt-1 text-sm text-muted-foreground">{entry.definition}</p>
                                             </div>
-                                            <p className="mt-1 text-sm text-muted-foreground">{entry.definition}</p>
+                                            <Button
+                                                variant="ghost"
+                                                size="icon"
+                                                className="ml-2 h-8 w-8 shrink-0 text-muted-foreground hover:text-danger"
+                                                onClick={() => handleDeleteTerm(entry.id, entry.term)}
+                                            >
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
                                         </div>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger shrink-0"><Trash2 className="h-4 w-4" /></Button>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
 
-                {/* Documents */}
+                {/* ============================================================ */}
+                {/* Documents tab                                                  */}
+                {/* ============================================================ */}
                 <TabsContent value="documents" className="mt-6 space-y-6">
+                    {/* Upload area */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-base">Upload Document</CardTitle>
-                            <CardDescription>Upload company documents to enrich the AI&apos;s understanding of your terminology.</CardDescription>
+                            <CardDescription>
+                                Upload company documents to enrich the AI&apos;s understanding of your terminology.
+                            </CardDescription>
                         </CardHeader>
                         <CardContent>
                             <div className="flex items-center justify-center rounded-xl border-2 border-dashed border-border bg-muted/30 p-8 transition-colors hover:border-brand-300">
                                 <div className="text-center">
                                     <Upload className="mx-auto h-10 w-10 text-muted-foreground" />
                                     <p className="mt-2 text-sm font-medium">Drop files here or click to upload</p>
-                                    <p className="text-xs text-muted-foreground mt-1">PDF, Excel, TXT — up to 10 MB</p>
-                                    <Button variant="outline" size="sm" className="mt-3">Browse Files</Button>
+                                    <p className="mt-1 text-xs text-muted-foreground">PDF, Excel, TXT, DOCX — up to 10 MB</p>
+                                    <Button
+                                        variant="outline"
+                                        size="sm"
+                                        className="mt-3"
+                                        onClick={handleUploadClick}
+                                        disabled={uploading}
+                                    >
+                                        {uploading
+                                            ? <><Loader2 className="mr-2 h-3.5 w-3.5 animate-spin" />Uploading…</>
+                                            : "Browse Files"}
+                                    </Button>
                                 </div>
                             </div>
                         </CardContent>
                     </Card>
 
+                    {/* Document list */}
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-base">Uploaded Documents</CardTitle>
-                            <CardDescription>{mockDocuments.length} documents</CardDescription>
+                            <CardDescription>
+                                {documents.length} document{documents.length !== 1 ? "s" : ""} indexed
+                            </CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-3">
-                                {mockDocuments.map((doc) => (
-                                    <div key={doc.id} className="flex items-center justify-between rounded-lg border border-border p-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50"><FileText className="h-5 w-5 text-brand-600" /></div>
-                                            <div>
-                                                <p className="text-sm font-medium">{doc.name}</p>
-                                                <p className="text-xs text-muted-foreground">{doc.size} · Uploaded {doc.uploadedAt}</p>
+                            {documents.length === 0 ? (
+                                <div className="py-10 text-center text-sm text-muted-foreground">
+                                    No documents uploaded yet
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {documents.map((doc) => (
+                                        <div
+                                            key={doc.id}
+                                            className="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/40"
+                                        >
+                                            <div className="flex items-center gap-3">
+                                                <div className={`flex h-10 w-10 items-center justify-center rounded-lg ${TYPE_COLORS[doc.type] ?? "bg-brand-50"}`}>
+                                                    <FileText className="h-5 w-5" />
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-medium">{doc.name}</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {doc.size} · Uploaded {doc.uploadedAt}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Badge variant="secondary" className="text-[10px]">Indexed</Badge>
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-muted-foreground hover:text-danger"
+                                                    onClick={() => handleDeleteDocument(doc.id, doc.name)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
                                             </div>
                                         </div>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger"><Trash2 className="h-4 w-4" /></Button>
-                                    </div>
-                                ))}
-                            </div>
+                                    ))}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
 
-                {/* Custom Patterns */}
-                <TabsContent value="documents" className="mt-6">
-                </TabsContent>
+                {/* ============================================================ */}
+                {/* Custom Patterns tab                                            */}
+                {/* ============================================================ */}
                 <TabsContent value="patterns" className="mt-6 space-y-6">
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-base">Custom Anonymization Patterns</CardTitle>
-                            <CardDescription>Define regex patterns to detect organization-specific sensitive data.</CardDescription>
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <CardTitle className="text-base">Custom Anonymization Patterns</CardTitle>
+                                    <CardDescription>
+                                        Define regex patterns to detect organisation-specific sensitive data.
+                                    </CardDescription>
+                                </div>
+                                <Button
+                                    className="bg-brand-700 hover:bg-brand-800"
+                                    size="sm"
+                                    onClick={() => setPatternOpen(true)}
+                                >
+                                    <Plus className="mr-2 h-4 w-4" />Add Pattern
+                                </Button>
+                            </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
-                                {[
-                                    { label: "Employee ID", pattern: "EMP-[0-9]{6}", example: "EMP-001234", active: true },
-                                    { label: "Project Code", pattern: "PRJ-[A-Z]{2}-[0-9]{4}", example: "PRJ-EN-2025", active: true },
-                                    { label: "Internal Doc Ref", pattern: "DOC-[A-Z]{3}-[0-9]+", example: "DOC-FIN-42", active: false },
-                                ].map((p) => (
-                                    <div key={p.label} className="flex items-center justify-between rounded-lg border border-border p-4">
-                                        <div>
-                                            <p className="text-sm font-medium">{p.label}</p>
-                                            <code className="mt-1 text-xs bg-muted px-2 py-0.5 rounded font-mono">{p.pattern}</code>
-                                            <p className="text-xs text-muted-foreground mt-1">Example: {p.example}</p>
+                            {patterns.length === 0 ? (
+                                <div className="py-10 text-center text-sm text-muted-foreground">
+                                    No custom patterns defined
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {patterns.map((p) => (
+                                        <div
+                                            key={p.id}
+                                            className="flex items-center justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/40"
+                                        >
+                                            <div className="min-w-0 flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <Tag className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                                                    <p className="text-sm font-medium">{p.label}</p>
+                                                </div>
+                                                <div className="mt-1.5 flex items-center gap-3">
+                                                    <code className="rounded bg-muted px-2 py-0.5 font-mono text-xs">
+                                                        {p.pattern}
+                                                    </code>
+                                                    {p.example && (
+                                                        <span className="text-xs text-muted-foreground">
+                                                            e.g. {p.example}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+                                            <div className="ml-3 flex items-center gap-2">
+                                                <button
+                                                    onClick={() => handleTogglePattern(p.id)}
+                                                    className="flex items-center gap-1.5 text-xs transition-colors hover:opacity-80"
+                                                >
+                                                    {p.active
+                                                        ? <ToggleRight className="h-5 w-5 text-success" />
+                                                        : <ToggleLeft  className="h-5 w-5 text-muted-foreground" />
+                                                    }
+                                                    <span className={p.active ? "text-success" : "text-muted-foreground"}>
+                                                        {p.active ? "Active" : "Disabled"}
+                                                    </span>
+                                                </button>
+                                                <Separator orientation="vertical" className="h-4" />
+                                                <Button
+                                                    variant="ghost"
+                                                    size="icon"
+                                                    className="h-8 w-8 text-muted-foreground hover:text-danger"
+                                                    onClick={() => handleDeletePattern(p.id, p.label)}
+                                                >
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
                                         </div>
-                                        <Badge variant={p.active ? "default" : "secondary"}>{p.active ? "Active" : "Disabled"}</Badge>
-                                    </div>
-                                ))}
-                            </div>
-                            <Button variant="outline" className="mt-4"><Plus className="mr-2 h-4 w-4" />Add Pattern</Button>
+                                    ))}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
             </Tabs>
+
+            {/* ================================================================ */}
+            {/* Add Term Dialog                                                    */}
+            {/* ================================================================ */}
+            <Dialog open={termOpen} onOpenChange={v => { if (!v) { setNewTerm(""); setNewDef(""); setNewCategory(""); } setTermOpen(v); }}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add Glossary Term</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Term or Acronym <span className="text-danger">*</span></Label>
+                            <Input
+                                placeholder="e.g. D-SecureAI"
+                                value={newTerm}
+                                onChange={e => setNewTerm(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Definition <span className="text-danger">*</span></Label>
+                            <Input
+                                placeholder="What does this term mean?"
+                                value={newDef}
+                                onChange={e => setNewDef(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Category</Label>
+                            <Input
+                                placeholder="e.g. Product, Technical, Internal…"
+                                value={newCategory}
+                                onChange={e => setNewCategory(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">Optional — used to group and filter terms.</p>
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button
+                            className="bg-brand-700 hover:bg-brand-800"
+                            onClick={handleAddTerm}
+                            disabled={termSaving}
+                        >
+                            {termSaving
+                                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Adding…</>
+                                : "Add Term"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ================================================================ */}
+            {/* Add Pattern Dialog                                                 */}
+            {/* ================================================================ */}
+            <Dialog open={patternOpen} onOpenChange={setPatternOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Add Custom Pattern</DialogTitle>
+                    </DialogHeader>
+                    <div className="grid gap-4 py-4">
+                        <div className="space-y-2">
+                            <Label>Label <span className="text-danger">*</span></Label>
+                            <Input
+                                placeholder="e.g. Employee ID"
+                                value={patLabel}
+                                onChange={e => setPatLabel(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="flex items-center gap-1.5">
+                                <Code className="h-3.5 w-3.5" />
+                                Regex Pattern <span className="text-danger">*</span>
+                            </Label>
+                            <Input
+                                className="font-mono text-sm"
+                                placeholder="e.g. EMP-[0-9]{6}"
+                                value={patRegex}
+                                onChange={e => setPatRegex(e.target.value)}
+                            />
+                            <p className="text-xs text-muted-foreground">Standard regex syntax. Do not include delimiters.</p>
+                        </div>
+                        <div className="space-y-2">
+                            <Label>Example match</Label>
+                            <Input
+                                placeholder="e.g. EMP-001234"
+                                value={patExample}
+                                onChange={e => setPatExample(e.target.value)}
+                            />
+                        </div>
+                    </div>
+                    <DialogFooter>
+                        <DialogClose asChild>
+                            <Button variant="outline">Cancel</Button>
+                        </DialogClose>
+                        <Button
+                            className="bg-brand-700 hover:bg-brand-800"
+                            onClick={handleAddPattern}
+                            disabled={patSaving}
+                        >
+                            {patSaving
+                                ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Adding…</>
+                                : "Add Pattern"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
         </div>
     );
 }
