@@ -276,12 +276,6 @@ export default function OrgSettingsPage() {
     // Security
     const [security, setSecurity] = useState<SecuritySettings>(SEED_SECURITY);
 
-    // AI Models
-    const [enabledModels, setEnabledModels] = useState<LLMModel[]>(
-        MODELS.filter((_, i) => i !== 3).map((m) => m.id) as LLMModel[],
-    );
-    const [defaultModel, setDefaultModel] = useState<LLMModel>("claude-4-6-sonnet");
-
     // Org Policies
     const [orgPolicy, setOrgPolicy] = useState<OrgPolicy>(SEED_POLICY);
     const [deptPolicies, setDeptPolicies] = useState<DeptPolicyState[]>(SEED_DEPT_POLICIES);
@@ -299,9 +293,6 @@ export default function OrgSettingsPage() {
     const totalEmployeesAcrossDepts = deptPolicies.reduce((s, d) => s + d.employees, 0);
     const syncedCount = deptPolicies.filter((d) => d.synced).length;
     const outOfSyncCount = deptPolicies.length - syncedCount;
-
-    const enabledModelCount = enabledModels.length;
-    const disabledModelCount = MODELS.length - enabledModelCount;
 
     // ── Handlers ────────────────────────────────────────────────────────────
 
@@ -403,12 +394,6 @@ export default function OrgSettingsPage() {
                 <TabsList>
                     <TabsTrigger value="general">General</TabsTrigger>
                     <TabsTrigger value="security">Security</TabsTrigger>
-                    <TabsTrigger value="models">
-                        AI Models
-                        <Badge variant="secondary" className="ml-1.5 text-[10px] px-1.5 py-0">
-                            {enabledModelCount}/{MODELS.length}
-                        </Badge>
-                    </TabsTrigger>
                     <TabsTrigger value="policies">
                         Org Policies
                         {outOfSyncCount > 0 && (
@@ -732,94 +717,6 @@ export default function OrgSettingsPage() {
                         </CardContent>
                     </Card>
 
-                </TabsContent>
-
-                {/* ════════════════════════════════════════════════════════════════
-                    AI MODELS TAB
-                    ════════════════════════════════════════════════════════════════ */}
-                <TabsContent value="models" className="mt-6 space-y-6">
-                    {/* Summary */}
-                    <div className="grid grid-cols-3 gap-4">
-                        <Card>
-                            <CardContent className="p-4 text-center">
-                                <p className="text-2xl font-bold text-success">{enabledModelCount}</p>
-                                <p className="mt-0.5 text-xs text-muted-foreground">Enabled Models</p>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardContent className="p-4 text-center">
-                                <p className="text-2xl font-bold text-danger">{disabledModelCount}</p>
-                                <p className="mt-0.5 text-xs text-muted-foreground">Disabled Models</p>
-                            </CardContent>
-                        </Card>
-                        <Card>
-                            <CardContent className="p-4 text-center">
-                                <p className="text-2xl font-bold text-brand-700">
-                                    {MODELS.find((m) => m.id === defaultModel)?.name ?? "—"}
-                                </p>
-                                <p className="mt-0.5 text-xs text-muted-foreground">Default Model</p>
-                            </CardContent>
-                        </Card>
-                    </div>
-
-                    {/* Default Model */}
-                    <Card>
-                        <CardHeader>
-                            <CardTitle className="text-base">Default AI Model</CardTitle>
-                            <CardDescription>The model used when employees start a new conversation.</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <Select value={defaultModel} onValueChange={(v) => setDefaultModel(v as LLMModel)}>
-                                <SelectTrigger className="max-w-xs"><SelectValue /></SelectTrigger>
-                                <SelectContent>
-                                    {MODELS.filter((m) => enabledModels.includes(m.id as LLMModel)).map((m) => (
-                                        <SelectItem key={m.id} value={m.id}>
-                                            {m.name} ({m.providerName})
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </CardContent>
-                    </Card>
-
-                    {/* Model Grid */}
-                    <Card>
-                        <CardHeader>
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <CardTitle className="text-base">Allowed Models</CardTitle>
-                                    <CardDescription>
-                                        Choose which AI models are available across the organisation.
-                                        Departments can further restrict models via the policies tab.
-                                    </CardDescription>
-                                </div>
-                                <div className="flex gap-2">
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-7 px-2 text-xs"
-                                        onClick={() => setEnabledModels(ALL_MODEL_IDS)}
-                                    >
-                                        Enable All
-                                    </Button>
-                                    <Button
-                                        size="sm"
-                                        variant="outline"
-                                        className="h-7 px-2 text-xs"
-                                        onClick={() => setEnabledModels([])}
-                                    >
-                                        Disable All
-                                    </Button>
-                                </div>
-                            </div>
-                        </CardHeader>
-                        <CardContent>
-                            <ModelCheckboxGrid
-                                selected={enabledModels}
-                                onChange={setEnabledModels}
-                            />
-                        </CardContent>
-                    </Card>
                 </TabsContent>
 
                 {/* ════════════════════════════════════════════════════════════════
