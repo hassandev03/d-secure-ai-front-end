@@ -74,14 +74,14 @@ export default function OrgAdminDashboard() {
 
     // ── Derived business insights ────────────────────────────────────────────
 
-    const deptEfficiency = useMemo(() =>
+    const deptUsage = useMemo(() =>
         [...depts]
             .map(d => ({
                 name: d.name,
                 color: d.color,
-                perEmployee: d.employees > 0 ? Math.round((d.quota.used / d.employees) * 10) / 10 : 0,
+                used: d.quota.used,
             }))
-            .sort((a, b) => b.perEmployee - a.perEmployee),
+            .sort((a, b) => b.used - a.used),
         [depts],
     );
 
@@ -146,26 +146,26 @@ export default function OrgAdminDashboard() {
                 </CardContent>
             </Card>
 
-            {/* ── Row 1: Department Efficiency + Model Preference ── */}
+            {/* ── Row 1: Department Quota Usage + Model Preference ── */}
             <div className="mt-6 grid gap-6 lg:grid-cols-2 items-stretch">
-                {/* Department Efficiency — "Which teams get the most value from AI?" */}
+                {/* Department Quota Usage — "Which teams are consuming the most quota?" */}
                 <Card className="flex flex-col">
                     <CardHeader>
-                        <CardTitle className="text-base font-semibold">AI Productivity by Department</CardTitle>
-                        <CardDescription>Requests per employee — identifies which teams leverage AI most and where training may help.</CardDescription>
+                        <CardTitle className="text-base font-semibold">Department Quota Usage</CardTitle>
+                        <CardDescription>Total AI requests consumed by each department this month.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-1 min-h-75 pb-4">
                         <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={deptEfficiency} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
+                            <BarChart data={deptUsage} layout="vertical" margin={{ top: 5, right: 30, left: 10, bottom: 5 }}>
                                 <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
                                 <XAxis type="number" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
                                 <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} width={90} />
                                 <RechartsTooltip
                                     contentStyle={TOOLTIP_STYLE}
-                                    formatter={(value: number) => [`${value} req / employee`, "Productivity"]}
+                                    formatter={(value: number) => [`${value} requests`, "Usage"]}
                                 />
-                                <Bar dataKey="perEmployee" name="Requests / Employee" radius={[0, 4, 4, 0]} barSize={18}>
-                                    {deptEfficiency.map((entry) => (
+                                <Bar dataKey="used" name="Requests" radius={[0, 4, 4, 0]} barSize={18}>
+                                    {deptUsage.map((entry) => (
                                         <Cell key={entry.name} fill={entry.color} />
                                     ))}
                                 </Bar>

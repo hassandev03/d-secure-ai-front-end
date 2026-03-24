@@ -8,6 +8,7 @@ import {
     BookText,
     BarChart3,
     Settings,
+    ShieldCheck,
 } from "lucide-react";
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
@@ -33,6 +34,12 @@ const orgAdminNav: NavGroup[] = [
         items: [
             { label: "Quota Management", href: "/oa/quota", icon: BarChart3 },
             { label: "Settings", href: "/oa/settings", icon: Settings },
+        ],
+    },
+    {
+        title: "Compliance",
+        items: [
+            { label: "Audit & Privacy", href: "/oa/audit-privacy", icon: ShieldCheck },
         ],
     },
 ];

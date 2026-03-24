@@ -84,6 +84,15 @@ export type OACustomPattern = {
     active:  boolean;
 };
 
+export type OAQueryLog = {
+    id:            string;
+    timestamp:     string;
+    employeeEmail: string;
+    employeeId:    string;
+    department:    string;
+    piiDetected:   string[]; // e.g. ["EMAIL", "CREDIT_CARD"]
+};
+
 // ── Dashboard presentation types ─────────────────────────────────────────────
 
 export type OrgDashboardStats = {
@@ -218,6 +227,21 @@ const RECENT_ACTIVITIES: RecentActivityItem[] = [
     { id: "a6", type: "quota_denied",     title: "Quota request denied",   description: "Operations dept request for +500 denied",          timestamp: "1 day ago",   icon: "x-circle"       },
     { id: "a7", type: "dept_created",     title: "Department edited",      description: "HR department quota increased to 400",             timestamp: "2 days ago",  icon: "building"       },
     { id: "a8", type: "employee_added",   title: "New employee added",     description: "Mia Thompson joined the Engineering department",   timestamp: "2 days ago",  icon: "user-plus"      },
+];
+
+const QUERY_LOGS: OAQueryLog[] = [
+    { id: "ql-001", timestamp: "2026-03-24 17:02:11", employeeEmail: "raj@acme.com",    employeeId: "EMP-000007", department: "Engineering", piiDetected: ["CREDENTIALS", "INTELLECTUAL_PROPERTY"] },
+    { id: "ql-002", timestamp: "2026-03-24 16:48:33", employeeEmail: "aisha@acme.com",  employeeId: "EMP-000004", department: "Finance",     piiDetected: ["FINANCIAL_DATA", "CORPORATE_SECRETS"] },
+    { id: "ql-003", timestamp: "2026-03-24 16:31:05", employeeEmail: "tom@acme.com",    employeeId: "EMP-000009", department: "Sales",       piiDetected: ["PERSONALLY_IDENTIFIABLE_INFO"] },
+    { id: "ql-004", timestamp: "2026-03-24 16:15:47", employeeEmail: "john@acme.com",   employeeId: "EMP-000001", department: "Engineering", piiDetected: ["INTELLECTUAL_PROPERTY", "SYSTEM_AND_NETWORK_DATA"] },
+    { id: "ql-005", timestamp: "2026-03-24 15:58:22", employeeEmail: "emma@acme.com",   employeeId: "EMP-000002", department: "Marketing",   piiDetected: ["PERSONALLY_IDENTIFIABLE_INFO", "CORPORATE_SECRETS"] },
+    { id: "ql-006", timestamp: "2026-03-24 15:40:09", employeeEmail: "nina@acme.com",   employeeId: "EMP-000010", department: "Finance",     piiDetected: ["FINANCIAL_DATA", "PERSONALLY_IDENTIFIABLE_INFO"] },
+    { id: "ql-007", timestamp: "2026-03-24 15:22:55", employeeEmail: "priya@acme.com",  employeeId: "EMP-000012", department: "HR",          piiDetected: ["PERSONALLY_IDENTIFIABLE_INFO", "PROTECTED_HEALTH_INFO"] },
+    { id: "ql-008", timestamp: "2026-03-24 15:07:14", employeeEmail: "sophie@acme.com", employeeId: "EMP-000006", department: "HR",          piiDetected: ["PERSONALLY_IDENTIFIABLE_INFO"] },
+    { id: "ql-009", timestamp: "2026-03-24 14:51:38", employeeEmail: "lisa@acme.com",   employeeId: "EMP-000008", department: "Operations",  piiDetected: ["PERSONALLY_IDENTIFIABLE_INFO", "FINANCIAL_DATA"] },
+    { id: "ql-010", timestamp: "2026-03-24 14:33:01", employeeEmail: "raj@acme.com",    employeeId: "EMP-000007", department: "Engineering", piiDetected: ["SYSTEM_AND_NETWORK_DATA", "CREDENTIALS"] },
+    { id: "ql-011", timestamp: "2026-03-24 14:18:29", employeeEmail: "john@acme.com",   employeeId: "EMP-000001", department: "Engineering", piiDetected: ["INTELLECTUAL_PROPERTY"] },
+    { id: "ql-012", timestamp: "2026-03-24 13:55:44", employeeEmail: "aisha@acme.com",  employeeId: "EMP-000004", department: "Finance",     piiDetected: ["FINANCIAL_DATA"] },
 ];
 
 const MODEL_COLORS: Record<string, string> = {
@@ -369,4 +393,10 @@ export async function getOrgUsageTrend(days: 7 | 30 = 7): Promise<OrgUsageTrendP
 export async function getOrgRecentActivity(): Promise<RecentActivityItem[]> {
     await delay(250);
     return structuredClone(RECENT_ACTIVITIES);
+}
+
+/** GET /api/v1/org/{orgId}/audit/query-logs */
+export async function getOAQueryLogs(): Promise<OAQueryLog[]> {
+    await delay(250);
+    return structuredClone(QUERY_LOGS);
 }
