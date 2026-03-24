@@ -41,6 +41,7 @@ const mockDeptAdmin: User = {
 };
 
 const mockEmployee: User = {
+    
     id: 'emp-001',
     name: 'Emily Chen',
     email: 'emily@acmecorp.com',
