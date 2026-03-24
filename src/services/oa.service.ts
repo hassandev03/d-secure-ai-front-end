@@ -84,6 +84,15 @@ export type OACustomPattern = {
     active:  boolean;
 };
 
+export type OASystemPrompt = {
+    id:              string;
+    name:            string;
+    content:         string;
+    /** IDs of departments this prompt is forced-applied to. Empty = not applied anywhere. */
+    appliedToDepts:  string[];
+    createdAt:       string;
+};
+
 export type OAQueryLog = {
     id:            string;
     timestamp:     string;
@@ -210,6 +219,30 @@ const CONTEXT_DOCUMENTS: OAContextDocument[] = [
     { id: 1, name: "Company Style Guide.pdf", size: "2.4 MB", uploadedAt: "2025-11-20", type: "PDF" },
     { id: 2, name: "Product Terminology.txt", size: "340 KB", uploadedAt: "2025-11-15", type: "TXT" },
     { id: 3, name: "Compliance Glossary.pdf", size: "1.1 MB", uploadedAt: "2025-10-28", type: "PDF" },
+];
+
+const SYSTEM_PROMPTS: OASystemPrompt[] = [
+    {
+        id:             "sp-oa-001",
+        name:           "Professional Tone Policy",
+        content:        "Always respond in a formal, professional tone. Avoid colloquialisms, slang, or casual language. Structure responses clearly with concise paragraphs.",
+        appliedToDepts: ["dept-001", "dept-003"],
+        createdAt:      "2026-03-01",
+    },
+    {
+        id:             "sp-oa-002",
+        name:           "Data Privacy Reminder",
+        content:        "Before providing any response that may involve personal or financial data, remind the user that all PII is automatically anonymized by D-SecureAI. Do not include actual personal identifiers in your responses.",
+        appliedToDepts: ["dept-004", "dept-005"],
+        createdAt:      "2026-03-05",
+    },
+    {
+        id:             "sp-oa-003",
+        name:           "Compliance Disclaimer",
+        content:        "When answering questions related to legal, financial, or HR matters, always append: 'This response is for informational purposes only and does not constitute professional legal or financial advice.'",
+        appliedToDepts: [],
+        createdAt:      "2026-03-10",
+    },
 ];
 
 const CUSTOM_PATTERNS: OACustomPattern[] = [
@@ -399,4 +432,64 @@ export async function getOrgRecentActivity(): Promise<RecentActivityItem[]> {
 export async function getOAQueryLogs(): Promise<OAQueryLog[]> {
     await delay(250);
     return structuredClone(QUERY_LOGS);
+}
+
+// ── System Prompts ───────────────────────────────────────────────────────────
+
+/** GET /api/v1/org/{orgId}/system-prompts */
+export async function getOASystemPrompts(): Promise<OASystemPrompt[]> {
+    await delay(200);
+    return structuredClone(SYSTEM_PROMPTS);
+}
+
+/** POST /api/v1/org/{orgId}/system-prompts */
+export async function createOASystemPrompt(
+    name: string,
+    content: string,
+): Promise<OASystemPrompt> {
+    await delay(400);
+    const prompt: OASystemPrompt = {
+        id:             `sp-oa-${Date.now()}`,
+        name:           name.trim(),
+        content:        content.trim(),
+        appliedToDepts: [],
+        createdAt:      new Date().toISOString().split('T')[0],
+    };
+    SYSTEM_PROMPTS.push(prompt);
+    return structuredClone(prompt);
+}
+
+/** PUT /api/v1/org/{orgId}/system-prompts/{promptId} */
+export async function updateOASystemPrompt(
+    id: string,
+    patch: Partial<Pick<OASystemPrompt, 'name' | 'content'>>,
+): Promise<OASystemPrompt> {
+    await delay(350);
+    const prompt = SYSTEM_PROMPTS.find((p) => p.id === id);
+    if (!prompt) throw new Error(`System prompt ${id} not found`);
+    if (patch.name    !== undefined) prompt.name    = patch.name.trim();
+    if (patch.content !== undefined) prompt.content = patch.content.trim();
+    return structuredClone(prompt);
+}
+
+/** DELETE /api/v1/org/{orgId}/system-prompts/{promptId} */
+export async function deleteOASystemPrompt(id: string): Promise<void> {
+    await delay(300);
+    const idx = SYSTEM_PROMPTS.findIndex((p) => p.id === id);
+    if (idx !== -1) SYSTEM_PROMPTS.splice(idx, 1);
+}
+
+/** PUT /api/v1/org/{orgId}/system-prompts/{promptId}/apply
+ *  Pass an array of department IDs. Pass all dept IDs for "apply to all".
+ *  Pass an empty array to remove from all departments.
+ */
+export async function applyOASystemPromptToDepts(
+    id: string,
+    deptIds: string[],
+): Promise<OASystemPrompt> {
+    await delay(450);
+    const prompt = SYSTEM_PROMPTS.find((p) => p.id === id);
+    if (!prompt) throw new Error(`System prompt ${id} not found`);
+    prompt.appliedToDepts = [...deptIds];
+    return structuredClone(prompt);
 }

@@ -9,6 +9,7 @@ import {
     BarChart3,
     Settings,
     ShieldCheck,
+    BrainCircuit,
 } from "lucide-react";
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
@@ -27,6 +28,7 @@ const orgAdminNav: NavGroup[] = [
             { label: "Employees", href: "/oa/employees", icon: Users },
             { label: "Departments", href: "/oa/departments", icon: Layers },
             { label: "Enterprise Context", href: "/oa/enterprise-context", icon: BookText },
+            { label: "System Prompts", href: "/oa/system-prompts", icon: BrainCircuit },
         ],
     },
     {

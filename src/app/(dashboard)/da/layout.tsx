@@ -6,6 +6,7 @@ import {
     Users,
     BarChart3,
     ShieldCheck,
+    BrainCircuit,
 } from "lucide-react";
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
@@ -37,6 +38,7 @@ export default function DeptAdminLayout({
                 { label: "Employee Management", href: "/da/employees", icon: Users },
                 { label: "Quota Requests", href: "/da/quota-requests", icon: BarChart3, badge: pendingCount },
                 { label: "Access Control", href: "/da/access-control", icon: ShieldCheck },
+                { label: "System Prompts", href: "/da/system-prompts", icon: BrainCircuit },
             ],
         },
     ], [pendingCount]);

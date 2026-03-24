@@ -94,6 +94,17 @@ export type DeptPolicy = {
     dailyLimit: number;
 };
 
+export type DASystemPrompt = {
+    id:                  string;
+    name:                string;
+    content:             string;
+    /** Employee IDs this DA prompt is applied to. */
+    appliedToEmployees:  string[];
+    createdAt:           string;
+    /** True = originated from Org Admin — read-only for dept admin */
+    enforcedByOrg?:      boolean;
+};
+
 // ─── Mock source data (replace with API calls later) ─────────────────────────
 
 /**
@@ -201,6 +212,42 @@ const MOCK_EMP_QUOTA_REQUESTS: EmpQuotaRequest[] = [
     { id: 'qr-2', employeeId: '6', name: 'Emily Zhao',  email: 'emily@acme.com', amount:  50, reason: 'Year-end analysis and reporting tasks.',                    date: '2025-12-27', status: 'PENDING'  },
     { id: 'qr-3', employeeId: '1', name: 'Raj Patel',   email: 'raj@acme.com',   amount: 100, reason: 'Automated code-review workflows.',                         date: '2025-12-20', status: 'APPROVED' },
     { id: 'qr-4', employeeId: '2', name: 'John Miller', email: 'john@acme.com',  amount:  80, reason: 'Documentation generation sprint.',                         date: '2025-12-15', status: 'DENIED'   },
+];
+
+/**
+ * DA-created system prompts for this department.
+ * Backend route (future): GET /api/v1/dept/{deptId}/system-prompts
+ */
+const MOCK_DA_SYSTEM_PROMPTS: DASystemPrompt[] = [
+    {
+        id:                 'sp-da-001',
+        name:               'Code Review Assistant',
+        content:            'When answering coding questions, always suggest best practices, potential edge cases, and security considerations. Format code examples with language-specific syntax and include comments explaining non-obvious logic.',
+        appliedToEmployees: ['1', '2', '7', '13', '18'],
+        createdAt:          '2026-03-08',
+    },
+    {
+        id:                 'sp-da-002',
+        name:               'Technical Documentation Style',
+        content:            'Format all technical explanations using structured markdown. Use headings, bullet lists, and code blocks where appropriate. Assume the reader has engineering-level technical knowledge.',
+        appliedToEmployees: ['4', '11', '20'],
+        createdAt:          '2026-03-15',
+    },
+];
+
+/**
+ * OA-enforced prompts that apply to this department (read-only for dept admin).
+ * Backend route (future): GET /api/v1/dept/{deptId}/org-system-prompts
+ */
+const MOCK_OA_ENFORCED_PROMPTS: DASystemPrompt[] = [
+    {
+        id:                 'sp-oa-001',
+        name:               'Professional Tone Policy',
+        content:            'Always respond in a formal, professional tone. Avoid colloquialisms, slang, or casual language. Structure responses clearly with concise paragraphs.',
+        appliedToEmployees: [],   // enforced for entire dept — field unused here
+        createdAt:          '2026-03-01',
+        enforcedByOrg:      true,
+    },
 ];
 
 /**
@@ -647,4 +694,70 @@ export async function getDeptRequestTypeBreakdown(): Promise<RequestTypePoint[]>
         count:      Math.round(total * weights[i]),
         percentage: Math.round(weights[i] * 100),
     }));
+}
+
+// ─── System Prompts ───────────────────────────────────────────────────────────
+
+/** GET /api/v1/dept/{deptId}/system-prompts */
+export async function getDASystemPrompts(): Promise<DASystemPrompt[]> {
+    await delay(200);
+    return structuredClone(MOCK_DA_SYSTEM_PROMPTS);
+}
+
+/** GET /api/v1/dept/{deptId}/org-system-prompts  (read-only, enforced by org admin) */
+export async function getOAPromptsForDept(): Promise<DASystemPrompt[]> {
+    await delay(150);
+    return structuredClone(MOCK_OA_ENFORCED_PROMPTS);
+}
+
+/** POST /api/v1/dept/{deptId}/system-prompts */
+export async function createDASystemPrompt(
+    name: string,
+    content: string,
+): Promise<DASystemPrompt> {
+    await delay(400);
+    const prompt: DASystemPrompt = {
+        id:                 `sp-da-${Date.now()}`,
+        name:               name.trim(),
+        content:            content.trim(),
+        appliedToEmployees: [],
+        createdAt:          new Date().toISOString().split('T')[0],
+    };
+    MOCK_DA_SYSTEM_PROMPTS.push(prompt);
+    return structuredClone(prompt);
+}
+
+/** PUT /api/v1/dept/{deptId}/system-prompts/{promptId} */
+export async function updateDASystemPrompt(
+    id: string,
+    patch: Partial<Pick<DASystemPrompt, 'name' | 'content'>>,
+): Promise<DASystemPrompt> {
+    await delay(350);
+    const prompt = MOCK_DA_SYSTEM_PROMPTS.find((p) => p.id === id);
+    if (!prompt) throw new Error(`System prompt ${id} not found`);
+    if (patch.name    !== undefined) prompt.name    = patch.name.trim();
+    if (patch.content !== undefined) prompt.content = patch.content.trim();
+    return structuredClone(prompt);
+}
+
+/** DELETE /api/v1/dept/{deptId}/system-prompts/{promptId} */
+export async function deleteDASystemPrompt(id: string): Promise<void> {
+    await delay(300);
+    const idx = MOCK_DA_SYSTEM_PROMPTS.findIndex((p) => p.id === id);
+    if (idx !== -1) MOCK_DA_SYSTEM_PROMPTS.splice(idx, 1);
+}
+
+/** PUT /api/v1/dept/{deptId}/system-prompts/{promptId}/apply
+ *  Pass employee IDs. Pass all IDs for "apply to all".
+ *  Pass an empty array to un-apply from everyone.
+ */
+export async function applyDASystemPromptToEmployees(
+    id: string,
+    employeeIds: string[],
+): Promise<DASystemPrompt> {
+    await delay(450);
+    const prompt = MOCK_DA_SYSTEM_PROMPTS.find((p) => p.id === id);
+    if (!prompt) throw new Error(`System prompt ${id} not found`);
+    prompt.appliedToEmployees = [...employeeIds];
+    return structuredClone(prompt);
 }
