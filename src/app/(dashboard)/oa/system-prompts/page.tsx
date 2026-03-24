@@ -383,7 +383,7 @@ export default function OASystemPromptsPage() {
 
             {/* ── Create / Edit dialog ─────────────────────────────────────── */}
             <Dialog open={promptDialog} onOpenChange={v => { if (!v) closePromptDialog(); }}>
-                <DialogContent className="sm:max-w-lg">
+                <DialogContent className="sm:max-w-3xl">
                     <DialogHeader>
                         <DialogTitle>{editTarget ? "Edit Prompt" : "Create System Prompt"}</DialogTitle>
                         <DialogDescription>
@@ -408,8 +408,8 @@ export default function OASystemPromptsPage() {
                                 placeholder="Describe how the LLM should behave, e.g. 'Always respond in a formal tone…'"
                                 value={formContent}
                                 onChange={e => setFormContent(e.target.value)}
-                                rows={6}
-                                className="resize-none"
+                                rows={16}
+                                className="min-h-[300px] max-h-[50vh] overflow-y-auto"
                             />
                             <p className="text-xs text-muted-foreground">
                                 Be specific — this text is prepended to every LLM interaction for the selected departments.
