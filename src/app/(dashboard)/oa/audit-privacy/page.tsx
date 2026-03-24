@@ -57,24 +57,7 @@ const PRESET_EXAMPLES = [
     { label: "Finance Support", text: 'Process refund of $500 for credit card 4532-1234-5678-9012. Customer phone is +44 7911 123456.' }
 ];
 
-const SAMPLE_PII: { pattern: RegExp; label: string; color: string }[] = [
-    { pattern: /\b[\w.-]+@[\w.-]+\.\w{2,}\b/g,               label: "EMAIL",         color: "#fbbf24" },
-    { pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,   label: "CARD",          color: "#f87171" },
-    { pattern: /\b\+?\d[\d\s-]{8,}\d\b/g,                    label: "PHONE",         color: "#fb923c" },
-    { pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+\b/g,               label: "PERSON",        color: "#60a5fa" },
-    { pattern: /\b\d{3}-\d{2}-\d{4}\b/g,                   label: "SSN",          color: "#a78bfa" },
-    { pattern: /\$\d+(?:,\d{3})*(?:\.\d{2})?/g,            label: "MONEY",        color: "#34d399" },
-];
 
-function highlight(text: string) {
-    let result = text;
-    for (const { pattern, label, color } of SAMPLE_PII) {
-        result = result.replace(pattern, (match) =>
-            `<mark style="background:${color}20;color:${color};border:1px solid ${color}40;border-radius:4px;padding:2px 4px;font-size:0.9em;display:inline-flex;align-items:center;line-height:1;margin:0 2px" title="${label}">${match} <span style="font-size:0.75em;margin-left:4px;opacity:0.8;font-weight:700">${label}</span></mark>`
-        );
-    }
-    return result;
-}
 
 function sanitize(text: string) {
     let result = text;
@@ -96,7 +79,6 @@ function PrivacyEngineSim() {
     const [loading, setLoading] = useState(false);
 
     const sanitized = useMemo(() => sanitize(input), [input]);
-    const highlighted = useMemo(() => highlight(input), [input]);
 
     const handleSimulate = async () => {
         if (!input.trim()) return;
@@ -138,115 +120,124 @@ function PrivacyEngineSim() {
                         ))}
                     </div>
                 </CardHeader>
-                <CardContent className="p-0">
-                    <div className="grid divide-y md:grid-cols-2 md:divide-y-0 md:divide-x text-sm">
-                        {/* Input Column */}
-                        <div className="flex flex-col bg-white p-5 lg:p-6 pb-6 hover:bg-slate-50/50 transition-colors">
-                            <div className="mb-4 flex items-center justify-between">
-                                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
-                                    <User className="h-4 w-4" /> Employee Query
+                <CardContent className="p-6 space-y-6 bg-white/50">
+                    {/* Grid for Input and Intercepted Payload */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        {/* Left: Input */}
+                        <div className="flex flex-col space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600">
+                                    <User className="h-4 w-4 text-brand-500" /> Employee Query
                                 </span>
                             </div>
                             <textarea
-                                className="min-h-[180px] w-full flex-1 resize-y rounded-xl border border-slate-200 bg-white p-4 text-[14px] leading-relaxed text-slate-700 shadow-sm transition-all placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
+                                className="min-h-[220px] w-full flex-1 resize-y rounded-xl border border-slate-200 bg-white p-4 text-[14px] leading-relaxed text-slate-700 shadow-sm transition-all placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
                                 placeholder='Type a prompt with sensitive information here...'
                                 value={input}
                                 onChange={(e) => { setInput(e.target.value); setRan(false); }}
                             />
-                            <Button
-                                className="mt-5 w-full bg-brand-700 py-6 text-[14px] font-semibold text-white shadow-md transition-all hover:bg-brand-800 hover:shadow-lg disabled:opacity-60"
-                                onClick={handleSimulate}
-                                disabled={loading || !input.trim()}
-                            >
-                                {loading ? (
-                                    <><RefreshCw className="mr-2 h-5 w-5 animate-spin" /> Processing via Gateway…</>
-                                ) : (
-                                    <><Play className="mr-2 h-5 w-5 fill-current" /> Simulate Pipeline</>
-                                )}
-                            </Button>
                         </div>
 
-                        {/* Output Column */}
-                        <div className="relative flex flex-col bg-slate-950 p-5 lg:p-6 text-slate-300">
-                            {/* Loading Overlay */}
-                            <AnimatePresence>
-                                {loading && (
-                                    <motion.div 
-                                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-                                        className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md"
-                                    >
-                                        <div className="relative flex h-20 w-20 items-center justify-center">
-                                            <div className="absolute inset-0 animate-ping rounded-full bg-brand-500/40" />
-                                            <div className="absolute inset-0 animate-pulse rounded-full bg-brand-600/30 blur-xl" />
-                                            <Lock className="relative z-10 h-8 w-8 text-white" />
-                                        </div>
-                                        <div className="mt-8 flex flex-col items-center gap-1.5">
-                                            <span className="text-sm font-bold uppercase tracking-widest text-white">Anonymizing Entities</span>
-                                            <span className="text-xs text-brand-300/80">Running advanced NLP models...</span>
-                                        </div>
-                                    </motion.div>
-                                )}
-                            </AnimatePresence>
-
-                            <div className="flex h-full flex-col">
-                                <span className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-400">
-                                    <Bot className="h-4 w-4" /> Payload Sent to LLM
+                        {/* Right: Intercepted & Sanitized Payload */}
+                        <div className="flex flex-col space-y-3">
+                            <div className="flex items-center justify-between">
+                                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600">
+                                    <ShieldCheck className="h-4 w-4 text-emerald-500" /> Intercepted Payload (Sent to LLM)
                                 </span>
-                                <div className="min-h-[180px] flex-1 rounded-xl border border-brand-900/40 bg-[#0f172a] p-5 font-mono text-[13px] leading-relaxed shadow-inner overflow-hidden flex flex-col">
-                                    <AnimatePresence mode="wait">
-                                        {ran ? (
-                                            <motion.div initial={{ opacity: 0, filter: "blur(4px)" }} animate={{ opacity: 1, filter: "blur(0px)" }} transition={{ duration: 0.4 }} className="space-y-6">
-                                                {/* Original Highlights */}
-                                                <div>
-                                                    <span className="mb-2.5 block text-[10px] font-bold uppercase tracking-widest text-slate-500">1. Detection Layer</span>
-                                                    <div dangerouslySetInnerHTML={{ __html: highlighted || '<span class="text-slate-600 italic">No input.</span>' }} className="text-slate-400 leading-loose" />
-                                                </div>
-                                                
-                                                <div className="flex items-center gap-3">
-                                                    <div className="h-px w-full bg-brand-900/30" />
-                                                    <Zap className="h-3 w-3 shrink-0 text-brand-500 opacity-50" />
-                                                    <div className="h-px w-full bg-brand-900/30" />
-                                                </div>
-
-                                                {/* Anonymized */}
-                                                <div>
-                                                    <span className="mb-2.5 block text-[10px] font-bold uppercase tracking-widest text-emerald-800">2. Sanitized Layer</span>
-                                                    <div className="text-emerald-400 font-medium leading-loose">
-                                                        {sanitized || <span className="text-slate-600 italic">No content.</span>}
-                                                    </div>
-                                                </div>
-                                            </motion.div>
-                                        ) : (
-                                            <div className="flex h-full flex-1 items-center justify-center">
-                                                <span className="text-brand-900/60 flex items-center gap-2.5 text-xs italic font-medium">
-                                                    <Shield className="h-5 w-5 opacity-60" /> Awaiting simulation input...
-                                                </span>
-                                            </div>
-                                        )}
-                                    </AnimatePresence>
-                                </div>
-                                
-                                {/* AI Response Preview */}
-                                <AnimatePresence>
-                                    {ran && (
+                            </div>
+                            
+                            <div className="relative flex min-h-[220px] flex-1 flex-col overflow-hidden rounded-xl border border-slate-200 bg-slate-50 shadow-inner">
+                                <AnimatePresence mode="wait">
+                                    {loading ? (
                                         <motion.div 
-                                            initial={{ opacity: 0, y: 15 }} 
-                                            animate={{ opacity: 1, y: 0 }} 
-                                            transition={{ delay: 0.5, type: "spring", stiffness: 200, damping: 20 }}
-                                            className="mt-5 rounded-xl border border-brand-800/40 bg-gradient-to-r from-brand-950 to-brand-900/20 p-4 shadow-lg ring-1 ring-white/5"
+                                            key="loading"
+                                            initial={{ opacity: 0 }} 
+                                            animate={{ opacity: 1 }} 
+                                            exit={{ opacity: 0 }}
+                                            className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-white/80 backdrop-blur-sm"
                                         >
-                                            <span className="mb-2.5 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-brand-300">
-                                                <Sparkles className="h-3.5 w-3.5 fill-current opacity-80" /> Reconstructed AI Response
-                                            </span>
-                                            <p className="text-[13px] leading-relaxed text-slate-300/90">
-                                                {aiResponse}
-                                            </p>
+                                            <div className="relative flex h-16 w-16 items-center justify-center">
+                                                <div className="absolute inset-0 animate-ping rounded-full bg-brand-500/20" />
+                                                <div className="absolute inset-0 animate-pulse rounded-full bg-brand-400/20" />
+                                                <Bot className="relative z-10 h-8 w-8 text-brand-600" />
+                                            </div>
+                                            <div className="mt-4 flex flex-col items-center gap-1">
+                                                <span className="text-xs font-bold uppercase tracking-widest text-slate-700">Sanitizing Input</span>
+                                            </div>
+                                        </motion.div>
+                                    ) : ran ? (
+                                        <motion.div 
+                                            key="content"
+                                            initial={{ opacity: 0 }} 
+                                            animate={{ opacity: 1 }} 
+                                            transition={{ duration: 0.3 }} 
+                                            className="flex flex-col p-5 h-full"
+                                        >
+                                            <div className="text-[14px] font-mono leading-relaxed text-slate-700 h-full overflow-y-auto whitespace-pre-wrap">
+                                                {sanitized || <span className="text-slate-400 italic">No content.</span>}
+                                            </div>
+                                        </motion.div>
+                                    ) : (
+                                        <motion.div 
+                                            key="empty"
+                                            className="flex h-full flex-1 items-center justify-center p-5"
+                                        >
+                                            <div className="flex flex-col items-center gap-3 text-slate-400 text-center">
+                                                <div className="h-12 w-12 rounded-full bg-slate-100 flex items-center justify-center border border-slate-200">
+                                                    <Lock className="h-5 w-5 text-slate-300" /> 
+                                                </div>
+                                                <div>
+                                                    <span className="block text-sm font-semibold text-slate-500">Awaiting simulation</span>
+                                                    <span className="block text-xs mt-0.5">Click simulate to view the sanitized payload</span>
+                                                </div>
+                                            </div>
                                         </motion.div>
                                     )}
                                 </AnimatePresence>
                             </div>
                         </div>
                     </div>
+
+                    {/* Simulate Button Container */}
+                    <div className="flex justify-center pt-2 pb-2">
+                        <Button
+                            className="w-full md:w-auto min-w-[320px] bg-brand-600 py-6 px-8 text-[15px] font-semibold text-white shadow-md transition-all hover:bg-brand-700 hover:shadow-lg disabled:opacity-60 rounded-xl"
+                            onClick={handleSimulate}
+                            disabled={loading || !input.trim()}
+                        >
+                            {loading ? (
+                                <><RefreshCw className="mr-2.5 h-5 w-5 animate-spin" /> Simulating Pipeline…</>
+                            ) : (
+                                <><Play className="mr-2.5 h-5 w-5 fill-current" /> Simulate End-to-End AI Request</>
+                            )}
+                        </Button>
+                    </div>
+
+                    {/* AI Response Section */}
+                    <AnimatePresence>
+                        {ran && (
+                            <motion.div 
+                                initial={{ opacity: 0, height: 0 }} 
+                                animate={{ opacity: 1, height: "auto" }} 
+                                exit={{ opacity: 0, height: 0 }}
+                                transition={{ duration: 0.4, type: "spring", stiffness: 200, damping: 20 }}
+                                className="overflow-hidden"
+                            >
+                                <div className="mt-2 rounded-xl border border-brand-200 bg-brand-50/50 p-5 shadow-sm">
+                                    <div className="flex items-center gap-2 mb-3">
+                                        <Sparkles className="h-4 w-4 text-brand-600" />
+                                        <h3 className="text-xs font-bold uppercase tracking-wider text-brand-800">Reconstructed AI Response</h3>
+                                    </div>
+                                    <div className="rounded-lg bg-white p-5 border border-brand-100 shadow-sm relative overflow-hidden">
+                                        <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-400" />
+                                        <p className="text-[14px] leading-relaxed text-slate-700 pl-2">
+                                            {aiResponse}
+                                        </p>
+                                    </div>
+                                </div>
+                            </motion.div>
+                        )}
+                    </AnimatePresence>
                 </CardContent>
             </Card>
         </motion.div>
