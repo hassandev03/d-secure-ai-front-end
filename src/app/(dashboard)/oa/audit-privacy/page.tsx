@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import {
     Shield,
     ShieldCheck,
@@ -14,6 +15,9 @@ import {
     ChevronRight,
     RefreshCw,
     Zap,
+    Play,
+    Sparkles,
+    Lock,
 } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -48,18 +52,25 @@ function PiiBadge({ type }: { type: string }) {
 
 // ── Privacy Engine Simulator ─────────────────────────────────────────────────
 
+const PRESET_EXAMPLES = [
+    { label: "HR Query", text: 'Please summarize the performance review for Sarah Connor. Her email is sarah.connor@acme.com and her SSN is 123-45-6789.' },
+    { label: "Finance Support", text: 'Process refund of $500 for credit card 4532-1234-5678-9012. Customer phone is +44 7911 123456.' }
+];
+
 const SAMPLE_PII: { pattern: RegExp; label: string; color: string }[] = [
-    { pattern: /\b[\w.-]+@[\w.-]+\.\w{2,}\b/g,             label: "EMAIL",        color: "#f59e0b" },
-    { pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, label: "CARD",     color: "#ef4444" },
-    { pattern: /\b\+?\d[\d\s-]{8,}\d\b/g,                  label: "PHONE",        color: "#f97316" },
-    { pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+\b/g,             label: "PERSON",       color: "#3b82f6" },
+    { pattern: /\b[\w.-]+@[\w.-]+\.\w{2,}\b/g,               label: "EMAIL",         color: "#fbbf24" },
+    { pattern: /\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g,   label: "CARD",          color: "#f87171" },
+    { pattern: /\b\+?\d[\d\s-]{8,}\d\b/g,                    label: "PHONE",         color: "#fb923c" },
+    { pattern: /\b[A-Z][a-z]+ [A-Z][a-z]+\b/g,               label: "PERSON",        color: "#60a5fa" },
+    { pattern: /\b\d{3}-\d{2}-\d{4}\b/g,                   label: "SSN",          color: "#a78bfa" },
+    { pattern: /\$\d+(?:,\d{3})*(?:\.\d{2})?/g,            label: "MONEY",        color: "#34d399" },
 ];
 
 function highlight(text: string) {
     let result = text;
     for (const { pattern, label, color } of SAMPLE_PII) {
         result = result.replace(pattern, (match) =>
-            `<mark style="background:${color}22;color:${color};border-radius:4px;padding:1px 4px" title="${label}">${match}</mark>`
+            `<mark style="background:${color}20;color:${color};border:1px solid ${color}40;border-radius:4px;padding:2px 4px;font-size:0.9em;display:inline-flex;align-items:center;line-height:1;margin:0 2px" title="${label}">${match} <span style="font-size:0.75em;margin-left:4px;opacity:0.8;font-weight:700">${label}</span></mark>`
         );
     }
     return result;
@@ -72,6 +83,8 @@ function sanitize(text: string) {
         [/\b\d{4}[\s-]?\d{4}[\s-]?\d{4}[\s-]?\d{4}\b/g, "[CARD_NUMBER]"],
         [/\b\+?\d[\d\s-]{8,}\d\b/g,                  "[PHONE_NUMBER]"],
         [/\b[A-Z][a-z]+ [A-Z][a-z]+\b/g,             "[PERSON_NAME]"],
+        [/\b\d{3}-\d{2}-\d{4}\b/g,                   "[SSN]"],
+        [/\$\d+(?:,\d{3})*(?:\.\d{2})?/g,            "[MONETARY_VALUE]"],
     ];
     for (const [pat, repl] of replacements) result = result.replace(pat, repl);
     return result;
@@ -88,89 +101,155 @@ function PrivacyEngineSim() {
     const handleSimulate = async () => {
         if (!input.trim()) return;
         setLoading(true);
-        await new Promise((r) => setTimeout(r, 900));
+        setRan(false);
+        await new Promise((r) => setTimeout(r, 1200));
         setRan(true);
         setLoading(false);
     };
 
-    const aiResponse = ran
-        ? `Based on the anonymized query, here is a relevant AI-generated response. All references to [PERSON_NAME], [EMAIL_ADDRESS], [CARD_NUMBER], and [PHONE_NUMBER] have been preserved as tokens and will be restored in the final response delivered to the employee.`
-        : "";
+    const aiResponse = `Based on the anonymized query provided, here is a detailed response. The references such as [PERSON_NAME], [CARD_NUMBER], and [SSN] have been successfully masked, ensuring data privacy before interacting with the LLM API.`;
 
     return (
-        <Card>
-            <CardHeader className="flex-row items-center gap-2 space-y-0 pb-3">
-                <Shield className="h-4 w-4 text-brand-700" />
-                <div>
-                    <CardTitle className="text-base font-semibold">Privacy Engine Simulator</CardTitle>
-                    <CardDescription className="mt-0.5">
-                        Test how D-SecureAI detects and anonymizes PII before queries reach the LLM.
-                    </CardDescription>
-                </div>
-            </CardHeader>
-            <CardContent className="space-y-4">
-                <div className="grid gap-4 lg:grid-cols-2">
-                    {/* Input */}
-                    <div className="flex flex-col gap-1.5">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Test Input — Simulate Employee Query
-                        </p>
-                        <textarea
-                            className="min-h-[140px] w-full resize-none rounded-lg border border-border bg-background px-3 py-2.5 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30"
-                            placeholder={`Try: "My credit card is 4532-1234-5678-9012. Email john.doe@example.com or call +44 7911 123456."`}
-                            value={input}
-                            onChange={(e) => { setInput(e.target.value); setRan(false); }}
-                        />
-                    </div>
-
-                    {/* Sanitized output */}
-                    <div className="flex flex-col gap-1.5">
-                        <p className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Sanitized Output — Sent to LLM
-                        </p>
-                        <div className="min-h-[140px] flex-1 rounded-lg border border-border bg-slate-950 px-3 py-2.5 font-mono text-sm text-slate-300">
-                            {ran
-                                ? <span>{sanitized || <span className="text-slate-500">No PII detected.</span>}</span>
-                                : <span className="text-slate-500 italic">// output will appear here…</span>
-                            }
+        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+            <Card className="overflow-hidden border-border/80 shadow-md">
+                <CardHeader className="flex-col items-start gap-4 border-b border-border/50 bg-slate-50/50 pb-4 md:flex-row md:items-center md:justify-between">
+                    <div className="flex items-center gap-3">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-100 text-brand-700 shadow-sm">
+                            <Shield className="h-5 w-5" />
+                        </div>
+                        <div>
+                            <CardTitle className="text-lg font-bold text-slate-800">Privacy Engine Simulator</CardTitle>
+                            <CardDescription className="mt-0.5 text-[13px] text-slate-500">
+                                See how D-SecureAI intercepts and masks PII in real-time.
+                            </CardDescription>
                         </div>
                     </div>
-                </div>
-
-                {/* Detected PII highlight */}
-                {ran && input && (
-                    <div className="rounded-lg border border-border bg-muted/40 px-3 py-2.5 text-sm">
-                        <p className="mb-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                            Detected PII Highlighted
-                        </p>
-                        <span dangerouslySetInnerHTML={{ __html: highlighted }} />
+                    <div className="flex flex-wrap items-center gap-2">
+                        {PRESET_EXAMPLES.map((ex, i) => (
+                            <Button 
+                                key={i} 
+                                variant="outline" 
+                                size="sm" 
+                                className="h-8 px-3 text-xs font-semibold bg-white hover:bg-slate-50 border-slate-200 text-slate-600 transition-all hover:border-slate-300"
+                                onClick={() => { setInput(ex.text); setRan(false); }}
+                            >
+                                Example: {ex.label}
+                            </Button>
+                        ))}
                     </div>
-                )}
+                </CardHeader>
+                <CardContent className="p-0">
+                    <div className="grid divide-y md:grid-cols-2 md:divide-y-0 md:divide-x text-sm">
+                        {/* Input Column */}
+                        <div className="flex flex-col bg-white p-5 lg:p-6 pb-6 hover:bg-slate-50/50 transition-colors">
+                            <div className="mb-4 flex items-center justify-between">
+                                <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-500">
+                                    <User className="h-4 w-4" /> Employee Query
+                                </span>
+                            </div>
+                            <textarea
+                                className="min-h-[180px] w-full flex-1 resize-y rounded-xl border border-slate-200 bg-white p-4 text-[14px] leading-relaxed text-slate-700 shadow-sm transition-all placeholder:text-slate-400 focus:border-brand-400 focus:outline-none focus:ring-4 focus:ring-brand-500/10"
+                                placeholder='Type a prompt with sensitive information here...'
+                                value={input}
+                                onChange={(e) => { setInput(e.target.value); setRan(false); }}
+                            />
+                            <Button
+                                className="mt-5 w-full bg-brand-700 py-6 text-[14px] font-semibold text-white shadow-md transition-all hover:bg-brand-800 hover:shadow-lg disabled:opacity-60"
+                                onClick={handleSimulate}
+                                disabled={loading || !input.trim()}
+                            >
+                                {loading ? (
+                                    <><RefreshCw className="mr-2 h-5 w-5 animate-spin" /> Processing via Gateway…</>
+                                ) : (
+                                    <><Play className="mr-2 h-5 w-5 fill-current" /> Simulate Pipeline</>
+                                )}
+                            </Button>
+                        </div>
 
-                <Button
-                    className="w-full bg-brand-700 hover:bg-brand-800"
-                    onClick={handleSimulate}
-                    disabled={loading || !input.trim()}
-                >
-                    {loading ? (
-                        <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Running…</>
-                    ) : (
-                        <><Zap className="mr-2 h-4 w-4" /> Simulate End-to-End AI Request</>
-                    )}
-                </Button>
+                        {/* Output Column */}
+                        <div className="relative flex flex-col bg-slate-950 p-5 lg:p-6 text-slate-300">
+                            {/* Loading Overlay */}
+                            <AnimatePresence>
+                                {loading && (
+                                    <motion.div 
+                                        initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                                        className="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-950/80 backdrop-blur-md"
+                                    >
+                                        <div className="relative flex h-20 w-20 items-center justify-center">
+                                            <div className="absolute inset-0 animate-ping rounded-full bg-brand-500/40" />
+                                            <div className="absolute inset-0 animate-pulse rounded-full bg-brand-600/30 blur-xl" />
+                                            <Lock className="relative z-10 h-8 w-8 text-white" />
+                                        </div>
+                                        <div className="mt-8 flex flex-col items-center gap-1.5">
+                                            <span className="text-sm font-bold uppercase tracking-widest text-white">Anonymizing Entities</span>
+                                            <span className="text-xs text-brand-300/80">Running advanced NLP models...</span>
+                                        </div>
+                                    </motion.div>
+                                )}
+                            </AnimatePresence>
 
-                {/* AI response */}
-                <div className="flex flex-col gap-1.5">
-                    <p className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
-                        <Bot className="h-3.5 w-3.5 text-brand-600" />
-                        AI Response — Generated from Sanitized Content
-                    </p>
-                    <div className="min-h-[80px] rounded-lg border border-brand-100 bg-brand-50/50 px-3 py-2.5 text-sm text-muted-foreground">
-                        {aiResponse || <span className="italic">Click the button above to see how the AI responds to the masked data…</span>}
+                            <div className="flex h-full flex-col">
+                                <span className="mb-4 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-400">
+                                    <Bot className="h-4 w-4" /> Payload Sent to LLM
+                                </span>
+                                <div className="min-h-[180px] flex-1 rounded-xl border border-brand-900/40 bg-[#0f172a] p-5 font-mono text-[13px] leading-relaxed shadow-inner overflow-hidden flex flex-col">
+                                    <AnimatePresence mode="wait">
+                                        {ran ? (
+                                            <motion.div initial={{ opacity: 0, filter: "blur(4px)" }} animate={{ opacity: 1, filter: "blur(0px)" }} transition={{ duration: 0.4 }} className="space-y-6">
+                                                {/* Original Highlights */}
+                                                <div>
+                                                    <span className="mb-2.5 block text-[10px] font-bold uppercase tracking-widest text-slate-500">1. Detection Layer</span>
+                                                    <div dangerouslySetInnerHTML={{ __html: highlighted || '<span class="text-slate-600 italic">No input.</span>' }} className="text-slate-400 leading-loose" />
+                                                </div>
+                                                
+                                                <div className="flex items-center gap-3">
+                                                    <div className="h-px w-full bg-brand-900/30" />
+                                                    <Zap className="h-3 w-3 shrink-0 text-brand-500 opacity-50" />
+                                                    <div className="h-px w-full bg-brand-900/30" />
+                                                </div>
+
+                                                {/* Anonymized */}
+                                                <div>
+                                                    <span className="mb-2.5 block text-[10px] font-bold uppercase tracking-widest text-emerald-800">2. Sanitized Layer</span>
+                                                    <div className="text-emerald-400 font-medium leading-loose">
+                                                        {sanitized || <span className="text-slate-600 italic">No content.</span>}
+                                                    </div>
+                                                </div>
+                                            </motion.div>
+                                        ) : (
+                                            <div className="flex h-full flex-1 items-center justify-center">
+                                                <span className="text-brand-900/60 flex items-center gap-2.5 text-xs italic font-medium">
+                                                    <Shield className="h-5 w-5 opacity-60" /> Awaiting simulation input...
+                                                </span>
+                                            </div>
+                                        )}
+                                    </AnimatePresence>
+                                </div>
+                                
+                                {/* AI Response Preview */}
+                                <AnimatePresence>
+                                    {ran && (
+                                        <motion.div 
+                                            initial={{ opacity: 0, y: 15 }} 
+                                            animate={{ opacity: 1, y: 0 }} 
+                                            transition={{ delay: 0.5, type: "spring", stiffness: 200, damping: 20 }}
+                                            className="mt-5 rounded-xl border border-brand-800/40 bg-gradient-to-r from-brand-950 to-brand-900/20 p-4 shadow-lg ring-1 ring-white/5"
+                                        >
+                                            <span className="mb-2.5 flex items-center gap-2 text-[11px] font-bold uppercase tracking-wider text-brand-300">
+                                                <Sparkles className="h-3.5 w-3.5 fill-current opacity-80" /> Reconstructed AI Response
+                                            </span>
+                                            <p className="text-[13px] leading-relaxed text-slate-300/90">
+                                                {aiResponse}
+                                            </p>
+                                        </motion.div>
+                                    )}
+                                </AnimatePresence>
+                            </div>
+                        </div>
                     </div>
-                </div>
-            </CardContent>
-        </Card>
+                </CardContent>
+            </Card>
+        </motion.div>
     );
 }
 
