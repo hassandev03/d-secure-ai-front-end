@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
     Save, Loader2, Building2, ShieldCheck, Lock, Globe,
     Bell, Clock, FileText, Mic, Check, Users, AlertTriangle,
@@ -10,6 +10,16 @@ import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { MODELS } from "@/lib/constants";
 import type { LLMModel } from "@/types/chat.types";
+import {
+    getOAOrgConfig, updateOAOrgConfig,
+    getOAEmployeeDefaults, updateOAEmployeeDefaults,
+    getOANotifications, updateOANotifications,
+    getOASecurity, updateOASecurity,
+    getOAOrgPolicy, updateOAOrgPolicy,
+    getOADeptPolicies, updateOADeptPolicy, applyOAOrgPolicyToAllDepts,
+    type OAOrgConfig, type OAEmployeeDefaults, type OANotificationSettings,
+    type OASecuritySettings, type OAOrgPolicy, type OADeptPolicyState
+} from "@/services/oa.service";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -26,130 +36,9 @@ import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogClose,
 } from "@/components/ui/dialog";
 
-// ── Types ─────────────────────────────────────────────────────────────────────
-
-interface OrgProfile {
-    name: string;
-    industry: string;
-    domain: string;
-    country: string;
-    supportEmail: string;
-    timezone: string;
-}
-
-interface EmployeeDefaults {
-    defaultDepartment: string;
-    defaultRole: string;
-    monthlyLimit: number;
-    autoApprove: boolean;
-}
-
-interface NotificationSettings {
-    emailNotifications: boolean;
-    weeklyDigest: boolean;
-    quotaAlerts: boolean;
-    quotaAlertThreshold: number;
-}
-
-interface SecuritySettings {
-    enforce2FA: boolean;
-    minPasswordLength: number;
-    requireUppercase: boolean;
-    requireSpecialChar: boolean;
-    sessionTimeout: number;
-    maxConcurrentSessions: number;
-    allowFileUploads: boolean;
-    allowSpeechToText: boolean;
-    allowApiAccess: boolean;
-    ipWhitelist: boolean;
-    ipWhitelistValue: string;
-}
-
-interface OrgPolicy {
-    fileUpload: boolean;
-    speechToText: boolean;
-    allModels: boolean;
-    permittedModels: LLMModel[];
-    defaultDailyLimit: number;
-    maxDailyLimit: number;
-    allowApiAccess: boolean;
-}
-
-interface DeptPolicyState {
-    id: string;
-    name: string;
-    head: string;
-    employees: number;
-    color: string;
-    fileUpload: boolean;
-    speechToText: boolean;
-    allModels: boolean;
-    permittedModels: LLMModel[];
-    dailyLimit: number;
-    synced: boolean; // whether matches org policy
-}
-
 // ── Seed data ─────────────────────────────────────────────────────────────────
 
 const DEPARTMENTS = ["Engineering", "Marketing", "Sales", "Finance", "HR", "Operations"];
-
-const SEED_PROFILE: OrgProfile = {
-    name: "Acme Corporation",
-    industry: "Technology",
-    domain: "acme.com",
-    country: "United States",
-    supportEmail: "it@acme.com",
-    timezone: "UTC-5 (Eastern)",
-};
-
-const SEED_EMP_DEFAULTS: EmployeeDefaults = {
-    defaultDepartment: "none",
-    defaultRole: "employee",
-    monthlyLimit: 100,
-    autoApprove: false,
-};
-
-const SEED_NOTIFICATIONS: NotificationSettings = {
-    emailNotifications: true,
-    weeklyDigest: true,
-    quotaAlerts: true,
-    quotaAlertThreshold: 80,
-};
-
-const SEED_SECURITY: SecuritySettings = {
-    enforce2FA: true,
-    minPasswordLength: 12,
-    requireUppercase: true,
-    requireSpecialChar: true,
-    sessionTimeout: 30,
-    maxConcurrentSessions: 3,
-    allowFileUploads: true,
-    allowSpeechToText: false,
-    allowApiAccess: false,
-    ipWhitelist: false,
-    ipWhitelistValue: "",
-};
-
-const ALL_MODEL_IDS = MODELS.map((m) => m.id) as LLMModel[];
-
-const SEED_POLICY: OrgPolicy = {
-    fileUpload: true,
-    speechToText: false,
-    allModels: false,
-    permittedModels: ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[],
-    defaultDailyLimit: 50,
-    maxDailyLimit: 200,
-    allowApiAccess: false,
-};
-
-const SEED_DEPT_POLICIES: DeptPolicyState[] = [
-    { id: "d1", name: "Engineering", head: "Sarah Johnson", employees: 45, color: "bg-blue-500",    fileUpload: true,  speechToText: true,  allModels: true,  permittedModels: ALL_MODEL_IDS, dailyLimit: 80,  synced: false },
-    { id: "d2", name: "Marketing",   head: "Emma Davis",    employees: 20, color: "bg-pink-500",    fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet"] as LLMModel[], dailyLimit: 50, synced: false },
-    { id: "d3", name: "Sales",       head: "David Kim",     employees: 25, color: "bg-orange-500",  fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[], dailyLimit: 50, synced: true },
-    { id: "d4", name: "Finance",     head: "Aisha Patel",   employees: 12, color: "bg-emerald-500", fileUpload: false, speechToText: false, allModels: false, permittedModels: ["gpt-5-1"] as LLMModel[], dailyLimit: 30, synced: false },
-    { id: "d5", name: "HR",          head: "Lisa Chen",     employees: 10, color: "bg-violet-500",  fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[], dailyLimit: 50, synced: true },
-    { id: "d6", name: "Operations",  head: "James Wilson",  employees: 8,  color: "bg-amber-500",   fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet"] as LLMModel[], dailyLimit: 40, synced: false },
-];
 
 const TIMEZONES = [
     "UTC-8 (Pacific)", "UTC-7 (Mountain)", "UTC-6 (Central)", "UTC-5 (Eastern)",
@@ -161,6 +50,8 @@ const INDUSTRIES = [
     "Healthcare", "Finance", "Legal", "Technology", "Education",
     "Government", "Manufacturing", "Retail", "Other",
 ];
+
+const ALL_MODEL_IDS = MODELS.map((m) => m.id as LLMModel);
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -267,20 +158,21 @@ function SettingToggle({
 export default function OrgSettingsPage() {
     // Tab state
     const [activeTab, setActiveTab] = useState("general");
+    const [loading, setLoading] = useState(true);
 
     // General
-    const [profile, setProfile] = useState<OrgProfile>(SEED_PROFILE);
-    const [empDefaults, setEmpDefaults] = useState<EmployeeDefaults>(SEED_EMP_DEFAULTS);
-    const [notifications, setNotifications] = useState<NotificationSettings>(SEED_NOTIFICATIONS);
+    const [profile, setProfile] = useState<OAOrgConfig>({} as OAOrgConfig);
+    const [empDefaults, setEmpDefaults] = useState<OAEmployeeDefaults>({} as OAEmployeeDefaults);
+    const [notifications, setNotifications] = useState<OANotificationSettings>({} as OANotificationSettings);
 
     // Security
-    const [security, setSecurity] = useState<SecuritySettings>(SEED_SECURITY);
+    const [security, setSecurity] = useState<OASecuritySettings>({} as OASecuritySettings);
 
     // Org Policies
-    const [orgPolicy, setOrgPolicy] = useState<OrgPolicy>(SEED_POLICY);
-    const [deptPolicies, setDeptPolicies] = useState<DeptPolicyState[]>(SEED_DEPT_POLICIES);
+    const [orgPolicy, setOrgPolicy] = useState<OAOrgPolicy>({} as OAOrgPolicy);
+    const [deptPolicies, setDeptPolicies] = useState<OADeptPolicyState[]>([]);
     const [expandedDept, setExpandedDept] = useState<string | null>(null);
-    const [editDept, setEditDept] = useState<DeptPolicyState | null>(null);
+    const [editDept, setEditDept] = useState<OADeptPolicyState | null>(null);
     const [editDeptModels, setEditDeptModels] = useState<LLMModel[]>([]);
 
     // Saving states
@@ -294,55 +186,88 @@ export default function OrgSettingsPage() {
     const syncedCount = deptPolicies.filter((d) => d.synced).length;
     const outOfSyncCount = deptPolicies.length - syncedCount;
 
+    // ── Initial Data Load ───────────────────────────────────────────────────
+
+    useEffect(() => {
+        let active = true;
+        Promise.all([
+            getOAOrgConfig(), getOAEmployeeDefaults(), getOANotifications(),
+            getOASecurity(), getOAOrgPolicy(), getOADeptPolicies()
+        ]).then(([cfg, emp, notif, sec, pol, depts]) => {
+            if (!active) return;
+            setProfile(cfg);
+            setEmpDefaults(emp);
+            setNotifications(notif);
+            setSecurity(sec);
+            setOrgPolicy(pol);
+            setDeptPolicies(depts);
+            setLoading(false);
+        }).catch(() => {
+            toast.error("Failed to load settings data.");
+            setLoading(false);
+        });
+        return () => { active = false; };
+    }, []);
+
     // ── Handlers ────────────────────────────────────────────────────────────
 
     const handleSave = async () => {
+        if (!profile.name || !empDefaults.defaultRole || !security.minPasswordLength || !orgPolicy.defaultDailyLimit) return;
         setSaving(true);
-        await new Promise((r) => setTimeout(r, 700));
-        setSaving(false);
-        toast.success("Settings saved successfully.");
+        try {
+            await Promise.all([
+                updateOAOrgConfig(profile),
+                updateOAEmployeeDefaults(empDefaults),
+                updateOANotifications(notifications),
+                updateOASecurity(security),
+                updateOAOrgPolicy(orgPolicy)
+            ]);
+            toast.success("Settings saved successfully.");
+        } catch {
+            toast.error("Failed to save settings.");
+        } finally {
+            setSaving(false);
+        }
     };
 
     const handlePushToAll = async () => {
+        if (!orgPolicy.defaultDailyLimit) return;
         setPushing(true);
-        await new Promise((r) => setTimeout(r, 900));
-        setDeptPolicies((prev) =>
-            prev.map((d) => ({
-                ...d,
-                fileUpload: orgPolicy.fileUpload,
-                speechToText: orgPolicy.speechToText,
-                allModels: orgPolicy.allModels,
-                permittedModels: orgPolicy.allModels ? ALL_MODEL_IDS : [...orgPolicy.permittedModels],
-                dailyLimit: orgPolicy.defaultDailyLimit,
-                synced: true,
-            })),
-        );
-        setPushing(false);
-        toast.success(`Organisation policy pushed to all ${deptPolicies.length} departments.`);
+        try {
+            await applyOAOrgPolicyToAllDepts();
+            const updated = await getOADeptPolicies();
+            setDeptPolicies(updated);
+            toast.success(`Organisation policy pushed to all ${updated.length} departments.`);
+        } catch {
+            toast.error("Failed to push policies.");
+        } finally {
+            setPushing(false);
+        }
     };
 
     const handleResetDept = async (deptId: string) => {
+        if (!orgPolicy.defaultDailyLimit) return;
         const dept = deptPolicies.find((d) => d.id === deptId);
         if (!dept) return;
-        setDeptPolicies((prev) =>
-            prev.map((d) =>
-                d.id === deptId
-                    ? {
-                        ...d,
-                        fileUpload: orgPolicy.fileUpload,
-                        speechToText: orgPolicy.speechToText,
-                        allModels: orgPolicy.allModels,
-                        permittedModels: orgPolicy.allModels ? ALL_MODEL_IDS : [...orgPolicy.permittedModels],
-                        dailyLimit: orgPolicy.defaultDailyLimit,
-                        synced: true,
-                    }
-                    : d,
-            ),
-        );
-        toast.success(`${dept.name} policy reset to organisation defaults.`);
+        
+        try {
+            const updatedPolicy = {
+                fileUpload: orgPolicy.fileUpload,
+                speechToText: orgPolicy.speechToText,
+                allModels: orgPolicy.allModels,
+                permittedModels: orgPolicy.allModels ? [...ALL_MODEL_IDS] : [...orgPolicy.permittedModels],
+                dailyLimit: orgPolicy.defaultDailyLimit,
+                synced: true,
+            };
+            await updateOADeptPolicy(deptId, updatedPolicy);
+            setDeptPolicies((prev) => prev.map((d) => (d.id === deptId ? { ...d, ...updatedPolicy } : d)));
+            toast.success(`${dept.name} policy reset to organisation defaults.`);
+        } catch {
+            toast.error("Failed to reset department policy.");
+        }
     };
 
-    const openEditDept = (dept: DeptPolicyState) => {
+    const openEditDept = (dept: OADeptPolicyState) => {
         setEditDept({ ...dept });
         setEditDeptModels([...dept.permittedModels]);
     };
@@ -350,24 +275,39 @@ export default function OrgSettingsPage() {
     const handleSaveEditDept = async () => {
         if (!editDept) return;
         setSavingDept(true);
-        await new Promise((r) => setTimeout(r, 600));
-        setDeptPolicies((prev) =>
-            prev.map((d) =>
-                d.id === editDept.id
-                    ? {
-                        ...editDept,
-                        permittedModels: editDept.allModels ? ALL_MODEL_IDS : editDeptModels,
-                        synced: false,
-                    }
-                    : d,
-            ),
-        );
-        setSavingDept(false);
-        setEditDept(null);
-        toast.success(`${editDept.name} policy updated.`);
+        try {
+            const updatedPolicy = {
+                ...editDept,
+                permittedModels: editDept.allModels ? [...ALL_MODEL_IDS] : editDeptModels,
+                synced: false,
+            };
+            await updateOADeptPolicy(editDept.id, updatedPolicy);
+            setDeptPolicies((prev) => prev.map((d) => (d.id === editDept.id ? updatedPolicy : d)));
+            setEditDept(null);
+            toast.success(`${editDept.name} policy updated.`);
+        } catch {
+            toast.error("Failed to update department policy.");
+        } finally {
+            setSavingDept(false);
+        }
     };
 
     // ── Render ──────────────────────────────────────────────────────────────
+
+    if (loading || !profile.name || !empDefaults.defaultRole || !security.minPasswordLength || !orgPolicy.defaultDailyLimit) {
+        return (
+            <div className="mx-auto max-w-5xl">
+                <PageHeader
+                    title="Organization Settings"
+                    subtitle="Configure organisation profile, security, AI models, and access policies."
+                    breadcrumbs={[{ label: "Organization", href: "/oa/dashboard" }, { label: "Settings" }]}
+                />
+                <div className="flex items-center justify-center py-32">
+                    <Loader2 className="h-7 w-7 animate-spin text-muted-foreground" />
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="mx-auto max-w-5xl">

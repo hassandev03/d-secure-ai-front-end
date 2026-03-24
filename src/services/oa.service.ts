@@ -13,6 +13,7 @@
  */
 
 import { delay } from './api';
+import type { LLMModel } from '@/types/chat.types';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Canonical types
@@ -22,6 +23,64 @@ export type OAOrgConfig = {
     totalQuota:     number;
     plan:           string;
     quotaRenewsAt:  string;
+    name:           string;
+    industry:       string;
+    domain:         string;
+    country:        string;
+    supportEmail:   string;
+    timezone:       string;
+};
+
+export type OAEmployeeDefaults = {
+    defaultDepartment: string;
+    defaultRole:       string;
+    monthlyLimit:      number;
+    autoApprove:       boolean;
+};
+
+export type OANotificationSettings = {
+    emailNotifications:  boolean;
+    weeklyDigest:        boolean;
+    quotaAlerts:         boolean;
+    quotaAlertThreshold: number;
+};
+
+export type OASecuritySettings = {
+    enforce2FA:            boolean;
+    minPasswordLength:     number;
+    requireUppercase:      boolean;
+    requireSpecialChar:    boolean;
+    sessionTimeout:        number;
+    maxConcurrentSessions: number;
+    allowFileUploads:      boolean;
+    allowSpeechToText:     boolean;
+    allowApiAccess:        boolean;
+    ipWhitelist:           boolean;
+    ipWhitelistValue:      string;
+};
+
+export type OAOrgPolicy = {
+    fileUpload:        boolean;
+    speechToText:      boolean;
+    allModels:         boolean;
+    permittedModels:   LLMModel[];
+    defaultDailyLimit: number;
+    maxDailyLimit:     number;
+    allowApiAccess:    boolean;
+};
+
+export type OADeptPolicyState = {
+    id:              string;
+    name:            string;
+    head:            string;
+    employees:       number;
+    color:           string;
+    fileUpload:      boolean;
+    speechToText:    boolean;
+    allModels:       boolean;
+    permittedModels: LLMModel[];
+    dailyLimit:      number;
+    synced:          boolean;
 };
 
 export type OADepartment = {
@@ -146,7 +205,66 @@ const ORG_CONFIG: OAOrgConfig = {
     totalQuota:    8_000,
     plan:          "Enterprise",
     quotaRenewsAt: "2026-04-01",
+    name:          "Acme Corporation",
+    industry:      "Technology",
+    domain:        "acme.com",
+    country:       "United States",
+    supportEmail:  "it@acme.com",
+    timezone:      "UTC-5 (Eastern)",
 };
+
+const EMP_DEFAULTS: OAEmployeeDefaults = {
+    defaultDepartment: "none",
+    defaultRole:       "employee",
+    monthlyLimit:      100,
+    autoApprove:       false,
+};
+
+const NOTIFICATIONS: OANotificationSettings = {
+    emailNotifications:  true,
+    weeklyDigest:        true,
+    quotaAlerts:         true,
+    quotaAlertThreshold: 80,
+};
+
+const SECURITY: OASecuritySettings = {
+    enforce2FA:            true,
+    minPasswordLength:     12,
+    requireUppercase:      true,
+    requireSpecialChar:    true,
+    sessionTimeout:        30,
+    maxConcurrentSessions: 3,
+    allowFileUploads:      true,
+    allowSpeechToText:     false,
+    allowApiAccess:        false,
+    ipWhitelist:           false,
+    ipWhitelistValue:      "",
+};
+
+const ORG_POLICY: OAOrgPolicy = {
+    fileUpload:        true,
+    speechToText:      false,
+    allModels:         false,
+    permittedModels:   ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[],
+    defaultDailyLimit: 50,
+    maxDailyLimit:     200,
+    allowApiAccess:    false,
+};
+
+// We use all models logic. We'll simply hardcode the expected IDs since the pages import constants anyway:
+const ALL_MODELS = [
+    "claude-4-6-sonnet", "claude-4-5-haiku", "claude-4-6-opus", "gpt-4o", "gpt-5-1", "gemini-3-1-pro", "gemini-3-1-flash"
+] as LLMModel[];
+
+const DEPT_POLICIES: OADeptPolicyState[] = [
+    { id: "d1", name: "Engineering", head: "Sarah Johnson", employees: 45, color: "bg-blue-500",    fileUpload: true,  speechToText: true,  allModels: true,  permittedModels: ALL_MODELS, dailyLimit: 80,  synced: false },
+    { id: "d2", name: "Marketing",   head: "Emma Davis",    employees: 20, color: "bg-pink-500",    fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet"] as LLMModel[], dailyLimit: 50, synced: false },
+    { id: "d3", name: "Sales",       head: "David Kim",     employees: 25, color: "bg-orange-500",  fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[], dailyLimit: 50, synced: true },
+    { id: "d4", name: "Finance",     head: "Aisha Patel",   employees: 12, color: "bg-emerald-500", fileUpload: false, speechToText: false, allModels: false, permittedModels: ["gpt-5-1"] as LLMModel[], dailyLimit: 30, synced: false },
+    { id: "d5", name: "HR",          head: "Lisa Chen",     employees: 10, color: "bg-violet-500",  fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[], dailyLimit: 50, synced: true },
+    { id: "d6", name: "Operations",  head: "James Wilson",  employees: 8,  color: "bg-amber-500",   fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet"] as LLMModel[], dailyLimit: 40, synced: false },
+];
+
 
 /** Colour palette for newly created departments (cycling). Exported so the
  *  departments page can assign a colour on creation without duplicating it. */
@@ -335,6 +453,80 @@ export async function getOAOrgConfig(): Promise<OAOrgConfig> {
     await delay(100);
     return { ...ORG_CONFIG };
 }
+
+export async function updateOAOrgConfig(cfg: Partial<OAOrgConfig>): Promise<void> {
+    await delay(300);
+    Object.assign(ORG_CONFIG, cfg);
+}
+
+/** GET /api/v1/org/{orgId}/employee-defaults */
+export async function getOAEmployeeDefaults(): Promise<OAEmployeeDefaults> {
+    await delay(100);
+    return { ...EMP_DEFAULTS };
+}
+
+export async function updateOAEmployeeDefaults(defs: Partial<OAEmployeeDefaults>): Promise<void> {
+    await delay(300);
+    Object.assign(EMP_DEFAULTS, defs);
+}
+
+/** GET /api/v1/org/{orgId}/notifications */
+export async function getOANotifications(): Promise<OANotificationSettings> {
+    await delay(100);
+    return { ...NOTIFICATIONS };
+}
+
+export async function updateOANotifications(nots: Partial<OANotificationSettings>): Promise<void> {
+    await delay(300);
+    Object.assign(NOTIFICATIONS, nots);
+}
+
+/** GET /api/v1/org/{orgId}/security */
+export async function getOASecurity(): Promise<OASecuritySettings> {
+    await delay(150);
+    return { ...SECURITY };
+}
+
+export async function updateOASecurity(sec: Partial<OASecuritySettings>): Promise<void> {
+    await delay(350);
+    Object.assign(SECURITY, sec);
+}
+
+/** GET /api/v1/org/{orgId}/policy */
+export async function getOAOrgPolicy(): Promise<OAOrgPolicy> {
+    await delay(100);
+    return { ...ORG_POLICY, permittedModels: [...ORG_POLICY.permittedModels] };
+}
+
+export async function updateOAOrgPolicy(pol: Partial<OAOrgPolicy>): Promise<void> {
+    await delay(400);
+    Object.assign(ORG_POLICY, pol);
+}
+
+/** GET /api/v1/org/{orgId}/dept-policies */
+export async function getOADeptPolicies(): Promise<OADeptPolicyState[]> {
+    await delay(200);
+    return structuredClone(DEPT_POLICIES);
+}
+
+export async function updateOADeptPolicy(id: string, pol: Partial<OADeptPolicyState>): Promise<void> {
+    await delay(300);
+    const d = DEPT_POLICIES.find(p => p.id === id);
+    if (d) Object.assign(d, pol);
+}
+
+export async function applyOAOrgPolicyToAllDepts(): Promise<void> {
+    await delay(700);
+    DEPT_POLICIES.forEach(d => {
+        d.fileUpload = ORG_POLICY.fileUpload;
+        d.speechToText = ORG_POLICY.speechToText;
+        d.allModels = ORG_POLICY.allModels;
+        d.permittedModels = ORG_POLICY.allModels ? [...ALL_MODELS] : [...ORG_POLICY.permittedModels];
+        d.dailyLimit = ORG_POLICY.defaultDailyLimit;
+        d.synced = true;
+    });
+}
+
 
 /** GET /api/v1/org/{orgId}/departments */
 export async function getOADepartments(): Promise<OADepartment[]> {

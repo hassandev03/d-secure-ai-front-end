@@ -162,7 +162,7 @@ export default function OrgAdminDashboard() {
                                 <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} width={90} />
                                 <RechartsTooltip
                                     contentStyle={TOOLTIP_STYLE}
-                                    formatter={(value: number) => [`${value} requests`, "Usage"]}
+                                    formatter={(value: any) => [`${value} requests`, "Usage"]}
                                 />
                                 <Bar dataKey="used" name="Requests" radius={[0, 4, 4, 0]} barSize={18}>
                                     {deptUsage.map((entry) => (
