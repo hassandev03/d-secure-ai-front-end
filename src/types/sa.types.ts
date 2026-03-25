@@ -74,6 +74,7 @@ export interface SAEnterprisePlan {
     excluded: string[];
     color: string;
     borderColor: string;
+    maxCost?: number;
 }
 
 export interface SAIndividualPlan {
@@ -84,6 +85,9 @@ export interface SAIndividualPlan {
     requests: number;
     active: number;
     popular?: boolean;
+    features: readonly string[] | string[];
+    excluded: readonly string[] | string[];
+    maxCost?: number;
 }
 
 export interface RegisterOrgPayload {
@@ -99,4 +103,12 @@ export interface RegisterOrgPayload {
     billingCycle: 'MONTHLY' | 'ANNUAL';
     initialQuota: number;
     notes?: string;
+}
+
+export interface SARevenueStats {
+    totalRevenue: number;
+    totalCost: number;
+    totalProfit: number;
+    unusedCreditsProfit: number;
+    profitMargin: number;
 }

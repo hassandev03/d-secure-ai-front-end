@@ -15,8 +15,8 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { cn } from "@/lib/utils";
-import { getDashboardStats, getRecentOrganizations, getRecentActivity } from "@/services/sa.service";
-import type { SADashboardStats, SAOrganization, SAActivityItem, ActivityIconType } from "@/types/sa.types";
+import { getDashboardStats, getRecentOrganizations, getRecentActivity, getRevenueStats } from "@/services/sa.service";
+import type { SADashboardStats, SAOrganization, SAActivityItem, ActivityIconType, SARevenueStats } from "@/types/sa.types";
 
 const ACTIVITY_ICONS: Record<ActivityIconType, { icon: React.ElementType; color: string }> = {
     "user-plus":    { icon: UserPlus,      color: "text-success bg-success/10" },
@@ -36,26 +36,29 @@ const quickLinks = [
 
 export default function SuperAdminDashboard() {
     const [stats, setStats] = useState<SADashboardStats | null>(null);
+    const [revStats, setRevStats] = useState<SARevenueStats | null>(null);
     const [recentOrgs, setRecentOrgs] = useState<SAOrganization[]>([]);
     const [activity, setActivity] = useState<SAActivityItem[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         async function load() {
-            const [s, o, a] = await Promise.all([
+            const [s, o, a, r] = await Promise.all([
                 getDashboardStats(),
                 getRecentOrganizations(5),
                 getRecentActivity(),
+                getRevenueStats(),
             ]);
             setStats(s);
             setRecentOrgs(o);
             setActivity(a);
+            setRevStats(r);
             setLoading(false);
         }
         load();
     }, []);
 
-    if (loading || !stats) {
+    if (loading || !stats || !revStats) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
                 <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
@@ -100,10 +103,11 @@ export default function SuperAdminDashboard() {
                 />
             </div>
 
-            <div className="mt-4 grid gap-4 sm:grid-cols-3">
-                <StatCard title="Total Requests" value={stats.totalRequests.toLocaleString()} icon={TrendingUp} />
+            <div className="mt-4 grid gap-4 xl:grid-cols-4 sm:grid-cols-2">
+                <StatCard title="Total Revenue" value={`$${revStats.totalRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} icon={TrendingUp} iconColor="text-success bg-success/10" />
+                <StatCard title="API Cost" value={`$${revStats.totalCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} icon={Activity} iconColor="text-warning bg-warning/10" delta={{ value: `$${revStats.unusedCreditsProfit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} extra profit via unused credits`, trend: "up" }} />
+                <StatCard title="Net Profit" value={`$${revStats.totalProfit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} icon={CreditCard} delta={{ value: `${Math.round(revStats.profitMargin)}% margin`, trend: "up" }} iconColor="text-brand-700 bg-brand-50" />
                 <StatCard title="Active Subscriptions" value={stats.activeSubscriptions} icon={CreditCard} iconColor="text-info bg-info/10" />
-                <StatCard title="Anonymization Ops" value={stats.anonymizationOps.toLocaleString()} icon={Globe} iconColor="text-success bg-success/10" />
             </div>
 
             <div className="mt-6 grid gap-6 lg:grid-cols-3">

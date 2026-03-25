@@ -29,18 +29,18 @@ export function PlanEditModal({
 
     if (!plan || !formData) return null;
 
-    const isEnterprise = 'features' in formData;
+    const isEnterprise = 'perUser' in formData;
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         setFormData((prev: any) => ({
             ...prev,
-            [name]: name.includes("rice") || name === "requests" || name === "perUser" || name === "active" ? Number(value) : value,
+            [name]: name.includes("rice") || name === "maxCost" || name === "requests" || name === "perUser" || name === "active" ? Number(value) : value,
         }));
     };
 
     const handleFeaturesChange = (index: number, value: string) => {
-        const newFeatures = [...formData.features];
+        const newFeatures = [...(formData.features || [])];
         newFeatures[index] = value;
         setFormData({ ...formData, features: newFeatures });
     };
@@ -50,15 +50,33 @@ export function PlanEditModal({
     };
 
     const removeFeature = (index: number) => {
-        const newFeatures = [...formData.features];
+        const newFeatures = [...(formData.features || [])];
         newFeatures.splice(index, 1);
         setFormData({ ...formData, features: newFeatures });
     };
 
+    const handleExcludedChange = (index: number, value: string) => {
+        const newExcluded = [...(formData.excluded || [])];
+        newExcluded[index] = value;
+        setFormData({ ...formData, excluded: newExcluded });
+    };
+
+    const addExcluded = () => {
+        setFormData({ ...formData, excluded: [...(formData.excluded || []), ""] });
+    };
+
+    const removeExcluded = (index: number) => {
+        const newExcluded = [...(formData.excluded || [])];
+        newExcluded.splice(index, 1);
+        setFormData({ ...formData, excluded: newExcluded });
+    };
+
     const handleSave = () => {
-        // Remove empty features
-        if (isEnterprise && formData.features) {
+        if (formData.features) {
             formData.features = formData.features.filter((f: string) => f.trim() !== "");
+        }
+        if (formData.excluded) {
+            formData.excluded = formData.excluded.filter((f: string) => f.trim() !== "");
         }
         onSave(formData);
         onClose();
@@ -98,6 +116,14 @@ export function PlanEditModal({
                                     </div>
                                 </div>
                             </div>
+
+                            <div className="grid gap-2">
+                                <Label htmlFor="maxCost" className="text-sm font-semibold">Estimated Max Cost ($)</Label>
+                                <div className="relative">
+                                    <span className="absolute left-3 top-3 text-muted-foreground">$</span>
+                                    <Input id="maxCost" name="maxCost" type="number" step="1" value={formData.maxCost || 0} onChange={handleChange} className="pl-7 h-11" />
+                                </div>
+                            </div>
                         </div>
 
                         <div className="border-t border-border pt-6 space-y-4">
@@ -123,40 +149,6 @@ export function PlanEditModal({
                                         </div>
                                     </div>
 
-                                    <div className="grid gap-3 pt-2">
-                                        <div className="flex items-center justify-between">
-                                            <Label className="text-sm font-semibold">Included Features</Label>
-                                            <Button type="button" variant="outline" size="sm" onClick={addFeature} className="h-8 gap-1">
-                                                <Plus className="h-3.5 w-3.5" /> Add Feature
-                                            </Button>
-                                        </div>
-                                        <div className="space-y-2">
-                                            {(formData.features || []).map((feature: string, index: number) => (
-                                                <div key={index} className="flex gap-2">
-                                                    <Input
-                                                        value={feature}
-                                                        onChange={(e) => handleFeaturesChange(index, e.target.value)}
-                                                        placeholder="e.g. Advanced Analytics"
-                                                        className="h-10"
-                                                    />
-                                                    <Button 
-                                                        type="button" 
-                                                        variant="ghost" 
-                                                        size="icon" 
-                                                        className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
-                                                        onClick={() => removeFeature(index)}
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            ))}
-                                            {(!formData.features || formData.features.length === 0) && (
-                                                <div className="text-center p-4 border border-dashed rounded-lg text-sm text-muted-foreground">
-                                                    No features added. Click "Add Feature" to start.
-                                                </div>
-                                            )}
-                                        </div>
-                                    </div>
                                 </>
                             ) : (
                                 <>
@@ -178,6 +170,80 @@ export function PlanEditModal({
                                     </div>
                                 </>
                             )}
+
+                            <div className="border-t border-border pt-4 mt-6">
+                                <div className="grid gap-3">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-sm font-semibold">Included Features</Label>
+                                        <Button type="button" variant="outline" size="sm" onClick={addFeature} className="h-8 gap-1">
+                                            <Plus className="h-3.5 w-3.5" /> Add Feature
+                                        </Button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {(formData.features || []).map((feature: string, index: number) => (
+                                            <div key={index} className="flex gap-2">
+                                                <Input
+                                                    value={feature}
+                                                    onChange={(e) => handleFeaturesChange(index, e.target.value)}
+                                                    placeholder="e.g. Advanced Analytics"
+                                                    className="h-10"
+                                                />
+                                                <Button 
+                                                    type="button" 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                                                    onClick={() => removeFeature(index)}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                        {(!formData.features || formData.features.length === 0) && (
+                                            <div className="text-center p-4 border border-dashed rounded-lg text-sm text-muted-foreground">
+                                                No features added. Click "Add Feature" to start.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="border-t border-border pt-4">
+                                <div className="grid gap-3">
+                                    <div className="flex items-center justify-between">
+                                        <Label className="text-sm font-semibold">Excluded Features (Not included)</Label>
+                                        <Button type="button" variant="outline" size="sm" onClick={addExcluded} className="h-8 gap-1">
+                                            <Plus className="h-3.5 w-3.5" /> Add Excluded
+                                        </Button>
+                                    </div>
+                                    <div className="space-y-2">
+                                        {(formData.excluded || []).map((feature: string, index: number) => (
+                                            <div key={index} className="flex gap-2">
+                                                <Input
+                                                    value={feature}
+                                                    onChange={(e) => handleExcludedChange(index, e.target.value)}
+                                                    placeholder="e.g. No API Access"
+                                                    className="h-10"
+                                                />
+                                                <Button 
+                                                    type="button" 
+                                                    variant="ghost" 
+                                                    size="icon" 
+                                                    className="h-10 w-10 text-destructive hover:text-destructive hover:bg-destructive/10 shrink-0"
+                                                    onClick={() => removeExcluded(index)}
+                                                >
+                                                    <X className="h-4 w-4" />
+                                                </Button>
+                                            </div>
+                                        ))}
+                                        {(!formData.excluded || formData.excluded.length === 0) && (
+                                            <div className="text-center p-4 border border-dashed rounded-lg text-sm text-muted-foreground">
+                                                No excluded features. Click "Add Excluded" to start.
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </ScrollArea>

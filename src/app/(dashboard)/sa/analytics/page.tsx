@@ -1,13 +1,16 @@
 "use client";
 
-import { BarChart3, Users, Building2, Activity, TrendingUp, Globe } from "lucide-react";
+import { useState, useEffect } from "react";
+import { BarChart3, Users, Building2, Activity, TrendingUp, Globe, CreditCard, DollarSign, Loader2, PlusCircle } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import StatCard from "@/components/shared/StatCard";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { getRevenueStats } from "@/services/sa.service";
+import type { SARevenueStats } from "@/types/sa.types";
 import {
-    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-    PieChart, Pie, Cell, LineChart, Line, Legend,
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
+    PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area
 } from "recharts";
 
 const dailyRequests = [
@@ -43,8 +46,34 @@ const topOrgs = [
 ];
 
 export default function AnalyticsPage() {
+    const [revStats, setRevStats] = useState<SARevenueStats | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        getRevenueStats().then(data => {
+            setRevStats(data);
+            setLoading(false);
+        });
+    }, []);
+
+    if (loading || !revStats) {
+        return (
+            <div className="flex items-center justify-center h-[60vh]">
+                <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
+            </div>
+        );
+    }
+
+    const formatCurrency = (val: number) => `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+    const FinancialChartData = [
+        { name: "Revenue", amount: revStats.totalRevenue, color: "#10B981" },
+        { name: "API Cost", amount: revStats.totalCost, color: "#EF4444" },
+        { name: "Net Profit", amount: revStats.totalProfit, color: "#3B82F6" },
+    ];
+
     return (
-        <div className="mx-auto max-w-7xl">
+        <div className="mx-auto max-w-7xl space-y-6">
             <PageHeader
                 title="Platform Analytics"
                 subtitle="System-wide usage metrics and trends."
@@ -63,13 +92,58 @@ export default function AnalyticsPage() {
             />
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                <StatCard title="Total Revenue" value={formatCurrency(revStats.totalRevenue)} icon={DollarSign} delta={{ value: "+8% this month", trend: "up" }} iconColor="text-success bg-success/10" />
                 <StatCard title="Total Requests" value="128.4K" icon={Activity} delta={{ value: "+12% this week", trend: "up" }} />
                 <StatCard title="Active Users" value="1,580" icon={Users} delta={{ value: "+18% this month", trend: "up" }} iconColor="text-info bg-info/10" />
                 <StatCard title="Organizations" value="42" icon={Building2} delta={{ value: "+3 this month", trend: "up" }} iconColor="text-success bg-success/10" />
-                <StatCard title="Avg. Accuracy" value="98.7%" icon={TrendingUp} delta={{ value: "Stable", trend: "flat" }} iconColor="text-warning bg-warning/10" />
             </div>
 
-            <div className="mt-6 grid gap-6 lg:grid-cols-2">
+            <div className="grid gap-6 lg:grid-cols-3">
+                <div className="lg:col-span-2">
+                    <Card className="h-full">
+                        <CardHeader>
+                            <CardTitle className="text-base font-semibold">Revenue & Profit Overview</CardTitle>
+                            <CardDescription>Visualizing revenue, backend API costs, and net profit margins.</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="h-[250px] w-full mt-4">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={FinancialChartData} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
+                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
+                                        <XAxis type="number" tickFormatter={(v) => `$${v}`} />
+                                        <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12, fontWeight: 500 }} />
+                                        <RechartsTooltip formatter={(value: any) => formatCurrency(value || 0)} />
+                                        <Bar dataKey="amount" radius={[0, 4, 4, 0]} barSize={32}>
+                                            {FinancialChartData.map((entry, index) => (
+                                                <Cell key={`cell-${index}`} fill={entry.color} />
+                                            ))}
+                                        </Bar>
+                                    </BarChart>
+                                </ResponsiveContainer>
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+                
+                <div className="space-y-6">
+                    <StatCard 
+                        title="Unused Credits Profit" 
+                        value={formatCurrency(revStats.unusedCreditsProfit)} 
+                        icon={PlusCircle} 
+                        delta={{ value: "Added to net profit margin", trend: "up" }} 
+                        iconColor="text-brand-700 bg-brand-50" 
+                    />
+                    <StatCard 
+                        title="Average Profit Margin" 
+                        value={`${Math.round(revStats.profitMargin)}%`} 
+                        icon={TrendingUp} 
+                        delta={{ value: "Across all active plans", trend: "up" }} 
+                        iconColor="text-info bg-info/10" 
+                    />
+                </div>
+            </div>
+
+            <div className="grid gap-6 lg:grid-cols-2">
                 {/* Daily requests bar chart */}
                 <Card>
                     <CardHeader><CardTitle className="text-base font-semibold">Daily Requests</CardTitle></CardHeader>
@@ -79,7 +153,7 @@ export default function AnalyticsPage() {
                                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                                 <XAxis dataKey="day" tick={{ fontSize: 12 }} />
                                 <YAxis tick={{ fontSize: 12 }} />
-                                <Tooltip />
+                                <RechartsTooltip />
                                 <Bar dataKey="requests" fill="#3B82F6" radius={[6, 6, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
@@ -96,7 +170,7 @@ export default function AnalyticsPage() {
                                     <Pie data={modelUsage} dataKey="value" cx="50%" cy="50%" outerRadius={90} innerRadius={50} paddingAngle={3} strokeWidth={0}>
                                         {modelUsage.map((entry) => <Cell key={entry.name} fill={entry.color} />)}
                                     </Pie>
-                                    <Tooltip />
+                                    <RechartsTooltip />
                                 </PieChart>
                             </ResponsiveContainer>
                             <div className="space-y-2.5 flex-1">
@@ -123,7 +197,7 @@ export default function AnalyticsPage() {
                             <XAxis dataKey="month" tick={{ fontSize: 12 }} />
                             <YAxis yAxisId="left" tick={{ fontSize: 12 }} />
                             <YAxis yAxisId="right" orientation="right" tick={{ fontSize: 12 }} />
-                            <Tooltip />
+                            <RechartsTooltip />
                             <Legend />
                             <Line yAxisId="left" type="monotone" dataKey="users" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} name="Users" />
                             <Line yAxisId="right" type="monotone" dataKey="requests" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} name="Requests" />

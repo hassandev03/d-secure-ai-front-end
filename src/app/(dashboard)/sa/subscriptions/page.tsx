@@ -216,7 +216,7 @@ export default function SubscriptionsPage() {
                                     </CardHeader>
 
                                     <CardContent className="flex-1 px-6">
-                                        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
+                                        <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 mb-6">
                                             <div className="flex items-center justify-between text-sm">
                                                 <span className="text-muted-foreground font-medium">Monthly Requests</span>
                                                 <span className="font-bold">{plan.requests.toLocaleString()}</span>
@@ -232,6 +232,34 @@ export default function SubscriptionsPage() {
                                                 <span className="font-bold text-success">${(plan.price * plan.active).toLocaleString()}</span>
                                             </div>
                                         </div>
+
+                                        {plan.excluded && plan.excluded.length > 0 && (
+                                            <>
+                                                <div className="font-semibold mb-3 text-xs text-muted-foreground uppercase tracking-wide">Not included</div>
+                                                <ul className="space-y-2.5 mb-5">
+                                                    {plan.excluded.map((f: string) => (
+                                                        <li key={f} className="flex items-start gap-3 text-sm text-muted-foreground/70">
+                                                            <X className="h-4 w-4 shrink-0 mt-0.5" /><span>{f}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </>
+                                        )}
+                                        {plan.features && plan.features.length > 0 && (
+                                            <>
+                                                <div className="font-semibold mb-3 text-xs text-muted-foreground uppercase tracking-wide">Included</div>
+                                                <ul className="space-y-2.5">
+                                                    {plan.features.map((f: string) => (
+                                                        <li key={f} className="flex items-start gap-3 text-sm font-medium">
+                                                            <div className={`mt-0.5 rounded-full p-0.5 ${plan.popular ? "bg-brand-100 text-brand-600" : "bg-success/20 text-success"}`}>
+                                                                <Check className="h-3 w-3 shrink-0" />
+                                                            </div>
+                                                            <span>{f}</span>
+                                                        </li>
+                                                    ))}
+                                                </ul>
+                                            </>
+                                        )}
                                     </CardContent>
 
                                     <CardFooter className="pt-4">
@@ -261,7 +289,7 @@ export default function SubscriptionsPage() {
                     setTimeout(() => setEditingPlan(null), 300);
                 }}
                 onSave={(updatedPlan) => {
-                    if ('features' in updatedPlan) {
+                    if ('perUser' in updatedPlan) {
                         setEntPlans(prev => prev.map(p => p.key === updatedPlan.key ? updatedPlan : p));
                     } else {
                         setIndPlans(prev => prev.map(p => p.key === updatedPlan.key ? updatedPlan : p));

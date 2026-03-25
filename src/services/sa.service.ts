@@ -4,6 +4,7 @@ import type {
     SAEnterprisePlan, SAIndividualPlan, RegisterOrgPayload,
     OrgStatus, ProfessionalStatus,
 } from '@/types/sa.types';
+import { SUBSCRIPTION_PLANS } from '@/lib/constants';
 
 const organizations: SAOrganization[] = [
     {
@@ -160,26 +161,26 @@ const enterprisePlans: SAEnterprisePlan[] = [
         key: 'starter', name: 'Starter', price: 499, annualPrice: 399, perUser: 4.99,
         features: ['Basic entity anonymization', 'Up to 1,000 requests/month', '5 departments max', 'Standard support', '30-day history'],
         excluded: ['No context-aware anonymization', 'No file upload', 'Limited models'],
-        color: 'from-blue-500/10 to-blue-500/5', borderColor: 'border-blue-200',
+        color: 'from-blue-500/10 to-blue-500/5', borderColor: 'border-blue-200', maxCost: 5
     },
     {
         key: 'professional', name: 'Professional', price: 999, annualPrice: 799, perUser: 3.99, popular: true,
         features: ['Context-aware anonymization', 'Up to 10,000 requests/month', 'Unlimited departments', 'All AI providers', 'File upload support', '90-day history', 'Priority support'],
         excluded: [],
-        color: 'from-brand-500/20 to-brand-500/5', borderColor: 'border-brand-500 ring-1 ring-brand-500/30',
+        color: 'from-brand-500/20 to-brand-500/5', borderColor: 'border-brand-500 ring-1 ring-brand-500/30', maxCost: 40
     },
     {
         key: 'enterprise', name: 'Enterprise', price: 2499, annualPrice: 1999, perUser: 2.99,
         features: ['Everything in Professional', 'Up to 50,000 requests/month', 'Custom anonymization rules', 'API access', 'Unlimited history', 'Dedicated account manager', 'Custom SLA'],
         excluded: [],
-        color: 'from-emerald-500/10 to-emerald-500/5', borderColor: 'border-emerald-200',
+        color: 'from-emerald-500/10 to-emerald-500/5', borderColor: 'border-emerald-200', maxCost: 200
     },
 ];
 
 const individualPlans: SAIndividualPlan[] = [
-    { key: 'FREE', name: 'Free', price: 0, annualPrice: 0, requests: 50, active: 180 },
-    { key: 'PRO', name: 'Pro', price: 29, annualPrice: 24, requests: 1000, active: 54, popular: true },
-    { key: 'MAX', name: 'Max', price: 79, annualPrice: 69, requests: 5000, active: 33 },
+    { key: 'FREE', name: SUBSCRIPTION_PLANS.FREE.name, price: SUBSCRIPTION_PLANS.FREE.price, annualPrice: SUBSCRIPTION_PLANS.FREE.annualPrice, requests: SUBSCRIPTION_PLANS.FREE.requests, features: SUBSCRIPTION_PLANS.FREE.features, excluded: SUBSCRIPTION_PLANS.FREE.excluded, active: 180, maxCost: 0.5 },
+    { key: 'PRO', name: SUBSCRIPTION_PLANS.PRO.name, price: SUBSCRIPTION_PLANS.PRO.price, annualPrice: SUBSCRIPTION_PLANS.PRO.annualPrice, requests: SUBSCRIPTION_PLANS.PRO.requests, features: SUBSCRIPTION_PLANS.PRO.features, excluded: SUBSCRIPTION_PLANS.PRO.excluded, active: 54, popular: true, maxCost: 15 },
+    { key: 'MAX', name: SUBSCRIPTION_PLANS.MAX.name, price: SUBSCRIPTION_PLANS.MAX.price, annualPrice: SUBSCRIPTION_PLANS.MAX.annualPrice, requests: SUBSCRIPTION_PLANS.MAX.requests, features: SUBSCRIPTION_PLANS.MAX.features, excluded: SUBSCRIPTION_PLANS.MAX.excluded, active: 33, maxCost: 50 },
 ];
 
 export async function getOrganizations(): Promise<SAOrganization[]> {
@@ -285,4 +286,52 @@ export async function getEnterprisePlans(): Promise<SAEnterprisePlan[]> {
 export async function getIndividualPlans(): Promise<SAIndividualPlan[]> {
     await delay(200);
     return [...individualPlans];
+}
+
+import type { SARevenueStats } from '@/types/sa.types';
+
+export async function getRevenueStats(): Promise<SARevenueStats> {
+    await delay(250);
+    
+    let totalRevenue = 0;
+    let totalCost = 0;
+    let maxPossibleCost = 0;
+
+    // Organizations
+    for (const org of organizations) {
+        if (org.status !== 'ACTIVE') continue;
+        const plan = enterprisePlans.find(p => p.name === org.plan) || enterprisePlans[1];
+        
+        totalRevenue += plan.price;
+        const maxCost = plan.maxCost || 15;
+        
+        const usedRatio = org.quota.total > 0 ? (org.quota.used / org.quota.total) : 0;
+        totalCost += usedRatio * maxCost;
+        maxPossibleCost += maxCost;
+    }
+
+    // Professionals
+    for (const pro of professionals) {
+        if (pro.status !== 'ACTIVE') continue;
+        const plan = individualPlans.find(p => p.key === pro.plan) || individualPlans[0];
+        
+        totalRevenue += plan.price;
+        const maxCost = plan.maxCost || 15;
+        
+        const usedRatio = plan.requests > 0 ? (pro.requests / plan.requests) : 0;
+        totalCost += usedRatio * maxCost;
+        maxPossibleCost += maxCost;
+    }
+
+    const totalProfit = totalRevenue - totalCost;
+    const unusedCreditsProfit = maxPossibleCost - totalCost;
+    const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
+
+    return {
+        totalRevenue,
+        totalCost,
+        totalProfit,
+        unusedCreditsProfit,
+        profitMargin
+    };
 }
