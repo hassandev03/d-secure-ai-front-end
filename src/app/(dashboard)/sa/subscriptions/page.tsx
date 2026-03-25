@@ -8,11 +8,10 @@ import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/componen
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { getEnterprisePlans, getIndividualPlans } from "@/services/sa.service";
 import type { SAEnterprisePlan, SAIndividualPlan } from "@/types/sa.types";
-import { PlanEditSheet } from "./PlanEditSheet";
+import { PlanEditModal } from "./PlanEditModal";
 
 const tierIcons: Record<string, React.ElementType> = {
     starter: Zap,
@@ -105,12 +104,19 @@ export default function SubscriptionsPage() {
                         </TabsTrigger>
                     </TabsList>
 
-                    <div className="flex items-center gap-3 bg-card px-4 py-2 rounded-full border border-border shadow-sm">
-                        <Label htmlFor="billing-toggle" className={`text-sm font-semibold cursor-pointer ${!isAnnual ? "text-foreground" : "text-muted-foreground"}`}>Monthly</Label>
-                        <Switch id="billing-toggle" checked={isAnnual} onCheckedChange={setIsAnnual} className="data-[state=checked]:bg-brand-600" />
-                        <Label htmlFor="billing-toggle" className={`text-sm font-semibold cursor-pointer flex items-center gap-1.5 ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
-                            Annually <Badge className="bg-success text-white hover:bg-success h-5 px-1.5 text-[10px] font-bold tracking-wide border-0 rounded-sm">SAVE 20%</Badge>
-                        </Label>
+                    <div className="flex items-center p-1 bg-muted/60 rounded-full border border-border">
+                        <button
+                            onClick={() => setIsAnnual(false)}
+                            className={`px-5 py-2.5 text-sm font-semibold rounded-full transition-all duration-200 ${!isAnnual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                            Monthly
+                        </button>
+                        <button
+                            onClick={() => setIsAnnual(true)}
+                            className={`px-5 py-2.5 text-sm font-semibold rounded-full flex items-center gap-2 transition-all duration-200 ${isAnnual ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}
+                        >
+                            Annually <Badge className="bg-success text-white hover:bg-success h-5 px-1.5 text-[10px] font-bold tracking-wide border-0 rounded-sm shadow-none">SAVE 20%</Badge>
+                        </button>
                     </div>
                 </div>
 
@@ -247,7 +253,7 @@ export default function SubscriptionsPage() {
                 </TabsContent>
             </Tabs>
 
-            <PlanEditSheet
+            <PlanEditModal
                 plan={editingPlan}
                 isOpen={isSheetOpen}
                 onClose={() => {
