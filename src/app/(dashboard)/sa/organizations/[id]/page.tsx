@@ -1,48 +1,57 @@
 "use client";
 
-import { use } from "react";
-import { Building2, Users, Layers, CreditCard, Calendar, Globe, Mail, Phone } from "lucide-react";
+import { use, useState, useEffect } from "react";
+import { Building2, Users, Layers, CreditCard, Calendar, Globe, Mail, Phone, Loader2 } from "lucide-react";
+import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
 import StatCard from "@/components/shared/StatCard";
 import StatusBadge from "@/components/shared/StatusBadge";
 import QuotaBar from "@/components/shared/QuotaBar";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
-
-const mockOrgDetail = {
-    id: "org-001",
-    name: "Acme Corporation",
-    industry: "Technology",
-    domain: "acme.com",
-    country: "USA",
-    sizeRange: "51-200",
-    status: "ACTIVE",
-    plan: "Enterprise",
-    billingCycle: "ANNUAL",
-    registeredAt: "2025-03-15",
-    adminName: "Sarah Johnson",
-    adminEmail: "sarah@acmecorp.com",
-    adminPhone: "+1-555-0123",
-    employees: 120,
-    departments: 6,
-    quota: { used: 3200, total: 5000 },
-    notes: "Premium enterprise client. Priority support enabled.",
-    departmentList: [
-        { name: "Engineering", employees: 45, quota: { used: 1200, total: 1500 } },
-        { name: "Marketing", employees: 20, quota: { used: 600, total: 800 } },
-        { name: "Sales", employees: 25, quota: { used: 500, total: 700 } },
-        { name: "HR", employees: 10, quota: { used: 200, total: 400 } },
-        { name: "Finance", employees: 12, quota: { used: 400, total: 600 } },
-        { name: "Operations", employees: 8, quota: { used: 300, total: 1000 } },
-    ],
-};
+import { getOrganizationById, updateOrganizationStatus } from "@/services/sa.service";
+import type { SAOrganization, OrgStatus } from "@/types/sa.types";
 
 export default function OrganizationDetailPage({ params }: { params: Promise<{ id: string }> }) {
     const { id } = use(params);
-    const org = mockOrgDetail;
+    const [org, setOrg] = useState<SAOrganization | null>(null);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        getOrganizationById(id).then((data) => {
+            setOrg(data);
+            setLoading(false);
+        });
+    }, [id]);
+
+    const handleStatusChange = async (newStatus: OrgStatus) => {
+        if (!org) return;
+        const updated = await updateOrganizationStatus(org.id, newStatus);
+        if (updated) {
+            setOrg({ ...org, status: newStatus });
+            toast.success(`${org.name} status changed to ${newStatus.toLowerCase()}.`);
+        }
+    };
+
+    if (loading) {
+        return (
+            <div className="flex items-center justify-center h-[60vh]">
+                <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
+            </div>
+        );
+    }
+
+    if (!org) {
+        return (
+            <div className="flex flex-col items-center justify-center h-[60vh] gap-3">
+                <Building2 className="h-12 w-12 text-muted-foreground/40" />
+                <p className="text-lg font-medium">Organization not found</p>
+                <p className="text-sm text-muted-foreground">The organization with ID &ldquo;{id}&rdquo; does not exist.</p>
+            </div>
+        );
+    }
 
     return (
         <div className="mx-auto max-w-7xl">
@@ -57,13 +66,19 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                 actions={
                     <div className="flex items-center gap-2">
                         <StatusBadge status={org.status} />
-                        <Button variant="outline">Edit</Button>
-                        <Button variant="outline" className="text-danger hover:text-danger">Suspend</Button>
+                        {org.status !== "ACTIVE" && (
+                            <Button variant="outline" className="text-success hover:text-success" onClick={() => handleStatusChange("ACTIVE")}>Activate</Button>
+                        )}
+                        {org.status === "ACTIVE" && (
+                            <Button variant="outline" className="text-warning hover:text-warning" onClick={() => handleStatusChange("SUSPENDED")}>Suspend</Button>
+                        )}
+                        {org.status !== "DEACTIVATED" && (
+                            <Button variant="outline" className="text-danger hover:text-danger" onClick={() => handleStatusChange("DEACTIVATED")}>Deactivate</Button>
+                        )}
                     </div>
                 }
             />
 
-            {/* Stats */}
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard title="Employees" value={org.employees} icon={Users} />
                 <StatCard title="Departments" value={org.departments} icon={Layers} iconColor="text-info bg-info/10" />
@@ -71,9 +86,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                 <StatCard title="Billing" value={org.billingCycle === "ANNUAL" ? "Annual" : "Monthly"} icon={Calendar} iconColor="text-warning bg-warning/10" />
             </div>
 
-            {/* Quota + Admin info */}
             <div className="mt-6 grid gap-6 lg:grid-cols-3">
-                {/* Quota */}
                 <Card className="lg:col-span-2">
                     <CardHeader><CardTitle className="text-base font-semibold">Quota Usage</CardTitle></CardHeader>
                     <CardContent>
@@ -81,7 +94,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                         <Separator className="my-6" />
                         <h4 className="mb-4 text-sm font-semibold text-foreground">Department Breakdown</h4>
                         <div className="space-y-4">
-                            {org.departmentList.map((dept) => (
+                            {(org.departmentList ?? []).map((dept) => (
                                 <div key={dept.name} className="flex items-center gap-4">
                                     <p className="w-28 text-sm font-medium text-foreground truncate">{dept.name}</p>
                                     <div className="flex-1">
@@ -94,7 +107,6 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                     </CardContent>
                 </Card>
 
-                {/* Admin + Details */}
                 <Card>
                     <CardHeader><CardTitle className="text-base font-semibold">Organization Details</CardTitle></CardHeader>
                     <CardContent className="space-y-5">
@@ -144,7 +156,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                             <div className="flex items-center gap-2 text-sm">
                                 <Calendar className="h-4 w-4 text-muted-foreground" />
                                 <span className="text-muted-foreground">Registered:</span>
-                                <span className="font-medium">{org.registeredAt}</span>
+                                <span className="font-medium">{new Date(org.registeredAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}</span>
                             </div>
                         </div>
                         {org.notes && (

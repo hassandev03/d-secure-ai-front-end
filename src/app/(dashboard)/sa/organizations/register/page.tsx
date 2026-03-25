@@ -12,19 +12,43 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { INDUSTRIES } from "@/lib/constants";
+import { registerOrganization } from "@/services/sa.service";
+import type { RegisterOrgPayload } from "@/types/sa.types";
 
 export default function RegisterOrganizationPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [formData, setFormData] = useState<RegisterOrgPayload>({
+        name: "",
+        industry: "",
+        domain: "",
+        country: "",
+        sizeRange: "",
+        adminName: "",
+        adminEmail: "",
+        adminPhone: "",
+        subscriptionPlan: "",
+        billingCycle: "MONTHLY",
+        initialQuota: 5000,
+        notes: "",
+    });
+
+    const updateField = <K extends keyof RegisterOrgPayload>(key: K, value: RegisterOrgPayload[K]) => {
+        setFormData((prev) => ({ ...prev, [key]: value }));
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         setIsLoading(true);
-        // Simulate API call
-        await new Promise((r) => setTimeout(r, 800));
-        setIsLoading(false);
-        toast.success("Organization registered successfully!");
-        router.push("/sa/organizations");
+        try {
+            await registerOrganization(formData);
+            toast.success("Organization registered successfully!");
+            router.push("/sa/organizations");
+        } catch {
+            toast.error("Failed to register organization. Please try again.");
+        } finally {
+            setIsLoading(false);
+        }
     };
 
     return (
@@ -40,32 +64,31 @@ export default function RegisterOrganizationPage() {
             />
 
             <form onSubmit={handleSubmit}>
-                {/* Organization Info */}
                 <Card className="mb-6">
                     <CardHeader><CardTitle className="text-base">Organization Information</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 sm:grid-cols-2">
                         <div className="sm:col-span-2 space-y-2">
                             <Label htmlFor="orgName">Organization Name *</Label>
-                            <Input id="orgName" placeholder="Acme Corporation" required />
+                            <Input id="orgName" placeholder="Acme Corporation" required value={formData.name} onChange={(e) => updateField("name", e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="industry">Industry *</Label>
-                            <Select required>
+                            <Select required value={formData.industry} onValueChange={(v) => updateField("industry", v)}>
                                 <SelectTrigger><SelectValue placeholder="Select industry" /></SelectTrigger>
                                 <SelectContent>{INDUSTRIES.map((ind) => <SelectItem key={ind} value={ind}>{ind}</SelectItem>)}</SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="domain">Domain</Label>
-                            <Input id="domain" placeholder="acme.com" />
+                            <Input id="domain" placeholder="acme.com" value={formData.domain} onChange={(e) => updateField("domain", e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="country">Country *</Label>
-                            <Input id="country" placeholder="United States" required />
+                            <Input id="country" placeholder="United States" required value={formData.country} onChange={(e) => updateField("country", e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="size">Size Range</Label>
-                            <Select>
+                            <Select value={formData.sizeRange} onValueChange={(v) => updateField("sizeRange", v)}>
                                 <SelectTrigger><SelectValue placeholder="Select size" /></SelectTrigger>
                                 <SelectContent>
                                     {["1-10", "11-50", "51-200", "201-500", "501-1000", "1000+"].map((s) => <SelectItem key={s} value={s}>{s} employees</SelectItem>)}
@@ -75,43 +98,41 @@ export default function RegisterOrganizationPage() {
                     </CardContent>
                 </Card>
 
-                {/* Admin Info */}
                 <Card className="mb-6">
                     <CardHeader><CardTitle className="text-base">Organization Admin</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 sm:grid-cols-2">
                         <div className="sm:col-span-2 space-y-2">
                             <Label htmlFor="adminName">Admin Full Name *</Label>
-                            <Input id="adminName" placeholder="Sarah Johnson" required />
+                            <Input id="adminName" placeholder="Sarah Johnson" required value={formData.adminName} onChange={(e) => updateField("adminName", e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="adminEmail">Admin Email *</Label>
-                            <Input id="adminEmail" type="email" placeholder="admin@acme.com" required />
+                            <Input id="adminEmail" type="email" placeholder="admin@acme.com" required value={formData.adminEmail} onChange={(e) => updateField("adminEmail", e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="adminPhone">Phone (optional)</Label>
-                            <Input id="adminPhone" type="tel" placeholder="+1-555-0123" />
+                            <Input id="adminPhone" type="tel" placeholder="+1-555-0123" value={formData.adminPhone} onChange={(e) => updateField("adminPhone", e.target.value)} />
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* Subscription */}
                 <Card className="mb-6">
                     <CardHeader><CardTitle className="text-base">Subscription & Quota</CardTitle></CardHeader>
                     <CardContent className="grid gap-4 sm:grid-cols-2">
                         <div className="space-y-2">
                             <Label>Subscription Plan *</Label>
-                            <Select>
+                            <Select value={formData.subscriptionPlan} onValueChange={(v) => updateField("subscriptionPlan", v)}>
                                 <SelectTrigger><SelectValue placeholder="Select plan" /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="starter">Starter</SelectItem>
-                                    <SelectItem value="professional">Professional</SelectItem>
-                                    <SelectItem value="enterprise">Enterprise</SelectItem>
+                                    <SelectItem value="Starter">Starter</SelectItem>
+                                    <SelectItem value="Professional">Professional</SelectItem>
+                                    <SelectItem value="Enterprise">Enterprise</SelectItem>
                                 </SelectContent>
                             </Select>
                         </div>
                         <div className="space-y-2">
                             <Label>Billing Cycle</Label>
-                            <Select>
+                            <Select value={formData.billingCycle} onValueChange={(v) => updateField("billingCycle", v as "MONTHLY" | "ANNUAL")}>
                                 <SelectTrigger><SelectValue placeholder="Select cycle" /></SelectTrigger>
                                 <SelectContent>
                                     <SelectItem value="MONTHLY">Monthly</SelectItem>
@@ -121,16 +142,21 @@ export default function RegisterOrganizationPage() {
                         </div>
                         <div className="space-y-2">
                             <Label htmlFor="quota">Initial Monthly Quota *</Label>
-                            <Input id="quota" type="number" placeholder="5000" min={100} required />
+                            <Input id="quota" type="number" placeholder="5000" min={100} required value={formData.initialQuota} onChange={(e) => updateField("initialQuota", parseInt(e.target.value) || 0)} />
                         </div>
                     </CardContent>
                 </Card>
 
-                {/* Notes */}
                 <Card className="mb-6">
                     <CardHeader><CardTitle className="text-base">Additional Notes</CardTitle></CardHeader>
                     <CardContent>
-                        <textarea className="w-full rounded-lg border border-border bg-transparent p-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring" rows={3} placeholder="Internal notes about this organization..." />
+                        <textarea
+                            className="w-full rounded-lg border border-border bg-transparent p-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                            rows={3}
+                            placeholder="Internal notes about this organization..."
+                            value={formData.notes}
+                            onChange={(e) => updateField("notes", e.target.value)}
+                        />
                     </CardContent>
                 </Card>
 

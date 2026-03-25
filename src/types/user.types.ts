@@ -1,6 +1,6 @@
 export type UserRole = 'SUPER_ADMIN' | 'ORG_ADMIN' | 'DEPT_ADMIN' | 'ORG_EMPLOYEE' | 'PROFESSIONAL';
 export type SubscriptionTier = 'FREE' | 'PRO' | 'MAX';
-export type UserStatus = 'ACTIVE' | 'INACTIVE' | 'SUSPENDED';
+export type UserStatus = 'UNVERIFIED' | 'ACTIVE' | 'SUSPENDED' | 'DEACTIVATED';
 
 export interface User {
     id: string;
