@@ -90,6 +90,16 @@ export interface SAIndividualPlan {
     maxCost?: number;
 }
 
+export interface SAAddonPackage {
+    id: string;
+    name: string;
+    credits: number;
+    price: number;
+    cost: number;
+    popular?: boolean;
+    description: string;
+}
+
 export interface RegisterOrgPayload {
     name: string;
     industry: string;
@@ -109,6 +119,8 @@ export interface SARevenueStats {
     totalRevenue: number;
     totalCost: number;
     totalProfit: number;
+    subscriptionsProfit: number;
+    addonProfit: number;
     unusedCreditsProfit: number;
     profitMargin: number;
 }

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Check, X, Users, Building2, Zap, Shield, Crown, CreditCard, TrendingUp, Loader2 } from "lucide-react";
+import { Check, X, Users, Building2, Zap, Shield, Crown, CreditCard, TrendingUp, Loader2, Plus } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
@@ -9,9 +9,10 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Label } from "@/components/ui/label";
-import { getEnterprisePlans, getIndividualPlans } from "@/services/sa.service";
-import type { SAEnterprisePlan, SAIndividualPlan } from "@/types/sa.types";
+import { getEnterprisePlans, getIndividualPlans, getAddonPackages, updateAddonPackage, updateEnterprisePlan, updateIndividualPlan } from "@/services/sa.service";
+import type { SAEnterprisePlan, SAIndividualPlan, SAAddonPackage } from "@/types/sa.types";
 import { PlanEditModal } from "./PlanEditModal";
+import { AddonPackageModal } from "./AddonPackageModal";
 
 const tierIcons: Record<string, React.ElementType> = {
     starter: Zap,
@@ -26,14 +27,19 @@ export default function SubscriptionsPage() {
     const [isAnnual, setIsAnnual] = useState(false);
     const [entPlans, setEntPlans] = useState<SAEnterprisePlan[]>([]);
     const [indPlans, setIndPlans] = useState<SAIndividualPlan[]>([]);
+    const [addonPackages, setAddonPackages] = useState<SAAddonPackage[]>([]);
     const [loading, setLoading] = useState(true);
     const [editingPlan, setEditingPlan] = useState<any>(null);
     const [isSheetOpen, setIsSheetOpen] = useState(false);
+    
+    const [editingAddon, setEditingAddon] = useState<SAAddonPackage | null>(null);
+    const [isAddonModalOpen, setIsAddonModalOpen] = useState(false);
 
     useEffect(() => {
-        Promise.all([getEnterprisePlans(), getIndividualPlans()]).then(([e, i]) => {
+        Promise.all([getEnterprisePlans(), getIndividualPlans(), getAddonPackages()]).then(([e, i, a]) => {
             setEntPlans(e);
             setIndPlans(i);
+            setAddonPackages(a);
             setLoading(false);
         });
     }, []);
@@ -101,6 +107,9 @@ export default function SubscriptionsPage() {
                         </TabsTrigger>
                         <TabsTrigger value="individual" className="gap-2 py-2.5 px-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
                             <Users className="h-4 w-4" /> Individual Plans
+                        </TabsTrigger>
+                        <TabsTrigger value="addons" className="gap-2 py-2.5 px-6 data-[state=active]:bg-background data-[state=active]:shadow-sm">
+                            <Zap className="h-4 w-4" /> Add-on Packages
                         </TabsTrigger>
                     </TabsList>
 
@@ -279,6 +288,66 @@ export default function SubscriptionsPage() {
                         })}
                     </div>
                 </TabsContent>
+
+                <TabsContent value="addons" className="mt-0">
+                    <div className="flex justify-between items-center mb-6">
+                        <div>
+                            <h3 className="text-lg font-semibold">Standardized Add-on Packages</h3>
+                            <p className="text-sm text-muted-foreground">Pre-defined quota blocks that users can purchase directly from their portal.</p>
+                        </div>
+                        <Button 
+                            onClick={() => {
+                                setEditingAddon(null);
+                                setIsAddonModalOpen(true);
+                            }}
+                            className="bg-brand-600 hover:bg-brand-700 text-white"
+                        >
+                            <Plus className="mr-2 h-4 w-4" /> Create Add-on View
+                        </Button>
+                    </div>
+
+                    <div className="grid gap-6 lg:grid-cols-3 max-w-5xl">
+                        {addonPackages.map((addon) => (
+                            <Card key={addon.id} className={`relative overflow-hidden transition-all duration-300 hover:shadow-md flex flex-col ${addon.popular ? "border-brand-500 ring-1 ring-brand-500/20 shadow-md" : "border-border/60"}`}>
+                                {addon.popular && <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-brand-400 to-indigo-500" />}
+                                {addon.popular && (
+                                    <Badge className="absolute top-4 right-4 bg-brand-600 border-0">Recommended</Badge>
+                                )}
+                                
+                                <CardHeader className="pb-4 pt-8 text-center">
+                                    <div className={`mx-auto w-12 h-12 rounded-xl mb-3 flex items-center justify-center ${addon.popular ? "bg-brand-100 text-brand-600" : "bg-muted text-muted-foreground"}`}>
+                                        <Zap className="h-6 w-6" />
+                                    </div>
+                                    <CardTitle className="text-xl font-bold">{addon.name}</CardTitle>
+                                    <div className="mt-4 flex items-center justify-center text-5xl font-extrabold">
+                                        ${addon.price}
+                                    </div>
+                                    <p className="text-sm text-muted-foreground mt-2 px-4">{addon.description}</p>
+                                </CardHeader>
+
+                                <CardContent className="flex-1 px-6">
+                                    <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 mb-2 flex items-center justify-between">
+                                        <span className="text-muted-foreground font-medium text-sm">Credits Included</span>
+                                        <span className="font-bold text-lg text-brand-600">+{addon.credits.toLocaleString()}</span>
+                                    </div>
+                                </CardContent>
+
+                                <CardFooter className="pt-4 pb-6">
+                                    <Button
+                                        className="w-full"
+                                        variant="outline"
+                                        onClick={() => {
+                                            setEditingAddon(addon);
+                                            setIsAddonModalOpen(true);
+                                        }}
+                                    >
+                                        Edit Package
+                                    </Button>
+                                </CardFooter>
+                            </Card>
+                        ))}
+                    </div>
+                </TabsContent>
             </Tabs>
 
             <PlanEditModal
@@ -288,13 +357,35 @@ export default function SubscriptionsPage() {
                     setIsSheetOpen(false);
                     setTimeout(() => setEditingPlan(null), 300);
                 }}
-                onSave={(updatedPlan) => {
+                onSave={async (updatedPlan) => {
                     if ('perUser' in updatedPlan) {
                         setEntPlans(prev => prev.map(p => p.key === updatedPlan.key ? updatedPlan : p));
+                        await updateEnterprisePlan(updatedPlan);
                     } else {
                         setIndPlans(prev => prev.map(p => p.key === updatedPlan.key ? updatedPlan : p));
+                        await updateIndividualPlan(updatedPlan);
                     }
                     toast.success(`${updatedPlan.name} plan updated successfully.`);
+                }}
+            />
+
+            <AddonPackageModal
+                addon={editingAddon}
+                isOpen={isAddonModalOpen}
+                onClose={() => {
+                    setIsAddonModalOpen(false);
+                    setTimeout(() => setEditingAddon(null), 300);
+                }}
+                onSave={async (updatedAddon) => {
+                    setAddonPackages(prev => {
+                        const existing = prev.find(p => p.id === updatedAddon.id);
+                        if (existing) {
+                            return prev.map(p => p.id === updatedAddon.id ? updatedAddon : p);
+                        }
+                        return [...prev, updatedAddon];
+                    });
+                    await updateAddonPackage(updatedAddon);
+                    toast.success(`Add-on package ${updatedAddon.name} saved successfully.`);
                 }}
             />
         </div>

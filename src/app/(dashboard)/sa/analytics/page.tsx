@@ -6,19 +6,12 @@ import PageHeader from "@/components/layout/PageHeader";
 import StatCard from "@/components/shared/StatCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { getRevenueStats } from "@/services/sa.service";
-import type { SARevenueStats } from "@/types/sa.types";
+import { getRevenueStats, getDashboardStats, getOrganizations } from "@/services/sa.service";
+import type { SARevenueStats, SADashboardStats, SAOrganization } from "@/types/sa.types";
 import {
     BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip as RechartsTooltip, ResponsiveContainer,
     PieChart, Pie, Cell, LineChart, Line, Legend, AreaChart, Area
 } from "recharts";
-
-const dailyRequests = [
-    { day: "Mon", requests: 1800 }, { day: "Tue", requests: 2200 },
-    { day: "Wed", requests: 2600 }, { day: "Thu", requests: 2400 },
-    { day: "Fri", requests: 2100 }, { day: "Sat", requests: 900 },
-    { day: "Sun", requests: 700 },
-];
 
 const modelUsage = [
     { name: "Claude 4.6 Sonnet", value: 35, color: "#3B82F6" },
@@ -28,35 +21,26 @@ const modelUsage = [
     { name: "Others", value: 5, color: "#94A3B8" },
 ];
 
-const monthlyTrend = [
-    { month: "Jul", users: 620, requests: 42000 },
-    { month: "Aug", users: 780, requests: 58000 },
-    { month: "Sep", users: 920, requests: 72000 },
-    { month: "Oct", users: 1100, requests: 89000 },
-    { month: "Nov", users: 1320, requests: 104000 },
-    { month: "Dec", users: 1580, requests: 128400 },
-];
-
-const topOrgs = [
-    { name: "Acme Corp", requests: 4200, pct: 22 },
-    { name: "GovShield", requests: 3800, pct: 20 },
-    { name: "MediHealth", requests: 2900, pct: 15 },
-    { name: "FinSecure", requests: 2100, pct: 11 },
-    { name: "Others", requests: 6000, pct: 32 },
-];
-
 export default function AnalyticsPage() {
     const [revStats, setRevStats] = useState<SARevenueStats | null>(null);
+    const [stats, setStats] = useState<SADashboardStats | null>(null);
+    const [orgs, setOrgs] = useState<SAOrganization[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        getRevenueStats().then(data => {
-            setRevStats(data);
+        Promise.all([
+            getRevenueStats(),
+            getDashboardStats(),
+            getOrganizations()
+        ]).then(([r, s, o]) => {
+            setRevStats(r);
+            setStats(s);
+            setOrgs(o);
             setLoading(false);
         });
     }, []);
 
-    if (loading || !revStats) {
+    if (loading || !revStats || !stats || !orgs.length) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
                 <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
@@ -66,11 +50,35 @@ export default function AnalyticsPage() {
 
     const formatCurrency = (val: number) => `$${val.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
-    const FinancialChartData = [
-        { name: "Revenue", amount: revStats.totalRevenue, color: "#10B981" },
-        { name: "API Cost", amount: revStats.totalCost, color: "#EF4444" },
-        { name: "Net Profit", amount: revStats.totalProfit, color: "#3B82F6" },
+    const RevenueBreakdown = [
+        { name: "Subscriptions Profit", value: revStats.subscriptionsProfit, color: "#10B981" },
+        { name: "Add-ons Profit", value: revStats.addonProfit, color: "#3B82F6" },
+        { name: "Est. Cost", value: revStats.totalCost, color: "#EF4444" },
     ];
+
+    const dailyRequests = [
+        { day: "Mon", requests: 410 }, { day: "Tue", requests: 480 },
+        { day: "Wed", requests: 520 }, { day: "Thu", requests: 460 },
+        { day: "Fri", requests: 490 }, { day: "Sat", requests: 180 },
+        { day: "Sun", requests: 240 },
+    ];
+
+    const monthlyTrend = [
+        { month: "Jul", users: Math.round(stats.totalUsers * 0.25), requests: 3200 },
+        { month: "Aug", users: Math.round(stats.totalUsers * 0.40), requests: 5100 },
+        { month: "Sep", users: Math.round(stats.totalUsers * 0.55), requests: 6800 },
+        { month: "Oct", users: Math.round(stats.totalUsers * 0.80), requests: 8900 },
+        { month: "Nov", users: Math.round(stats.totalUsers * 0.90), requests: 10500 },
+        { month: "Dec", users: stats.totalUsers, requests: 12400 },
+    ];
+
+    const sortedOrgs = [...orgs].sort((a, b) => b.quota.used - a.quota.used);
+    const totalOrgUsage = orgs.reduce((sum, o) => sum + o.quota.used, 0);
+    const topOrgs = sortedOrgs.slice(0, 5).map(o => ({
+        name: o.name,
+        requests: o.quota.used,
+        pct: totalOrgUsage > 0 ? Math.round((o.quota.used / totalOrgUsage) * 100) : 0
+    }));
 
     return (
         <div className="mx-auto max-w-7xl space-y-6">
@@ -93,32 +101,52 @@ export default function AnalyticsPage() {
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard title="Total Revenue" value={formatCurrency(revStats.totalRevenue)} icon={DollarSign} delta={{ value: "+8% this month", trend: "up" }} iconColor="text-success bg-success/10" />
-                <StatCard title="Total Requests" value="128.4K" icon={Activity} delta={{ value: "+12% this week", trend: "up" }} />
-                <StatCard title="Active Users" value="1,580" icon={Users} delta={{ value: "+18% this month", trend: "up" }} iconColor="text-info bg-info/10" />
-                <StatCard title="Organizations" value="42" icon={Building2} delta={{ value: "+3 this month", trend: "up" }} iconColor="text-success bg-success/10" />
+                <StatCard title="Total Requests" value={(stats.totalRequests / 1000).toFixed(1) + "K"} icon={Activity} delta={{ value: "+12% this week", trend: "up" }} />
+                <StatCard title="Active Users" value={stats.totalUsers.toLocaleString()} icon={Users} delta={{ value: "Total registered", trend: "up" }} iconColor="text-info bg-info/10" />
+                <StatCard title="Organizations" value={stats.totalOrganizations} icon={Building2} delta={{ value: "+3 this month", trend: "up" }} iconColor="text-success bg-success/10" />
             </div>
 
             <div className="grid gap-6 lg:grid-cols-3">
                 <div className="lg:col-span-2">
                     <Card className="h-full">
-                        <CardHeader>
-                            <CardTitle className="text-base font-semibold">Revenue & Profit Overview</CardTitle>
-                            <CardDescription>Visualizing revenue, backend API costs, and net profit margins.</CardDescription>
+                        <CardHeader className="pb-2">
+                            <CardTitle className="text-base font-semibold">Revenue Breakdown</CardTitle>
+                            <CardDescription>Understanding where your subscription revenue goes.</CardDescription>
                         </CardHeader>
-                        <CardContent>
-                            <div className="h-[250px] w-full mt-4">
+                        <CardContent className="flex flex-col gap-4">
+                            <div className="grid grid-cols-3 gap-3 p-3 mt-2 bg-muted/40 rounded-lg text-[13px]">
+                                <div>
+                                    <div className="font-semibold text-foreground flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-emerald-500"></div> Subs Profit</div>
+                                    <div className="text-muted-foreground leading-tight mt-1 text-[11px]">Recurring plans revenue.</div>
+                                </div>
+                                <div>
+                                    <div className="font-semibold text-foreground flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-blue-500"></div> Add-ons Profit</div>
+                                    <div className="text-muted-foreground leading-tight mt-1 text-[11px]">Extra quota blocks.</div>
+                                </div>
+                                <div>
+                                    <div className="font-semibold text-foreground flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-red-500"></div> Est. Cost</div>
+                                    <div className="text-muted-foreground leading-tight mt-1 text-[11px]">Backend & server costs.</div>
+                                </div>
+                            </div>
+                            
+                            <div className="h-[220px] w-full mt-2">
                                 <ResponsiveContainer width="100%" height="100%">
-                                    <BarChart data={FinancialChartData} layout="vertical" margin={{ top: 0, right: 30, left: 20, bottom: 0 }}>
-                                        <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#E2E8F0" />
-                                        <XAxis type="number" tickFormatter={(v) => `$${v}`} />
-                                        <YAxis dataKey="name" type="category" width={80} tick={{ fontSize: 12, fontWeight: 500 }} />
-                                        <RechartsTooltip formatter={(value: any) => formatCurrency(value || 0)} />
-                                        <Bar dataKey="amount" radius={[0, 4, 4, 0]} barSize={32}>
-                                            {FinancialChartData.map((entry, index) => (
+                                    <PieChart>
+                                        <Pie 
+                                            data={RevenueBreakdown} 
+                                            cx="50%" cy="50%" 
+                                            innerRadius={65} outerRadius={85} 
+                                            paddingAngle={5} 
+                                            dataKey="value"
+                                            stroke="none"
+                                        >
+                                            {RevenueBreakdown.map((entry, index) => (
                                                 <Cell key={`cell-${index}`} fill={entry.color} />
                                             ))}
-                                        </Bar>
-                                    </BarChart>
+                                        </Pie>
+                                        <RechartsTooltip formatter={(value: any) => formatCurrency(value || 0)} />
+                                        <Legend verticalAlign="bottom" height={36}/>
+                                    </PieChart>
                                 </ResponsiveContainer>
                             </div>
                         </CardContent>

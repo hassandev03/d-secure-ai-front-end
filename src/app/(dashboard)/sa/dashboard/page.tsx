@@ -105,7 +105,7 @@ export default function SuperAdminDashboard() {
 
             <div className="mt-4 grid gap-4 xl:grid-cols-4 sm:grid-cols-2">
                 <StatCard title="Total Revenue" value={`$${revStats.totalRevenue.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} icon={TrendingUp} iconColor="text-success bg-success/10" />
-                <StatCard title="API Cost" value={`$${revStats.totalCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} icon={Activity} iconColor="text-warning bg-warning/10" delta={{ value: `$${revStats.unusedCreditsProfit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} extra profit via unused credits`, trend: "up" }} />
+                <StatCard title="Estimated Cost" value={`$${revStats.totalCost.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} icon={Activity} iconColor="text-warning bg-warning/10" delta={{ value: `$${revStats.unusedCreditsProfit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})} saved via unused credits`, trend: "up" }} />
                 <StatCard title="Net Profit" value={`$${revStats.totalProfit.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2})}`} icon={CreditCard} delta={{ value: `${Math.round(revStats.profitMargin)}% margin`, trend: "up" }} iconColor="text-brand-700 bg-brand-50" />
                 <StatCard title="Active Subscriptions" value={stats.activeSubscriptions} icon={CreditCard} iconColor="text-info bg-info/10" />
             </div>

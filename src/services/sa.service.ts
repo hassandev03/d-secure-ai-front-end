@@ -1,7 +1,7 @@
 import { delay } from './api';
 import type {
     SAOrganization, SAProfessional, SADashboardStats, SAActivityItem,
-    SAEnterprisePlan, SAIndividualPlan, RegisterOrgPayload,
+    SAEnterprisePlan, SAIndividualPlan, SAAddonPackage, RegisterOrgPayload,
     OrgStatus, ProfessionalStatus,
 } from '@/types/sa.types';
 import { SUBSCRIPTION_PLANS } from '@/lib/constants';
@@ -183,6 +183,12 @@ const individualPlans: SAIndividualPlan[] = [
     { key: 'MAX', name: SUBSCRIPTION_PLANS.MAX.name, price: SUBSCRIPTION_PLANS.MAX.price, annualPrice: SUBSCRIPTION_PLANS.MAX.annualPrice, requests: SUBSCRIPTION_PLANS.MAX.requests, features: SUBSCRIPTION_PLANS.MAX.features, excluded: SUBSCRIPTION_PLANS.MAX.excluded, active: 33, maxCost: 50 },
 ];
 
+const addonPackages: SAAddonPackage[] = [
+    { id: 'addon-1', name: 'Standard Top-up', credits: 100, price: 5, cost: 0.8, description: 'A quick top-up for everyday tasks.' },
+    { id: 'addon-2', name: 'Professional Pack', credits: 500, price: 20, cost: 3.5, popular: true, description: 'Best value for active professionals and small teams.' },
+    { id: 'addon-3', name: 'Volume Block', credits: 2000, price: 70, cost: 12.0, description: 'Large quota block for enterprise needs and heavy workloads.' },
+];
+
 export async function getOrganizations(): Promise<SAOrganization[]> {
     await delay(300);
     return [...organizations];
@@ -254,16 +260,16 @@ export async function getDashboardStats(): Promise<SADashboardStats> {
     const activeOrgs = organizations.filter((o) => o.status === 'ACTIVE').length;
     const totalPros = professionals.length;
     const totalUsers = organizations.reduce((s, o) => s + o.employees, 0) + totalPros;
-    const totalRequests = 128400;
+    const totalRequests = 49400;
     return {
         totalOrganizations: organizations.length,
         activeOrganizations: activeOrgs,
         totalUsers,
         totalProfessionals: totalPros,
         totalRequests,
-        todayRequests: 2340,
-        anonymizationOps: 89200,
-        activeSubscriptions: 267,
+        todayRequests: 420,
+        anonymizationOps: 38200,
+        activeSubscriptions: organizations.length + totalPros,
         avgRequestsPerUser: Math.round(totalRequests / totalUsers),
     };
 }
@@ -286,6 +292,33 @@ export async function getEnterprisePlans(): Promise<SAEnterprisePlan[]> {
 export async function getIndividualPlans(): Promise<SAIndividualPlan[]> {
     await delay(200);
     return [...individualPlans];
+}
+
+export async function getAddonPackages(): Promise<SAAddonPackage[]> {
+    await delay(200);
+    return [...addonPackages];
+}
+
+export async function updateEnterprisePlan(updatedPlan: SAEnterprisePlan): Promise<void> {
+    await delay(300);
+    const index = enterprisePlans.findIndex(p => p.key === updatedPlan.key);
+    if (index !== -1) enterprisePlans[index] = updatedPlan;
+}
+
+export async function updateIndividualPlan(updatedPlan: SAIndividualPlan): Promise<void> {
+    await delay(300);
+    const index = individualPlans.findIndex(p => p.key === updatedPlan.key);
+    if (index !== -1) individualPlans[index] = updatedPlan;
+}
+
+export async function updateAddonPackage(updatedPackage: SAAddonPackage): Promise<void> {
+    await delay(300);
+    const index = addonPackages.findIndex(p => p.id === updatedPackage.id);
+    if (index !== -1) {
+        addonPackages[index] = updatedPackage;
+    } else {
+        addonPackages.push(updatedPackage);
+    }
 }
 
 import type { SARevenueStats } from '@/types/sa.types';
@@ -323,14 +356,38 @@ export async function getRevenueStats(): Promise<SARevenueStats> {
         maxPossibleCost += maxCost;
     }
 
+    const subscriptionsProfit = totalRevenue - totalCost;
+
+    // Add-on Packages (Mocking purchases for current month)
+    const mockAddonPurchases: Record<string, number> = {
+        'addon-1': 145, // 145 basic top-ups
+        'addon-2': 82,  // 82 pro packs
+        'addon-3': 18,  // 18 volume blocks
+    };
+
+    let addonRevenue = 0;
+    let addonCost = 0;
+
+    for (const addon of addonPackages) {
+        const amount = mockAddonPurchases[addon.id] || 0;
+        addonRevenue += addon.price * amount;
+        addonCost += addon.cost * amount;
+    }
+
+    totalRevenue += addonRevenue;
+    totalCost += addonCost;
+
+    const addonProfit = addonRevenue - addonCost;
     const totalProfit = totalRevenue - totalCost;
-    const unusedCreditsProfit = maxPossibleCost - totalCost;
+    const unusedCreditsProfit = maxPossibleCost - (totalCost - addonCost); // Only subscriptions have "unused credits" conceptually
     const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
 
     return {
         totalRevenue,
         totalCost,
         totalProfit,
+        subscriptionsProfit,
+        addonProfit,
         unusedCreditsProfit,
         profitMargin
     };
