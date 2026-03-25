@@ -12,6 +12,7 @@ import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { getEnterprisePlans, getIndividualPlans } from "@/services/sa.service";
 import type { SAEnterprisePlan, SAIndividualPlan } from "@/types/sa.types";
+import { PlanEditSheet } from "./PlanEditSheet";
 
 const tierIcons: Record<string, React.ElementType> = {
     starter: Zap,
@@ -27,6 +28,8 @@ export default function SubscriptionsPage() {
     const [entPlans, setEntPlans] = useState<SAEnterprisePlan[]>([]);
     const [indPlans, setIndPlans] = useState<SAIndividualPlan[]>([]);
     const [loading, setLoading] = useState(true);
+    const [editingPlan, setEditingPlan] = useState<any>(null);
+    const [isSheetOpen, setIsSheetOpen] = useState(false);
 
     useEffect(() => {
         Promise.all([getEnterprisePlans(), getIndividualPlans()]).then(([e, i]) => {
@@ -106,7 +109,7 @@ export default function SubscriptionsPage() {
                         <Label htmlFor="billing-toggle" className={`text-sm font-semibold cursor-pointer ${!isAnnual ? "text-foreground" : "text-muted-foreground"}`}>Monthly</Label>
                         <Switch id="billing-toggle" checked={isAnnual} onCheckedChange={setIsAnnual} className="data-[state=checked]:bg-brand-600" />
                         <Label htmlFor="billing-toggle" className={`text-sm font-semibold cursor-pointer flex items-center gap-1.5 ${isAnnual ? "text-foreground" : "text-muted-foreground"}`}>
-                            Annually <Badge className="bg-success text-success-foreground hover:bg-success h-5 px-1.5 text-[10px] rounded-sm">SAVE 20%</Badge>
+                            Annually <Badge className="bg-success text-white hover:bg-success h-5 px-1.5 text-[10px] font-bold tracking-wide border-0 rounded-sm">SAVE 20%</Badge>
                         </Label>
                     </div>
                 </div>
@@ -167,7 +170,10 @@ export default function SubscriptionsPage() {
                                         <Button
                                             className={`w-full py-5 text-sm font-semibold ${plan.popular ? "bg-gradient-to-r from-brand-600 to-brand-700 hover:from-brand-700 hover:to-brand-800 text-white" : ""}`}
                                             variant={plan.popular ? "default" : "outline"}
-                                            onClick={() => toast.success(`${plan.name} plan settings opened.`)}
+                                            onClick={() => {
+                                                setEditingPlan(plan);
+                                                setIsSheetOpen(true);
+                                            }}
                                         >
                                             Manage {plan.name} Plan
                                         </Button>
@@ -226,7 +232,10 @@ export default function SubscriptionsPage() {
                                         <Button
                                             className={`w-full ${plan.popular ? "bg-brand-600 hover:bg-brand-700 text-white" : ""}`}
                                             variant={plan.popular ? "default" : "outline"}
-                                            onClick={() => toast.success(`${plan.name} plan configuration opened.`)}
+                                            onClick={() => {
+                                                setEditingPlan(plan);
+                                                setIsSheetOpen(true);
+                                            }}
                                         >
                                             Configure Tier
                                         </Button>
@@ -237,6 +246,23 @@ export default function SubscriptionsPage() {
                     </div>
                 </TabsContent>
             </Tabs>
+
+            <PlanEditSheet
+                plan={editingPlan}
+                isOpen={isSheetOpen}
+                onClose={() => {
+                    setIsSheetOpen(false);
+                    setTimeout(() => setEditingPlan(null), 300);
+                }}
+                onSave={(updatedPlan) => {
+                    if ('features' in updatedPlan) {
+                        setEntPlans(prev => prev.map(p => p.key === updatedPlan.key ? updatedPlan : p));
+                    } else {
+                        setIndPlans(prev => prev.map(p => p.key === updatedPlan.key ? updatedPlan : p));
+                    }
+                    toast.success(`${updatedPlan.name} plan updated successfully.`);
+                }}
+            />
         </div>
     );
 }
