@@ -20,7 +20,7 @@ const stats = {
     todayRequests: 2340,
     anonymizationOps: 89200,
     activeSubscriptions: 267,
-    anonymizationAccuracy: 98.7,
+    platformUptime: 99.99,
 };
 
 const recentOrgs = [
@@ -70,11 +70,11 @@ export default function SuperAdminDashboard() {
                     iconColor="text-success bg-success/10"
                 />
                 <StatCard
-                    title="Anonymization Accuracy"
-                    value={`${stats.anonymizationAccuracy}%`}
+                    title="Platform Uptime"
+                    value={`${stats.platformUptime}%`}
                     icon={Shield}
-                    delta={{ value: `${stats.anonymizationOps.toLocaleString()} ops`, trend: "flat" }}
-                    iconColor="text-warning bg-warning/10"
+                    delta={{ value: "Operational", trend: "up" }}
+                    iconColor="text-success bg-success/10"
                 />
             </div>
 
