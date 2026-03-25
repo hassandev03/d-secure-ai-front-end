@@ -7,6 +7,18 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Plus, X } from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+
+const AVAILABLE_MODELS = [
+    "GPT-4o",
+    "GPT-4o mini",
+    "Claude 3.5 Sonnet",
+    "Claude 3 Haiku",
+    "Gemini 1.5 Pro",
+    "Gemini 1.5 Flash",
+    "Llama 3 70B",
+    "All Models"
+];
 
 export function PlanEditModal({
     plan,
@@ -20,6 +32,8 @@ export function PlanEditModal({
     onSave: (updatedPlan: any) => void;
 }) {
     const [formData, setFormData] = useState<any>(null);
+    const [modelInput, setModelInput] = useState("");
+    const [showModelDropdown, setShowModelDropdown] = useState(false);
 
     useEffect(() => {
         if (plan) {
@@ -33,11 +47,30 @@ export function PlanEditModal({
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
+        
         setFormData((prev: any) => ({
             ...prev,
-            [name]: name.includes("rice") || name === "maxCost" || name === "requests" || name === "perUser" || name === "active" ? Number(value) : value,
+            [name]: name.includes("rice") || ["maxCost", "requests", "perUser", "active", "maxUploadSize", "contextWindow"].includes(name) ? Number(value) : value,
         }));
     };
+
+    const filteredModels = AVAILABLE_MODELS.filter(m => m.toLowerCase().includes(modelInput.toLowerCase()) && !(formData?.allowedModels || []).includes(m));
+
+    const addModel = (model: string) => {
+        setFormData((prev: any) => ({
+            ...prev,
+            allowedModels: [...(prev.allowedModels || []), model]
+        }));
+        setModelInput("");
+        setShowModelDropdown(false);
+    }
+    
+    const removeAllowedModel = (model: string) => {
+        setFormData((prev: any) => ({
+            ...prev,
+            allowedModels: (prev.allowedModels || []).filter((m: string) => m !== model)
+        }));
+    }
 
     const handleFeaturesChange = (index: number, value: string) => {
         const newFeatures = [...(formData.features || [])];
@@ -122,6 +155,64 @@ export function PlanEditModal({
                                 <div className="relative">
                                     <span className="absolute left-3 top-3 text-muted-foreground">$</span>
                                     <Input id="maxCost" name="maxCost" type="number" step="1" value={formData.maxCost || 0} onChange={handleChange} className="pl-7 h-11" />
+                                </div>
+                            </div>
+
+                            <div className="grid grid-cols-2 gap-4 pt-2">
+                                <div className="grid gap-2">
+                                    <Label htmlFor="maxUploadSize" className="text-sm font-semibold">Max Upload Size (MB)</Label>
+                                    <Input id="maxUploadSize" name="maxUploadSize" type="number" value={formData.maxUploadSize || 0} onChange={handleChange} className="h-11" />
+                                </div>
+                                <div className="grid gap-2">
+                                    <Label htmlFor="contextWindow" className="text-sm font-semibold">Context Window Limit</Label>
+                                    <Input id="contextWindow" name="contextWindow" type="number" value={formData.contextWindow || 0} onChange={handleChange} className="h-11" />
+                                </div>
+                            </div>
+
+                            <div className="grid gap-2 pt-2 relative">
+                                <Label htmlFor="allowedModels" className="text-sm font-semibold">Allowed AI Models</Label>
+                                {formData.allowedModels && formData.allowedModels.length > 0 && (
+                                    <div className="flex flex-wrap gap-2 mb-1">
+                                        {formData.allowedModels.map((m: string) => (
+                                            <Badge key={m} variant="secondary" className="flex items-center gap-1 px-2 py-1 text-xs">
+                                                {m}
+                                                <button type="button" onClick={() => removeAllowedModel(m)} className="text-muted-foreground hover:text-foreground">
+                                                    <X className="h-3 w-3" />
+                                                </button>
+                                            </Badge>
+                                        ))}
+                                    </div>
+                                )}
+                                <div className="relative">
+                                    <Input 
+                                        value={modelInput} 
+                                        onChange={(e) => {
+                                            setModelInput(e.target.value);
+                                            setShowModelDropdown(true);
+                                        }} 
+                                        onFocus={() => setShowModelDropdown(true)}
+                                        onBlur={() => setTimeout(() => setShowModelDropdown(false), 200)}
+                                        placeholder="Type to search and add AI Models..." 
+                                        className="h-11" 
+                                    />
+                                    {showModelDropdown && filteredModels.length > 0 && (
+                                        <div className="absolute top-full left-0 z-50 mt-1 w-full rounded-md border bg-popover text-popover-foreground shadow-md outline-none">
+                                            <div className="max-h-48 overflow-y-auto p-1">
+                                                {filteredModels.map(m => (
+                                                    <div 
+                                                        key={m} 
+                                                        onMouseDown={(e) => {
+                                                            e.preventDefault();
+                                                            addModel(m);
+                                                        }}
+                                                        className="relative flex select-none rounded-sm px-2 py-1.5 text-sm outline-none hover:bg-accent hover:text-accent-foreground cursor-pointer"
+                                                    >
+                                                        {m}
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
                                 </div>
                             </div>
                         </div>

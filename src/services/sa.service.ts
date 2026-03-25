@@ -159,18 +159,21 @@ const activityFeed: SAActivityItem[] = [
 const enterprisePlans: SAEnterprisePlan[] = [
     {
         key: 'starter', name: 'Starter', price: 499, annualPrice: 399, perUser: 4.99,
+        maxUploadSize: 0, contextWindow: 8000, allowedModels: ['GPT-4o mini'],
         features: ['Basic entity anonymization', 'Up to 1,000 requests/month', '5 departments max', 'Standard support', '30-day history'],
         excluded: ['No context-aware anonymization', 'No file upload', 'Limited models'],
         color: 'from-blue-500/10 to-blue-500/5', borderColor: 'border-blue-200', maxCost: 5
     },
     {
         key: 'professional', name: 'Professional', price: 999, annualPrice: 799, perUser: 3.99, popular: true,
+        maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'],
         features: ['Context-aware anonymization', 'Up to 10,000 requests/month', 'Unlimited departments', 'All AI providers', 'File upload support', '90-day history', 'Priority support'],
         excluded: [],
         color: 'from-brand-500/20 to-brand-500/5', borderColor: 'border-brand-500 ring-1 ring-brand-500/30', maxCost: 40
     },
     {
         key: 'enterprise', name: 'Enterprise', price: 2499, annualPrice: 1999, perUser: 2.99,
+        maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'],
         features: ['Everything in Professional', 'Up to 50,000 requests/month', 'Custom anonymization rules', 'API access', 'Unlimited history', 'Dedicated account manager', 'Custom SLA'],
         excluded: [],
         color: 'from-emerald-500/10 to-emerald-500/5', borderColor: 'border-emerald-200', maxCost: 200
@@ -178,9 +181,9 @@ const enterprisePlans: SAEnterprisePlan[] = [
 ];
 
 const individualPlans: SAIndividualPlan[] = [
-    { key: 'FREE', name: SUBSCRIPTION_PLANS.FREE.name, price: SUBSCRIPTION_PLANS.FREE.price, annualPrice: SUBSCRIPTION_PLANS.FREE.annualPrice, requests: SUBSCRIPTION_PLANS.FREE.requests, features: SUBSCRIPTION_PLANS.FREE.features, excluded: SUBSCRIPTION_PLANS.FREE.excluded, active: 180, maxCost: 0.5 },
-    { key: 'PRO', name: SUBSCRIPTION_PLANS.PRO.name, price: SUBSCRIPTION_PLANS.PRO.price, annualPrice: SUBSCRIPTION_PLANS.PRO.annualPrice, requests: SUBSCRIPTION_PLANS.PRO.requests, features: SUBSCRIPTION_PLANS.PRO.features, excluded: SUBSCRIPTION_PLANS.PRO.excluded, active: 54, popular: true, maxCost: 15 },
-    { key: 'MAX', name: SUBSCRIPTION_PLANS.MAX.name, price: SUBSCRIPTION_PLANS.MAX.price, annualPrice: SUBSCRIPTION_PLANS.MAX.annualPrice, requests: SUBSCRIPTION_PLANS.MAX.requests, features: SUBSCRIPTION_PLANS.MAX.features, excluded: SUBSCRIPTION_PLANS.MAX.excluded, active: 33, maxCost: 50 },
+    { key: 'FREE', name: SUBSCRIPTION_PLANS.FREE.name, price: SUBSCRIPTION_PLANS.FREE.price, annualPrice: SUBSCRIPTION_PLANS.FREE.annualPrice, requests: SUBSCRIPTION_PLANS.FREE.requests, maxUploadSize: 5, contextWindow: 4000, allowedModels: ['GPT-4o mini'], features: SUBSCRIPTION_PLANS.FREE.features, excluded: SUBSCRIPTION_PLANS.FREE.excluded, active: 180, maxCost: 0.5 },
+    { key: 'PRO', name: SUBSCRIPTION_PLANS.PRO.name, price: SUBSCRIPTION_PLANS.PRO.price, annualPrice: SUBSCRIPTION_PLANS.PRO.annualPrice, requests: SUBSCRIPTION_PLANS.PRO.requests, maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'], features: SUBSCRIPTION_PLANS.PRO.features, excluded: SUBSCRIPTION_PLANS.PRO.excluded, active: 54, popular: true, maxCost: 15 },
+    { key: 'MAX', name: SUBSCRIPTION_PLANS.MAX.name, price: SUBSCRIPTION_PLANS.MAX.price, annualPrice: SUBSCRIPTION_PLANS.MAX.annualPrice, requests: SUBSCRIPTION_PLANS.MAX.requests, maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'], features: SUBSCRIPTION_PLANS.MAX.features, excluded: SUBSCRIPTION_PLANS.MAX.excluded, active: 33, maxCost: 50 },
 ];
 
 const addonPackages: SAAddonPackage[] = [
