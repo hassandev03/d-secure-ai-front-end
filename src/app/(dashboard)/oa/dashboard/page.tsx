@@ -15,7 +15,7 @@ import {
 } from "recharts";
 import PageHeader from "@/components/layout/PageHeader";
 import StatCard from "@/components/shared/StatCard";
-import QuotaBar from "@/components/shared/QuotaBar";
+import QuotaGauge from "@/components/shared/QuotaGauge";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -79,16 +79,16 @@ export default function OrgAdminDashboard() {
             .map(d => ({
                 name: d.name,
                 color: d.color,
-                used: d.quota.used,
+                used: Math.round(d.budget * (d.percentageUsed / 100)),
             }))
             .sort((a, b) => b.used - a.used),
         [depts],
     );
 
     const quotaAlerts = useMemo(() => ({
-        critical:       depts.filter(d => d.quota.total > 0 && (d.quota.used / d.quota.total) >= 0.9),
-        warning:        depts.filter(d => d.quota.total > 0 && (d.quota.used / d.quota.total) >= 0.7 && (d.quota.used / d.quota.total) < 0.9),
-        underutilized:  depts.filter(d => d.quota.total > 0 && (d.quota.used / d.quota.total) < 0.4),
+        critical:       depts.filter(d => d.budget > 0 && d.percentageUsed >= 90),
+        warning:        depts.filter(d => d.budget > 0 && d.percentageUsed >= 70 && d.percentageUsed < 90),
+        underutilized:  depts.filter(d => d.budget > 0 && d.percentageUsed < 40),
     }), [depts]);
 
     if (!stats) return null;
@@ -110,24 +110,24 @@ export default function OrgAdminDashboard() {
                     delta={{ value: `${stats.activeEmployees} of ${stats.totalEmployees} employees active`, trend: stats.adoptionRate >= 80 ? "up" : "down" }}
                 />
                 <StatCard
-                    title="Avg Requests / Employee"
-                    value={stats.avgRequestsPerEmployee}
+                    title="Avg Credits / Employee"
+                    value={stats.avgCreditsPerEmployee}
                     icon={TrendingUp}
                     delta={{ value: "Per active employee this month", trend: "flat" }}
                     iconColor="text-success bg-success/10"
                 />
                 <StatCard
-                    title="Quota Utilization"
+                    title="Budget Utilization"
                     value={`${stats.quotaUtilization}%`}
                     icon={Percent}
-                    delta={{ value: `${stats.monthlyRequests.toLocaleString()} of ${stats.monthlyQuota.toLocaleString()} used`, trend: stats.quotaUtilization >= 80 ? "up" : "flat" }}
+                    delta={{ value: `${stats.monthlyCredits.toLocaleString()} of ${stats.monthlyBudget.toLocaleString()} credits used`, trend: stats.quotaUtilization >= 80 ? "up" : "flat" }}
                     iconColor="text-info bg-info/10"
                 />
                 <StatCard
                     title="Pending Actions"
                     value={stats.pendingQuotaRequests}
                     icon={Bell}
-                    delta={{ value: "Quota requests awaiting review", trend: stats.pendingQuotaRequests > 0 ? "up" : "flat" }}
+                    delta={{ value: "Budget requests awaiting review", trend: stats.pendingQuotaRequests > 0 ? "up" : "flat" }}
                     iconColor="text-warning bg-warning/10"
                 />
             </div>
@@ -136,13 +136,15 @@ export default function OrgAdminDashboard() {
             <Card className="mt-6">
                 <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
                     <div>
-                        <CardTitle className="text-base font-semibold">Organisation Quota</CardTitle>
-                        <CardDescription className="mt-0.5">{stats.unallocatedQuota.toLocaleString()} requests unallocated — available to assign to departments.</CardDescription>
+                        <CardTitle className="text-base font-semibold">Organisation Budget</CardTitle>
+                        <CardDescription className="mt-0.5">{stats.unallocatedBudget.toLocaleString()} credits unallocated — available to assign to departments.</CardDescription>
                     </div>
                     <Link href="/oa/quota"><Button variant="ghost" size="sm">Manage →</Button></Link>
                 </CardHeader>
                 <CardContent>
-                    <QuotaBar used={stats.monthlyRequests} total={stats.monthlyQuota} label="Monthly AI Requests" />
+                    <div className="flex justify-center py-2">
+                        <QuotaGauge percentageUsed={stats.quotaUtilization} size="md" planName="Organization Plan" renewsAt="2026-05-01T00:00:00Z" />
+                    </div>
                 </CardContent>
             </Card>
 
@@ -273,7 +275,8 @@ export default function OrgAdminDashboard() {
                             <div>
                                 <p className="text-xs font-semibold text-danger mb-2">Critical — Over 90% used, may run out</p>
                                 {quotaAlerts.critical.map(d => {
-                                    const pct = Math.round((d.quota.used / d.quota.total) * 100);
+                                    const pct = Math.round(d.percentageUsed);
+                                    const remaining = Math.round(d.budget - (d.budget * (d.percentageUsed / 100)));
                                     return (
                                         <div key={d.name} className="flex items-center justify-between rounded-lg border border-danger/20 bg-danger/5 px-3 py-2.5 mb-2 last:mb-0">
                                             <div className="flex items-center gap-2">
@@ -282,7 +285,7 @@ export default function OrgAdminDashboard() {
                                             </div>
                                             <div className="text-right">
                                                 <span className="text-sm font-bold text-danger">{pct}%</span>
-                                                <p className="text-[10px] text-muted-foreground">{d.quota.total - d.quota.used} remaining</p>
+                                                <p className="text-[10px] text-muted-foreground">{remaining} remaining</p>
                                             </div>
                                         </div>
                                     );
@@ -294,7 +297,8 @@ export default function OrgAdminDashboard() {
                             <div>
                                 <p className="text-xs font-semibold text-warning mb-2">Warning — 70–90% used, monitor closely</p>
                                 {quotaAlerts.warning.map(d => {
-                                    const pct = Math.round((d.quota.used / d.quota.total) * 100);
+                                    const pct = Math.round(d.percentageUsed);
+                                    const remaining = Math.round(d.budget - (d.budget * (d.percentageUsed / 100)));
                                     return (
                                         <div key={d.name} className="flex items-center justify-between rounded-lg border border-warning/20 bg-warning/5 px-3 py-2.5 mb-2 last:mb-0">
                                             <div className="flex items-center gap-2">
@@ -303,7 +307,7 @@ export default function OrgAdminDashboard() {
                                             </div>
                                             <div className="text-right">
                                                 <span className="text-sm font-bold text-warning">{pct}%</span>
-                                                <p className="text-[10px] text-muted-foreground">{d.quota.total - d.quota.used} remaining</p>
+                                                <p className="text-[10px] text-muted-foreground">{remaining} remaining</p>
                                             </div>
                                         </div>
                                     );
@@ -315,7 +319,8 @@ export default function OrgAdminDashboard() {
                             <div>
                                 <p className="text-xs font-semibold text-info mb-2">Underutilized — Below 40%, consider redistributing</p>
                                 {quotaAlerts.underutilized.map(d => {
-                                    const pct = Math.round((d.quota.used / d.quota.total) * 100);
+                                    const pct = Math.round(d.percentageUsed);
+                                    const remaining = Math.round(d.budget - (d.budget * (d.percentageUsed / 100)));
                                     return (
                                         <div key={d.name} className="flex items-center justify-between rounded-lg border border-border px-3 py-2.5 mb-2 last:mb-0">
                                             <div className="flex items-center gap-2">
@@ -324,7 +329,7 @@ export default function OrgAdminDashboard() {
                                             </div>
                                             <div className="text-right">
                                                 <span className="text-sm font-bold text-info">{pct}%</span>
-                                                <p className="text-[10px] text-muted-foreground">{d.quota.total - d.quota.used} unused</p>
+                                                <p className="text-[10px] text-muted-foreground">{remaining} unused</p>
                                             </div>
                                         </div>
                                     );

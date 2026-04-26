@@ -101,7 +101,7 @@ export default function AnalyticsPage() {
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard title="Total Revenue" value={formatCurrency(revStats.totalRevenue)} icon={DollarSign} delta={{ value: "+8% this month", trend: "up" }} iconColor="text-success bg-success/10" />
-                <StatCard title="Total Requests" value={(stats.totalRequests / 1000).toFixed(1) + "K"} icon={Activity} delta={{ value: "+12% this week", trend: "up" }} />
+                <StatCard title="Total Credits Used" value={(stats.totalCreditsUsed / 1000).toFixed(1) + "K"} icon={Activity} delta={{ value: "+12% this week", trend: "up" }} />
                 <StatCard title="Active Users" value={stats.totalUsers.toLocaleString()} icon={Users} delta={{ value: "Total registered", trend: "up" }} iconColor="text-info bg-info/10" />
                 <StatCard title="Organizations" value={stats.totalOrganizations} icon={Building2} delta={{ value: "+3 this month", trend: "up" }} iconColor="text-success bg-success/10" />
             </div>

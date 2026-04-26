@@ -20,7 +20,7 @@ import type { LLMModel } from '@/types/chat.types';
 // ─────────────────────────────────────────────────────────────────────────────
 
 export type OAOrgConfig = {
-    totalQuota:     number;
+    totalBudget:    number;
     plan:           string;
     quotaRenewsAt:  string;
     name:           string;
@@ -64,7 +64,7 @@ export type OAOrgPolicy = {
     speechToText:      boolean;
     allModels:         boolean;
     permittedModels:   LLMModel[];
-    defaultDailyLimit: number;
+    defaultCreditLimit: number;
     maxDailyLimit:     number;
     allowApiAccess:    boolean;
 };
@@ -79,7 +79,7 @@ export type OADeptPolicyState = {
     speechToText:    boolean;
     allModels:       boolean;
     permittedModels: LLMModel[];
-    dailyLimit:      number;
+    creditLimit:      number;
     synced:          boolean;
 };
 
@@ -89,8 +89,8 @@ export type OADepartment = {
     head:     string;
     headEmail: string;
     employees: number;
-    /** used = requests consumed this month; total = allocated monthly quota */
-    quota:    { used: number; total: number };
+    percentageUsed: number;
+    budget: number;
     color:    string; // hex, e.g. "#3B82F6"
 };
 
@@ -102,8 +102,8 @@ export type OAEmployee = {
     department:    string; // display name (= OADepartment.name)
     role:          'EMPLOYEE' | 'DEPT_ADMIN';
     status:        'ACTIVE' | 'INACTIVE' | 'PENDING';
-    requests:      number;
-    dailyLimit:    number;
+    creditsUsed:      number;
+    creditLimit:    number;
     lastActive:    string;
 };
 
@@ -168,13 +168,13 @@ export type OrgDashboardStats = {
     activeEmployees:         number;
     pendingEmployees:        number;
     departments:             number;
-    monthlyRequests:         number;
-    monthlyQuota:            number;
+    monthlyCredits:      number;
+    monthlyBudget:     number;
     quotaUtilization:        number;
-    unallocatedQuota:        number;
+    unallocatedBudget:       number;
     pendingQuotaRequests:    number;
     adoptionRate:            number;
-    avgRequestsPerEmployee:  number;
+    avgCreditsPerEmployee:   number;
 };
 
 export type OrgModelUsageSlice = {
@@ -185,7 +185,7 @@ export type OrgModelUsageSlice = {
 
 export type OrgUsageTrendPoint = {
     date:     string;
-    requests: number;
+    creditsUsed: number;
 };
 
 export type RecentActivityItem = {
@@ -202,7 +202,7 @@ export type RecentActivityItem = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 const ORG_CONFIG: OAOrgConfig = {
-    totalQuota:    8_000,
+    totalBudget:   8_000,
     plan:          "Enterprise",
     quotaRenewsAt: "2026-04-01",
     name:          "Acme Corporation",
@@ -246,7 +246,7 @@ const ORG_POLICY: OAOrgPolicy = {
     speechToText:      false,
     allModels:         false,
     permittedModels:   ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[],
-    defaultDailyLimit: 50,
+    defaultCreditLimit: 50,
     maxDailyLimit:     200,
     allowApiAccess:    false,
 };
@@ -257,12 +257,12 @@ const ALL_MODELS = [
 ] as LLMModel[];
 
 const DEPT_POLICIES: OADeptPolicyState[] = [
-    { id: "d1", name: "Engineering", head: "Sarah Johnson", employees: 45, color: "bg-blue-500",    fileUpload: true,  speechToText: true,  allModels: true,  permittedModels: ALL_MODELS, dailyLimit: 80,  synced: false },
-    { id: "d2", name: "Marketing",   head: "Emma Davis",    employees: 20, color: "bg-pink-500",    fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet"] as LLMModel[], dailyLimit: 50, synced: false },
-    { id: "d3", name: "Sales",       head: "David Kim",     employees: 25, color: "bg-orange-500",  fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[], dailyLimit: 50, synced: true },
-    { id: "d4", name: "Finance",     head: "Aisha Patel",   employees: 12, color: "bg-emerald-500", fileUpload: false, speechToText: false, allModels: false, permittedModels: ["gpt-5-1"] as LLMModel[], dailyLimit: 30, synced: false },
-    { id: "d5", name: "HR",          head: "Lisa Chen",     employees: 10, color: "bg-violet-500",  fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[], dailyLimit: 50, synced: true },
-    { id: "d6", name: "Operations",  head: "James Wilson",  employees: 8,  color: "bg-amber-500",   fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet"] as LLMModel[], dailyLimit: 40, synced: false },
+    { id: "d1", name: "Engineering", head: "Sarah Johnson", employees: 45, color: "bg-blue-500",    fileUpload: true,  speechToText: true,  allModels: true,  permittedModels: ALL_MODELS, creditLimit: 80,  synced: false },
+    { id: "d2", name: "Marketing",   head: "Emma Davis",    employees: 20, color: "bg-pink-500",    fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet"] as LLMModel[], creditLimit: 50, synced: false },
+    { id: "d3", name: "Sales",       head: "David Kim",     employees: 25, color: "bg-orange-500",  fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[], creditLimit: 50, synced: true },
+    { id: "d4", name: "Finance",     head: "Aisha Patel",   employees: 12, color: "bg-emerald-500", fileUpload: false, speechToText: false, allModels: false, permittedModels: ["gpt-5-1"] as LLMModel[], creditLimit: 30, synced: false },
+    { id: "d5", name: "HR",          head: "Lisa Chen",     employees: 10, color: "bg-violet-500",  fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[], creditLimit: 50, synced: true },
+    { id: "d6", name: "Operations",  head: "James Wilson",  employees: 8,  color: "bg-amber-500",   fileUpload: true,  speechToText: false, allModels: false, permittedModels: ["gpt-5-1", "claude-4-6-sonnet"] as LLMModel[], creditLimit: 40, synced: false },
 ];
 
 
@@ -274,27 +274,27 @@ export const DEPT_COLORS = [
 ];
 
 const DEPTS: OADepartment[] = [
-    { id: "dept-001", name: "Engineering", head: "Sarah Johnson", headEmail: "sarah@acme.com",  employees: 45, quota: { used: 1420, total: 1800 }, color: "#3B82F6" },
-    { id: "dept-002", name: "Marketing",   head: "Emma Davis",    headEmail: "emma@acme.com",   employees: 20, quota: { used: 620,  total: 800  }, color: "#EC4899" },
-    { id: "dept-003", name: "Sales",       head: "David Kim",     headEmail: "david@acme.com",  employees: 25, quota: { used: 480,  total: 700  }, color: "#F97316" },
-    { id: "dept-004", name: "Finance",     head: "Aisha Patel",   headEmail: "aisha@acme.com",  employees: 12, quota: { used: 390,  total: 600  }, color: "#10B981" },
-    { id: "dept-005", name: "HR",          head: "Lisa Chen",     headEmail: "lisa@acme.com",   employees: 10, quota: { used: 180,  total: 400  }, color: "#8B5CF6" },
-    { id: "dept-006", name: "Operations",  head: "James Wilson",  headEmail: "james@acme.com",  employees: 8,  quota: { used: 310,  total: 700  }, color: "#F59E0B" },
+    { id: "dept-001", name: "Engineering", head: "Sarah Johnson", headEmail: "sarah@acme.com",  employees: 45, percentageUsed: 78.8, budget: 1800, color: "#3B82F6" },
+    { id: "dept-002", name: "Marketing",   head: "Emma Davis",    headEmail: "emma@acme.com",   employees: 20, percentageUsed: 77.5, budget: 800,  color: "#EC4899" },
+    { id: "dept-003", name: "Sales",       head: "David Kim",     headEmail: "david@acme.com",  employees: 25, percentageUsed: 68.5, budget: 700,  color: "#F97316" },
+    { id: "dept-004", name: "Finance",     head: "Aisha Patel",   headEmail: "aisha@acme.com",  employees: 12, percentageUsed: 65.0, budget: 600,  color: "#10B981" },
+    { id: "dept-005", name: "HR",          head: "Lisa Chen",     headEmail: "lisa@acme.com",   employees: 10, percentageUsed: 45.0, budget: 400,  color: "#8B5CF6" },
+    { id: "dept-006", name: "Operations",  head: "James Wilson",  headEmail: "james@acme.com",  employees: 8,  percentageUsed: 44.2, budget: 700,  color: "#F59E0B" },
 ];
 
 const EMPLOYEES: OAEmployee[] = [
-    { id: "emp-001", name: "John Miller",    email: "john@acme.com",    departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   requests: 180, dailyLimit: 50,  lastActive: "2026-03-13" },
-    { id: "emp-002", name: "Emma Davis",     email: "emma@acme.com",    departmentId: "dept-002", department: "Marketing",   role: "DEPT_ADMIN", status: "ACTIVE",   requests: 95,  dailyLimit: 100, lastActive: "2026-03-13" },
-    { id: "emp-003", name: "Carlos Ruiz",    email: "carlos@acme.com",  departmentId: "dept-003", department: "Sales",       role: "EMPLOYEE",   status: "PENDING",  requests: 0,   dailyLimit: 30,  lastActive: "—" },
-    { id: "emp-004", name: "Aisha Patel",    email: "aisha@acme.com",   departmentId: "dept-004", department: "Finance",     role: "DEPT_ADMIN", status: "ACTIVE",   requests: 210, dailyLimit: 100, lastActive: "2026-03-12" },
-    { id: "emp-005", name: "Mike Chen",      email: "mike@acme.com",    departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "INACTIVE", requests: 45,  dailyLimit: 0,   lastActive: "2026-02-15" },
-    { id: "emp-006", name: "Sophie Laurent", email: "sophie@acme.com",  departmentId: "dept-005", department: "HR",          role: "EMPLOYEE",   status: "ACTIVE",   requests: 60,  dailyLimit: 30,  lastActive: "2026-03-13" },
-    { id: "emp-007", name: "Raj Patel",      email: "raj@acme.com",     departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   requests: 320, dailyLimit: 50,  lastActive: "2026-03-13" },
-    { id: "emp-008", name: "Lisa Wang",      email: "lisa@acme.com",    departmentId: "dept-006", department: "Operations",  role: "EMPLOYEE",   status: "ACTIVE",   requests: 78,  dailyLimit: 30,  lastActive: "2026-03-12" },
-    { id: "emp-009", name: "Tom Brennan",    email: "tom@acme.com",     departmentId: "dept-003", department: "Sales",       role: "DEPT_ADMIN", status: "ACTIVE",   requests: 134, dailyLimit: 100, lastActive: "2026-03-13" },
-    { id: "emp-010", name: "Nina Hoffmann",  email: "nina@acme.com",    departmentId: "dept-004", department: "Finance",     role: "EMPLOYEE",   status: "ACTIVE",   requests: 88,  dailyLimit: 30,  lastActive: "2026-03-11" },
-    { id: "emp-011", name: "Kevin Park",     email: "kevin@acme.com",   departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "PENDING",  requests: 0,   dailyLimit: 30,  lastActive: "—" },
-    { id: "emp-012", name: "Priya Sharma",   email: "priya@acme.com",   departmentId: "dept-005", department: "HR",          role: "DEPT_ADMIN", status: "ACTIVE",   requests: 112, dailyLimit: 100, lastActive: "2026-03-13" },
+    { id: "emp-001", name: "John Miller",    email: "john@acme.com",    departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 180, creditLimit: 50,  lastActive: "2026-03-13" },
+    { id: "emp-002", name: "Emma Davis",     email: "emma@acme.com",    departmentId: "dept-002", department: "Marketing",   role: "DEPT_ADMIN", status: "ACTIVE",   creditsUsed: 95,  creditLimit: 100, lastActive: "2026-03-13" },
+    { id: "emp-003", name: "Carlos Ruiz",    email: "carlos@acme.com",  departmentId: "dept-003", department: "Sales",       role: "EMPLOYEE",   status: "PENDING",  creditsUsed: 0,   creditLimit: 30,  lastActive: "—" },
+    { id: "emp-004", name: "Aisha Patel",    email: "aisha@acme.com",   departmentId: "dept-004", department: "Finance",     role: "DEPT_ADMIN", status: "ACTIVE",   creditsUsed: 210, creditLimit: 100, lastActive: "2026-03-12" },
+    { id: "emp-005", name: "Mike Chen",      email: "mike@acme.com",    departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "INACTIVE", creditsUsed: 45,  creditLimit: 0,   lastActive: "2026-02-15" },
+    { id: "emp-006", name: "Sophie Laurent", email: "sophie@acme.com",  departmentId: "dept-005", department: "HR",          role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 60,  creditLimit: 30,  lastActive: "2026-03-13" },
+    { id: "emp-007", name: "Raj Patel",      email: "raj@acme.com",     departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 320, creditLimit: 50,  lastActive: "2026-03-13" },
+    { id: "emp-008", name: "Lisa Wang",      email: "lisa@acme.com",    departmentId: "dept-006", department: "Operations",  role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 78,  creditLimit: 30,  lastActive: "2026-03-12" },
+    { id: "emp-009", name: "Tom Brennan",    email: "tom@acme.com",     departmentId: "dept-003", department: "Sales",       role: "DEPT_ADMIN", status: "ACTIVE",   creditsUsed: 134, creditLimit: 100, lastActive: "2026-03-13" },
+    { id: "emp-010", name: "Nina Hoffmann",  email: "nina@acme.com",    departmentId: "dept-004", department: "Finance",     role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 88,  creditLimit: 30,  lastActive: "2026-03-11" },
+    { id: "emp-011", name: "Kevin Park",     email: "kevin@acme.com",   departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "PENDING",  creditsUsed: 0,   creditLimit: 30,  lastActive: "—" },
+    { id: "emp-012", name: "Priya Sharma",   email: "priya@acme.com",   departmentId: "dept-005", department: "HR",          role: "DEPT_ADMIN", status: "ACTIVE",   creditsUsed: 112, creditLimit: 100, lastActive: "2026-03-13" },
 ];
 
 const QUOTA_REQUESTS: OAQuotaRequest[] = [
@@ -371,7 +371,7 @@ const CUSTOM_PATTERNS: OACustomPattern[] = [
 
 const RECENT_ACTIVITIES: RecentActivityItem[] = [
     { id: "a1", type: "employee_added",   title: "New employee added",     description: "Carlos Ruiz joined the Sales department",          timestamp: "2 hours ago", icon: "user-plus"      },
-    { id: "a2", type: "quota_approved",   title: "Quota request approved", description: "Engineering dept granted +200 requests",           timestamp: "4 hours ago", icon: "check-circle"   },
+    { id: "a2", type: "quota_approved",   title: "Quota request approved", description: "Engineering dept granted +200 creditsUsed",           timestamp: "4 hours ago", icon: "check-circle"   },
     { id: "a3", type: "policy_changed",   title: "Policy updated",         description: "Speech-to-text enabled for Marketing department",  timestamp: "6 hours ago", icon: "shield"         },
     { id: "a4", type: "security_alert",   title: "Multiple failed logins", description: "3 failed login attempts for mike@acme.com",       timestamp: "8 hours ago", icon: "alert-triangle" },
     { id: "a5", type: "employee_removed", title: "Employee deactivated",   description: "Ethan Harris deactivated from Engineering",        timestamp: "1 day ago",   icon: "user-minus"     },
@@ -410,7 +410,7 @@ const MODEL_COLORS: Record<string, string> = {
 // ─────────────────────────────────────────────────────────────────────────────
 
 function buildModelUsage(): OrgModelUsageSlice[] {
-    const total = DEPTS.reduce((s, d) => s + d.quota.used, 0);
+    const total = DEPTS.reduce((s, d) => s + d.budget * (d.percentageUsed / 100), 0);
     const slices = [
         { name: 'Claude 4.6 Sonnet', pct: 0.28 },
         { name: 'GPT-5.1',           pct: 0.22 },
@@ -428,7 +428,7 @@ function buildModelUsage(): OrgModelUsageSlice[] {
 }
 
 function buildUsageTrend(days: number): OrgUsageTrendPoint[] {
-    const avg   = DEPTS.reduce((s, d) => s + d.quota.used, 0) / 30;
+    const avg   = DEPTS.reduce((s, d) => s + d.budget * (d.percentageUsed / 100), 0) / 30;
     const today = new Date();
     return Array.from({ length: days }, (_, i) => {
         const d = new Date(today);
@@ -437,7 +437,7 @@ function buildUsageTrend(days: number): OrgUsageTrendPoint[] {
         const factor    = isWeekend ? 0.15 + Math.random() * 0.15 : 0.7 + Math.random() * 0.6;
         return {
             date:     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            requests: Math.round(avg * factor),
+            creditsUsed: Math.round(avg * factor),
         };
     });
 }
@@ -522,7 +522,7 @@ export async function applyOAOrgPolicyToAllDepts(): Promise<void> {
         d.speechToText = ORG_POLICY.speechToText;
         d.allModels = ORG_POLICY.allModels;
         d.permittedModels = ORG_POLICY.allModels ? [...ALL_MODELS] : [...ORG_POLICY.permittedModels];
-        d.dailyLimit = ORG_POLICY.defaultDailyLimit;
+        d.creditLimit = ORG_POLICY.defaultCreditLimit;
         d.synced = true;
     });
 }
@@ -546,7 +546,7 @@ export async function getOAEmployees(): Promise<OAEmployee[]> {
     return structuredClone(EMPLOYEES);
 }
 
-/** GET /api/v1/org/{orgId}/quota/requests */
+/** GET /api/v1/org/{orgId}/quota/creditsUsed */
 export async function getOAQuotaRequests(): Promise<OAQuotaRequest[]> {
     await delay(200);
     return structuredClone(QUOTA_REQUESTS);
@@ -576,8 +576,8 @@ export async function getOACustomPatterns(): Promise<OACustomPattern[]> {
 export async function getOrgDashboardStats(): Promise<OrgDashboardStats> {
     await delay(300);
     const totalEmployees       = DEPTS.reduce((s, d) => s + d.employees, 0);
-    const monthlyRequests      = DEPTS.reduce((s, d) => s + d.quota.used, 0);
-    const monthlyQuota         = DEPTS.reduce((s, d) => s + d.quota.total, 0);
+    const monthlyCredits   = DEPTS.reduce((s, d) => s + d.budget * (d.percentageUsed / 100), 0);
+    const monthlyBudget  = DEPTS.reduce((s, d) => s + d.budget, 0);
     const activeEmployees      = EMPLOYEES.filter((e) => e.status === 'ACTIVE').length;
     const pendingEmployees     = EMPLOYEES.filter((e) => e.status === 'PENDING').length;
     const pendingQuotaRequests = QUOTA_REQUESTS.filter((r) => r.status === 'PENDING').length;
@@ -586,13 +586,13 @@ export async function getOrgDashboardStats(): Promise<OrgDashboardStats> {
         activeEmployees,
         pendingEmployees,
         departments:          DEPTS.length,
-        monthlyRequests,
-        monthlyQuota,
-        quotaUtilization:     Math.round((monthlyRequests / monthlyQuota) * 100),
-        unallocatedQuota:     ORG_CONFIG.totalQuota - monthlyQuota,
+        monthlyCredits,
+        monthlyBudget,
+        quotaUtilization:     Math.round((monthlyCredits / monthlyBudget) * 100),
+        unallocatedBudget:    ORG_CONFIG.totalBudget - monthlyBudget,
         pendingQuotaRequests,
         adoptionRate:         Math.round((activeEmployees / totalEmployees) * 100),
-        avgRequestsPerEmployee: Math.round((monthlyRequests / activeEmployees) * 10) / 10,
+        avgCreditsPerEmployee: Math.round((monthlyCredits / activeEmployees) * 10) / 10,
     };
 }
 

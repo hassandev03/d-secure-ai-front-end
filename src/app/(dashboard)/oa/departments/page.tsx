@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
-import QuotaBar from "@/components/shared/QuotaBar";
+import QuotaGauge from "@/components/shared/QuotaGauge";
 import StatCard from "@/components/shared/StatCard";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -40,9 +40,9 @@ type SortField   = "name" | "employees" | "quota";
 /* Helpers                                                              */
 /* ------------------------------------------------------------------ */
 function quotaHealth(dept: Department): { label: string; className: string } {
-    const pct = dept.quota.used / dept.quota.total;
-    if (pct >= 0.9) return { label: "Critical", className: "bg-danger/10 text-danger border-danger/20" };
-    if (pct >= 0.7) return { label: "Warning",  className: "bg-warning/10 text-warning border-warning/20" };
+    const pct = dept.percentageUsed;
+    if (pct >= 90) return { label: "Critical", className: "bg-danger/10 text-danger border-danger/20" };
+    if (pct >= 70) return { label: "Warning",  className: "bg-warning/10 text-warning border-warning/20" };
     return                { label: "Normal",   className: "bg-success/10 text-success border-success/20" };
 }
 
@@ -84,9 +84,9 @@ export default function DepartmentsPage() {
 
     /* ---- derived stats ---- */
     const totalEmployees = departments.reduce((s, d) => s + d.employees, 0);
-    const totalQuotaUsed = departments.reduce((s, d) => s + d.quota.used, 0);
-    const totalQuotaMax  = departments.reduce((s, d) => s + d.quota.total, 0);
-    const criticalCount  = departments.filter(d => d.quota.used / d.quota.total >= 0.9).length;
+    const totalQuotaUsed = departments.reduce((s, d) => s + (d.budget * (d.percentageUsed / 100)), 0);
+    const totalQuotaMax  = departments.reduce((s, d) => s + d.budget, 0);
+    const criticalCount  = departments.filter(d => d.percentageUsed >= 90).length;
 
     /* ---- filtered + sorted list ---- */
     const filtered = useMemo(() => {
@@ -99,14 +99,14 @@ export default function DepartmentsPage() {
         }
         if (quotaFilter !== "all") {
             list = list.filter(d => {
-                const pct = d.quota.used / d.quota.total;
-                if (quotaFilter === "critical") return pct >= 0.9;
-                if (quotaFilter === "warning")  return pct >= 0.7 && pct < 0.9;
-                return pct < 0.7; // normal
+                const pct = d.percentageUsed;
+                if (quotaFilter === "critical") return pct >= 90;
+                if (quotaFilter === "warning")  return pct >= 70 && pct < 90;
+                return pct < 70; // normal
             });
         }
         if (sortBy === "employees") list.sort((a, b) => b.employees - a.employees);
-        else if (sortBy === "quota") list.sort((a, b) => (b.quota.used / b.quota.total) - (a.quota.used / a.quota.total));
+        else if (sortBy === "quota") list.sort((a, b) => b.percentageUsed - a.percentageUsed);
         else list.sort((a, b) => a.name.localeCompare(b.name));
         return list;
     }, [departments, search, quotaFilter, sortBy]);
@@ -140,7 +140,8 @@ export default function DepartmentsPage() {
                     head: newHead.trim(),
                     headEmail: newEmail.trim(),
                     employees: 0,
-                    quota: { used: 0, total: parseInt(newQuota) || 1000 },
+                    budget: parseInt(newQuota) || 1000,
+                    percentageUsed: 0,
                     color,
                 },
             ]);
@@ -156,7 +157,7 @@ export default function DepartmentsPage() {
         setEditName(dept.name);
         setEditHead(dept.head);
         setEditEmail(dept.headEmail);
-        setEditQuota(String(dept.quota.total));
+        setEditQuota(String(dept.budget));
     };
 
     const handleEdit = () => {
@@ -171,7 +172,7 @@ export default function DepartmentsPage() {
                             name:      editName.trim(),
                             head:      editHead.trim(),
                             headEmail: editEmail.trim(),
-                            quota:     { ...d.quota, total: parseInt(editQuota) || d.quota.total },
+                            budget:    parseInt(editQuota) || d.budget,
                         }
                         : d
                 )
@@ -231,13 +232,13 @@ export default function DepartmentsPage() {
                     iconColor="text-success bg-success/10"
                 />
                 <StatCard
-                    title="Quota Utilisation"
+                    title="Budget Utilisation"
                     value={totalQuotaMax ? `${Math.round((totalQuotaUsed / totalQuotaMax) * 100)}%` : "0%"}
                     icon={Database}
                     iconColor="text-warning bg-warning/10"
                 />
                 <StatCard
-                    title="Critical Quota"
+                    title="Critical Budget"
                     value={criticalCount}
                     icon={TrendingUp}
                     iconColor={criticalCount > 0 ? "text-danger bg-danger/10" : "text-success bg-success/10"}
@@ -257,10 +258,10 @@ export default function DepartmentsPage() {
                 </div>
                 <Select value={quotaFilter} onValueChange={v => setQuotaFilter(v as QuotaFilter)}>
                     <SelectTrigger className="w-44">
-                        <SelectValue placeholder="Quota Health" />
+                        <SelectValue placeholder="Budget Health" />
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="all">All Quotas</SelectItem>
+                        <SelectItem value="all">All Budgets</SelectItem>
                         <SelectItem value="normal">Normal (&lt;70%)</SelectItem>
                         <SelectItem value="warning">Warning (70–89%)</SelectItem>
                         <SelectItem value="critical">Critical (≥90%)</SelectItem>
@@ -273,7 +274,7 @@ export default function DepartmentsPage() {
                     <SelectContent>
                         <SelectItem value="name">Name A–Z</SelectItem>
                         <SelectItem value="employees">Most Employees</SelectItem>
-                        <SelectItem value="quota">Highest Quota Use</SelectItem>
+                        <SelectItem value="quota">Highest Budget Use</SelectItem>
                     </SelectContent>
                 </Select>
             </div>
@@ -392,17 +393,14 @@ export default function DepartmentsPage() {
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <Database className="h-3.5 w-3.5" />
-                                                <span>{dept.quota.total.toLocaleString()} quota</span>
+                                                <span>{dept.budget.toLocaleString()} credits</span>
                                             </div>
                                         </div>
 
                                         {/* Quota bar */}
-                                        <QuotaBar
-                                            used={dept.quota.used}
-                                            total={dept.quota.total}
-                                            label="Quota Usage"
-                                            size="sm"
-                                        />
+                                        <div className="flex justify-center py-2">
+                                            <QuotaGauge percentageUsed={dept.percentageUsed} size="sm" />
+                                        </div>
                                     </CardContent>
                                 </Link>
                             </Card>
@@ -446,7 +444,7 @@ export default function DepartmentsPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Monthly AI Quota (requests)</Label>
+                            <Label>Monthly AI Budget (credits)</Label>
                             <Input
                                 type="number"
                                 placeholder="1000"
@@ -498,7 +496,7 @@ export default function DepartmentsPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Monthly AI Quota (requests)</Label>
+                            <Label>Monthly AI Budget (credits)</Label>
                             <Input
                                 type="number"
                                 value={editQuota}

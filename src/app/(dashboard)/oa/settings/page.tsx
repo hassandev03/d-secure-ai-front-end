@@ -212,7 +212,7 @@ export default function OrgSettingsPage() {
     // ── Handlers ────────────────────────────────────────────────────────────
 
     const handleSave = async () => {
-        if (!profile.name || !empDefaults.defaultRole || !security.minPasswordLength || !orgPolicy.defaultDailyLimit) return;
+        if (!profile.name || !empDefaults.defaultRole || !security.minPasswordLength || !orgPolicy.defaultCreditLimit) return;
         setSaving(true);
         try {
             await Promise.all([
@@ -231,7 +231,7 @@ export default function OrgSettingsPage() {
     };
 
     const handlePushToAll = async () => {
-        if (!orgPolicy.defaultDailyLimit) return;
+        if (!orgPolicy.defaultCreditLimit) return;
         setPushing(true);
         try {
             await applyOAOrgPolicyToAllDepts();
@@ -246,7 +246,7 @@ export default function OrgSettingsPage() {
     };
 
     const handleResetDept = async (deptId: string) => {
-        if (!orgPolicy.defaultDailyLimit) return;
+        if (!orgPolicy.defaultCreditLimit) return;
         const dept = deptPolicies.find((d) => d.id === deptId);
         if (!dept) return;
         
@@ -256,7 +256,7 @@ export default function OrgSettingsPage() {
                 speechToText: orgPolicy.speechToText,
                 allModels: orgPolicy.allModels,
                 permittedModels: orgPolicy.allModels ? [...ALL_MODEL_IDS] : [...orgPolicy.permittedModels],
-                dailyLimit: orgPolicy.defaultDailyLimit,
+                creditLimit: orgPolicy.defaultCreditLimit,
                 synced: true,
             };
             await updateOADeptPolicy(deptId, updatedPolicy);
@@ -294,7 +294,7 @@ export default function OrgSettingsPage() {
 
     // ── Render ──────────────────────────────────────────────────────────────
 
-    if (loading || !profile.name || !empDefaults.defaultRole || !security.minPasswordLength || !orgPolicy.defaultDailyLimit) {
+    if (loading || !profile.name || !empDefaults.defaultRole || !security.minPasswordLength || !orgPolicy.defaultCreditLimit) {
         return (
             <div className="mx-auto max-w-5xl">
                 <PageHeader
@@ -464,7 +464,7 @@ export default function OrgSettingsPage() {
                                     value={empDefaults.monthlyLimit}
                                     onChange={(e) => setEmpDefaults((p) => ({ ...p, monthlyLimit: parseInt(e.target.value) || 0 }))}
                                 />
-                                <p className="text-xs text-muted-foreground">Max AI requests per month for new employees.</p>
+                                <p className="text-xs text-muted-foreground">Max AI creditBudget per month for new employees.</p>
                             </div>
                             <div className="flex items-end pb-1">
                                 <SettingToggle
@@ -801,10 +801,10 @@ export default function OrgSettingsPage() {
                                     <Input
                                         type="number"
                                         min={0}
-                                        value={orgPolicy.defaultDailyLimit}
-                                        onChange={(e) => setOrgPolicy((p) => ({ ...p, defaultDailyLimit: parseInt(e.target.value) || 0 }))}
+                                        value={orgPolicy.defaultCreditLimit}
+                                        onChange={(e) => setOrgPolicy((p) => ({ ...p, defaultCreditLimit: parseInt(e.target.value) || 0 }))}
                                     />
-                                    <p className="text-xs text-muted-foreground">Requests per employee per day.</p>
+                                    <p className="text-xs text-muted-foreground">creditBudget per employee per day.</p>
                                 </div>
                                 <div className="space-y-1.5">
                                     <Label>Max Daily Limit</Label>
@@ -912,7 +912,7 @@ export default function OrgSettingsPage() {
                                                         {modelCount}/{MODELS.length} models
                                                     </Badge>
                                                     <Badge variant="outline" className="text-[10px]">
-                                                        {dept.dailyLimit}/day
+                                                        {dept.creditLimit}/day
                                                     </Badge>
                                                 </div>
 
@@ -972,7 +972,7 @@ export default function OrgSettingsPage() {
                                                             {modelCount}/{MODELS.length} models
                                                         </Badge>
                                                         <Badge variant="outline" className="text-[10px]">
-                                                            {dept.dailyLimit}/day
+                                                            {dept.creditLimit}/day
                                                         </Badge>
                                                     </div>
 
@@ -1002,8 +1002,8 @@ export default function OrgSettingsPage() {
                                                             </p>
                                                         </div>
                                                         <div className="rounded-lg bg-background border border-border p-3">
-                                                            <p className="text-xs text-muted-foreground">Daily Limit</p>
-                                                            <p className="mt-1 text-sm font-medium">{dept.dailyLimit} requests</p>
+                                                            <p className="text-xs text-muted-foreground">Credit Limit</p>
+                                                            <p className="mt-1 text-sm font-medium">{dept.creditLimit} credits/mo</p>
                                                         </div>
                                                     </div>
 
@@ -1105,14 +1105,14 @@ export default function OrgSettingsPage() {
                                     />
                                 </div>
                                 <div className="flex items-center gap-2 rounded-lg border border-border p-3">
-                                    <span className="flex-1 text-sm font-medium">Daily Limit</span>
+                                    <span className="flex-1 text-sm font-medium">Credit Limit</span>
                                     <Input
                                         type="number"
                                         min={0}
                                         className="h-7 w-20 px-2 text-xs"
-                                        value={editDept.dailyLimit}
+                                        value={editDept.creditLimit}
                                         onChange={(e) =>
-                                            setEditDept((p) => p ? { ...p, dailyLimit: parseInt(e.target.value) || 0 } : p)
+                                            setEditDept((p) => p ? { ...p, creditLimit: parseInt(e.target.value) || 0 } : p)
                                         }
                                     />
                                 </div>

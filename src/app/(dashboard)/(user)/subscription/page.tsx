@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Check, X, Zap, CreditCard, Lock, Plus, Trash2, AlertCircle, Crown, Shield, Calendar } from "lucide-react";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
-import QuotaBar from "@/components/shared/QuotaBar";
+import QuotaGauge from "@/components/shared/QuotaGauge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -242,8 +242,13 @@ export default function SubscriptionPage() {
                             <p className="text-xs text-muted-foreground">/month</p>
                         </div>
                     </div>
-                    <div className="mt-4">
-                        <QuotaBar used={activePlan.key === "FREE" ? 15 : 320} total={activePlan.quotaTotal} label="Monthly AI Requests" />
+                    <div className="mt-4 flex justify-center py-2">
+                        <QuotaGauge
+                            percentageUsed={activePlan.key === "FREE" ? 30 : 27.7}
+                            planName={activePlan.name}
+                            renewsAt="2026-05-01T00:00:00Z"
+                            size="md"
+                        />
                     </div>
                 </CardContent>
             </Card>

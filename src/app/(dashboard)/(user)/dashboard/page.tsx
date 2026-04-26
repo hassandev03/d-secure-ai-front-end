@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { Activity, MessageSquare, Shield, BarChart3 } from "lucide-react";
 import PageHeader from "@/components/layout/PageHeader";
 import StatCard from "@/components/shared/StatCard";
-import QuotaBar from "@/components/shared/QuotaBar";
+import QuotaGauge from "@/components/shared/QuotaGauge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
@@ -30,8 +30,8 @@ export default function UserDashboard() {
     const [recentSessions, setRecentSessions] = useState<ChatSessionSummary[]>([]);
 
     useEffect(() => {
-        getUserDashboardStats(user?.subscriptionTier).then(setStats);
-        getDailyActivity(7, user?.subscriptionTier).then(setActivity);
+        getUserDashboardStats().then(setStats);
+        getDailyActivity(7).then(setActivity);
         getModelUsageBreakdown().then(setModels);
         getEntityTypeBreakdown().then(setEntities);
         getChatSessions().then(sessions => setRecentSessions(sessions.slice(0, 5)));
@@ -53,21 +53,29 @@ export default function UserDashboard() {
                 <StatCard title="Avg. Entities/Request" value={stats.avgEntitiesPerRequest} icon={BarChart3} iconColor="text-purple-600 bg-purple-100" />
             </div>
 
+            {/* ── Quota Card — percentage gauge ── */}
             <Card className="mt-6">
                 <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
                     <CardTitle className="text-base font-semibold">
-                        {isOrgUser ? "Organization Quota" : "Monthly Quota"}
+                        {isOrgUser ? "Organization Quota" : "Monthly Credit Budget"}
                     </CardTitle>
                     {!isOrgUser && (
                         <Link href="/subscription"><Button variant="ghost" size="sm">Upgrade →</Button></Link>
                     )}
                 </CardHeader>
-                <CardContent>
-                    <QuotaBar
-                        used={stats.totalRequestsThisMonth}
-                        total={stats.quotaTotal}
-                        label="AI Requests This Month"
+                <CardContent className="flex flex-col items-center py-4">
+                    <QuotaGauge
+                        percentageUsed={stats.percentageUsed}
+                        planName={stats.planName}
+                        renewsAt={stats.periodEndsAt}
+                        size="lg"
                     />
+                    <p className="mt-4 text-sm text-muted-foreground text-center">
+                        {Math.round(stats.percentageUsed)}% of your {stats.planName} credit budget used this month.
+                        {!isOrgUser && stats.percentageUsed >= 80 && (
+                            <span className="ml-1 text-warning font-medium">Consider upgrading!</span>
+                        )}
+                    </p>
                 </CardContent>
             </Card>
 
@@ -90,7 +98,7 @@ export default function UserDashboard() {
                                 <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
                                 <Bar dataKey="requests" name="AI Requests" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={24} />
                                 <Bar dataKey="entitiesAnonymized" name="Entities Anonymized" fill="#10b981" radius={[4, 4, 0, 0]} barSize={24} />
-                                <Line type="monotone" dataKey="quotaUtilizedPct" name="Quota Utilized (%)" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: "#f59e0b", strokeWidth: 2, stroke: "#fff" }} />
+                                <Line type="monotone" dataKey="quotaUtilizedPct" name="Quota Used (%)" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: "#f59e0b", strokeWidth: 2, stroke: "#fff" }} />
                             </ComposedChart>
                         </ResponsiveContainer>
                     </CardContent>

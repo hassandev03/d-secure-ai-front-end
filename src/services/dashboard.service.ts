@@ -1,7 +1,5 @@
 import { delay } from './api';
 import type { UserStats } from '@/types/analytics.types';
-import type { SubscriptionTier } from '@/types/user.types';
-import { SUBSCRIPTION_PLANS } from '@/lib/constants';
 import { MOCK_SESSIONS, MOCK_MESSAGES, ChatMessage } from './chat.service';
 
 /* ══════════════════════════════════════════════════════
@@ -11,6 +9,12 @@ import { MOCK_SESSIONS, MOCK_MESSAGES, ChatMessage } from './chat.service';
 export interface DashboardStats extends UserStats {
     /** Computed: entitiesAnonymized / totalRequestsThisMonth */
     avgEntitiesPerRequest: number;
+    /** Percentage of monthly credit budget used (0–100) */
+    percentageUsed: number;
+    /** Plan name (e.g. "Pro") */
+    planName: string;
+    /** ISO date of next renewal */
+    periodEndsAt: string;
 }
 
 export interface DailyActivityPoint {
@@ -36,16 +40,20 @@ export interface EntityTypePoint {
    Mock data — realistic & internally consistent
    ══════════════════════════════════════════════════════ */
 
-function getQuotaForTier(tier?: SubscriptionTier): number {
-    if (!tier) return SUBSCRIPTION_PLANS.FREE.requests;
-    return SUBSCRIPTION_PLANS[tier]?.requests ?? SUBSCRIPTION_PLANS.FREE.requests;
-}
+// Mock quota data — in production this comes from GET /api/v1/analytics/quota/me
+const MOCK_QUOTA = {
+    plan_name: 'Pro',
+    credits_allocated: 25.00,
+    credits_used: 8.32,
+    addon_credits: 5.00,
+    effective_budget: 30.00,
+    percentage_used: 27.7,
+    period_ends_at: '2026-05-01T00:00:00Z',
+};
 
 /** GET /api/v1/dashboard/stats */
-export async function getUserDashboardStats(subscriptionTier?: SubscriptionTier): Promise<DashboardStats> {
+export async function getUserDashboardStats(): Promise<DashboardStats> {
     await delay(300);
-
-    const quotaTotal = getQuotaForTier(subscriptionTier);
 
     // Aggregate stats from mock conversations
     let totalRequests = 0;
@@ -67,20 +75,24 @@ export async function getUserDashboardStats(subscriptionTier?: SubscriptionTier)
         totalRequestsThisMonth: totalRequests,
         totalSessions: MOCK_SESSIONS.length,
         entitiesAnonymized,
-        quotaRemaining: Math.max(0, quotaTotal - totalRequests),
-        quotaTotal,
+        quotaRemaining: 0,  // Not relevant in credit system — use percentageUsed
+        quotaTotal: 0,      // Not relevant in credit system — use percentageUsed
         avgEntitiesPerRequest: totalRequests > 0 ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10 : 0,
+        percentageUsed: MOCK_QUOTA.percentage_used,
+        planName: MOCK_QUOTA.plan_name,
+        periodEndsAt: MOCK_QUOTA.period_ends_at,
     };
 }
 
 /** GET /api/v1/dashboard/activity?days=7 */
-export async function getDailyActivity(days: number = 7, subscriptionTier?: SubscriptionTier): Promise<DailyActivityPoint[]> {
+export async function getDailyActivity(days: number = 7): Promise<DailyActivityPoint[]> {
     await delay(250);
 
-    const quotaTotal = getQuotaForTier(subscriptionTier || 'PRO'); // Default to PRO to prevent division by zero contextually if missing
+    // For the activity chart, we show cumulative percentage growth across the period.
+    // In production: backend returns per-day credits_used which we map to % of effective_budget.
+    const totalPctForPeriod = MOCK_QUOTA.percentage_used;
     let cumulative = 0;
 
-    // Build the last N days structure
     const activityMap = new Map<string, { requests: number; entities: number }>();
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -108,10 +120,11 @@ export async function getDailyActivity(days: number = 7, subscriptionTier?: Subs
         });
     });
 
-    // We assume chronological order from map iteration to build cumulative
+    const totalRequests = Array.from(activityMap.values()).reduce((s, v) => s + v.requests, 0);
+    const pctPerRequest = totalRequests > 0 ? totalPctForPeriod / totalRequests : 0;
+
     return Array.from(activityMap.entries()).map(([dateStr, stats]) => {
-        cumulative += stats.requests;
-        // Format to "Mar 1"
+        cumulative += stats.requests * pctPerRequest;
         const d = new Date(dateStr);
         const formattedDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
@@ -119,7 +132,7 @@ export async function getDailyActivity(days: number = 7, subscriptionTier?: Subs
             date: formattedDate,
             requests: stats.requests,
             entitiesAnonymized: stats.entities,
-            quotaUtilizedPct: Math.round((cumulative / quotaTotal) * 100),
+            quotaUtilizedPct: Math.round(Math.min(cumulative, 100)),
         };
     });
 }
@@ -130,10 +143,8 @@ export async function getModelUsageBreakdown(): Promise<ModelUsagePoint[]> {
 
     const modelCounts = new Map<string, number>();
     MOCK_SESSIONS.forEach(session => {
-        // Find how many requests were made in this session
         const messages = MOCK_MESSAGES[session.id] || [];
         const requestCount = messages.filter((m: ChatMessage) => m.role === 'user').length;
-
         const count = modelCounts.get(session.modelName) || 0;
         modelCounts.set(session.modelName, count + requestCount);
     });

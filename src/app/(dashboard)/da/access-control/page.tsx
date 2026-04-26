@@ -136,7 +136,7 @@ export default function AccessControlPage() {
         speechToText:    false,
         allModels:       false,
         permittedModels: [],
-        dailyLimit:      0,
+        creditLimit:      0,
     });
 
     const [search, setSearch]             = useState("");
@@ -359,13 +359,13 @@ export default function AccessControlPage() {
 
                     {/* Daily limit + Apply button */}
                     <div className="flex flex-col sm:flex-row sm:items-end gap-3">
-                        <div className="space-y-1.5 flex-1 max-w-xs">
-                            <Label>Default Daily Limit (requests)</Label>
+                        <div className="space-y-2">
+                            <Label>Default Credit Limit</Label>
                             <Input
                                 type="number"
-                                value={policy.dailyLimit}
+                                value={policy.creditLimit}
                                 min="0"
-                                onChange={(e) => setPolicy((p) => ({ ...p, dailyLimit: parseInt(e.target.value) || 0 }))}
+                                onChange={(e) => setPolicy((p) => ({ ...p, creditLimit: parseInt(e.target.value) || 0 }))}
                             />
                         </div>
                         <Button

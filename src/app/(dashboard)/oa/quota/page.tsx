@@ -8,7 +8,7 @@ import {
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
-import QuotaBar from "@/components/shared/QuotaBar";
+import QuotaGauge from "@/components/shared/QuotaGauge";
 import StatCard from "@/components/shared/StatCard";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -53,10 +53,9 @@ const STATUS_ICON: Record<ReqStatus, React.ReactNode> = {
     PENDING:  <Clock        className="h-4 w-4 text-warning" />,
 };
 
-function quotaHealth(used: number, total: number) {
-    const pct = total > 0 ? used / total : 0;
-    if (pct < 0.70) return { label: "Normal",   cls: "bg-success/10 text-success border-success/20" };
-    if (pct < 0.90) return { label: "Warning",  cls: "bg-warning/10 text-warning border-warning/20" };
+function quotaHealth(percentageUsed: number) {
+    if (percentageUsed < 70) return { label: "Normal",   cls: "bg-success/10 text-success border-success/20" };
+    if (percentageUsed < 90) return { label: "Warning",  cls: "bg-warning/10 text-warning border-warning/20" };
     return              { label: "Critical",  cls: "bg-danger/10  text-danger  border-danger/20"  };
 }
 
@@ -95,9 +94,11 @@ export default function QuotaManagementPage() {
 
     // ── Derived ─────────────────────────────────────────────────────────────
 
-    const totalAllocated = useMemo(() => depts.reduce((s, d) => s + d.quota.total, 0), [depts]);
-    const totalUsed      = useMemo(() => depts.reduce((s, d) => s + d.quota.used,  0), [depts]);
-    const unallocated    = (orgConfig?.totalQuota ?? 0) - totalAllocated;
+    const totalAllocated = useMemo(() => depts.reduce((s, d) => s + d.budget, 0), [depts]);
+    const totalUsedCredits = useMemo(() => depts.reduce((s, d) => s + (d.budget * d.percentageUsed / 100), 0), [depts]);
+    const orgTotalBudget = orgConfig?.totalBudget ?? 0;
+    const orgPercentageUsed = orgTotalBudget > 0 ? (totalUsedCredits / orgTotalBudget) * 100 : 0;
+    const unallocated    = orgTotalBudget - totalAllocated;
 
     const pendingRequests  = requests.filter((r) => r.status === "PENDING");
     const historyRequests  = requests.filter((r) => r.status !== "PENDING");
@@ -113,25 +114,25 @@ export default function QuotaManagementPage() {
         if (!approveTarget) return;
         const val = parseInt(approveAmount);
         if (!val || val <= 0) { toast.error("Amount must be at least 1."); return; }
-        if (val > unallocated) { toast.error(`Only ${unallocated.toLocaleString()} unallocated quota available.`); return; }
+        if (val > unallocated) { toast.error(`Only ${unallocated.toLocaleString()} unallocated budget available.`); return; }
         setApproving(true);
         await new Promise((r) => setTimeout(r, 700));
         const granted = val;
         setRequests((prev) => prev.map((r) =>
             r.id === approveTarget.id
-                ? { ...r, status: "APPROVED" as const, grantedAmount: granted, respondedAt: "2026-03-14" }
+                ? { ...r, status: "APPROVED" as const, grantedAmount: granted, respondedAt: new Date().toISOString().split('T')[0] }
                 : r,
         ));
         setDepts((prev) => prev.map((d) =>
             d.id === approveTarget.deptId
-                ? { ...d, quota: { ...d.quota, total: d.quota.total + granted } }
+                ? { ...d, budget: d.budget + granted }
                 : d,
         ));
         const partial = granted < approveTarget.amount;
         toast.success(
             partial
-                ? `Partially approved: +${granted} of ${approveTarget.amount} allocated to ${approveTarget.deptName}.`
-                : `Approved +${granted} requests for ${approveTarget.deptName}.`,
+                ? `Partially approved: +${granted} credits of ${approveTarget.amount} allocated to ${approveTarget.deptName}.`
+                : `Approved +${granted} credits for ${approveTarget.deptName}.`,
         );
         setApproveTarget(null);
         setApproving(false);
@@ -143,7 +144,7 @@ export default function QuotaManagementPage() {
         await new Promise((r) => setTimeout(r, 500));
         setRequests((prev) => prev.map((r) =>
             r.id === denyTarget.id
-                ? { ...r, status: "DENIED" as const, respondedAt: "2026-03-14" }
+                ? { ...r, status: "DENIED" as const, respondedAt: new Date().toISOString().split('T')[0] }
                 : r,
         ));
         toast.success(`Quota request from ${denyTarget.deptName} denied.`);
@@ -153,27 +154,28 @@ export default function QuotaManagementPage() {
 
     const openEdit = (dept: DeptAllocation) => {
         setEditTarget(dept);
-        setEditAmount(String(dept.quota.total));
+        setEditAmount(String(dept.budget));
     };
 
     const handleEditSave = async () => {
         if (!editTarget) return;
         const val = parseInt(editAmount);
-        if (!val || val < editTarget.quota.used) {
-            toast.error(`Quota cannot be less than current usage (${editTarget.quota.used.toLocaleString()}).`);
+        const currentUsed = editTarget.budget * (editTarget.percentageUsed / 100);
+        if (!val || val < currentUsed) {
+            toast.error(`Budget cannot be less than current usage (${Math.round(currentUsed).toLocaleString()}).`);
             return;
         }
-        const diff = val - editTarget.quota.total;
+        const diff = val - editTarget.budget;
         if (diff > 0 && diff > unallocated) {
-            toast.error(`Only ${unallocated.toLocaleString()} unallocated quota remaining.`);
+            toast.error(`Only ${unallocated.toLocaleString()} unallocated budget remaining.`);
             return;
         }
         setEditing(true);
         await new Promise((r) => setTimeout(r, 600));
         setDepts((prev) => prev.map((d) =>
-            d.id === editTarget.id ? { ...d, quota: { ...d.quota, total: val } } : d,
+            d.id === editTarget.id ? { ...d, budget: val, percentageUsed: val > 0 ? (currentUsed / val) * 100 : 0 } : d,
         ));
-        toast.success(`${editTarget.name} quota updated to ${val.toLocaleString()} requests.`);
+        toast.success(`${editTarget.name} budget updated to ${val.toLocaleString()} credits.`);
         setEditTarget(null);
         setEditing(false);
     };
@@ -182,7 +184,7 @@ export default function QuotaManagementPage() {
         if (!reqAmount || !reqReason.trim()) { toast.error("Please fill in both fields."); return; }
         setRequesting(true);
         await new Promise((r) => setTimeout(r, 700));
-        toast.success("Quota increase request submitted to Platform Admin!");
+        toast.success("Budget increase request submitted to Platform Admin!");
         setReqAmount(""); setReqReason("");
         setRequestOpen(false);
         setRequesting(false);
@@ -190,7 +192,7 @@ export default function QuotaManagementPage() {
 
     // Edit dialog derived
     const editVal        = parseInt(editAmount || "0");
-    const editDiff       = editTarget ? editVal - editTarget.quota.total : 0;
+    const editDiff       = editTarget ? editVal - editTarget.budget : 0;
     const editWouldExceed = editDiff > 0 && editDiff > unallocated;
 
     // ── JSX ─────────────────────────────────────────────────────────────────
@@ -201,7 +203,7 @@ export default function QuotaManagementPage() {
         <div className="mx-auto max-w-6xl">
             <PageHeader
                 title="Quota Management"
-                subtitle="Manage AI request quotas across your organisation and act on department requests."
+                subtitle="Manage AI credit budgets across your organisation and act on department requests."
                 breadcrumbs={[{ label: "Organization", href: "/oa/dashboard" }, { label: "Quota Management" }]}
                 actions={
                     <Button variant="outline" onClick={() => setRequestOpen(true)}>
@@ -213,19 +215,19 @@ export default function QuotaManagementPage() {
             {/* ── Stat cards ──────────────────────────────────────────── */}
             <div className="mb-6 grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <StatCard
-                    title="Total Org Quota"
-                    value={orgConfig.totalQuota.toLocaleString()}
+                    title="Total Org Budget"
+                    value={orgConfig.totalBudget.toLocaleString()}
                     icon={Activity}
                     iconColor="text-brand-700 bg-brand-50"
                 />
                 <StatCard
-                    title="Used This Month"
-                    value={totalUsed.toLocaleString()}
+                    title="Credits Used This Month"
+                    value={Math.round(totalUsedCredits).toLocaleString()}
                     icon={TrendingUp}
                     iconColor="text-blue-600 bg-blue-50"
                 />
                 <StatCard
-                    title="Unallocated"
+                    title="Unallocated Budget"
                     value={unallocated.toLocaleString()}
                     icon={Building2}
                     iconColor={unallocated < 500 ? "text-danger bg-danger/10" : "text-success bg-success/10"}
@@ -243,18 +245,25 @@ export default function QuotaManagementPage() {
                 <CardHeader>
                     <div className="flex items-center justify-between">
                         <div>
-                            <CardTitle className="text-base font-semibold">Organisation Quota Overview</CardTitle>
+                            <CardTitle className="text-base font-semibold">Organisation Budget Overview</CardTitle>
                             <CardDescription>{orgConfig.plan} Plan · Renews {orgConfig.quotaRenewsAt}</CardDescription>
                         </div>
                         <Badge variant="outline" className="text-xs font-medium">{orgConfig.plan}</Badge>
                     </div>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    <QuotaBar used={totalUsed} total={orgConfig.totalQuota} label="Monthly AI Requests (used across departments)" />
-                    <div className="grid grid-cols-3 gap-3">
+                    <div className="flex justify-center py-4">
+                        <QuotaGauge
+                            percentageUsed={orgPercentageUsed}
+                            planName={orgConfig.plan}
+                            renewsAt={orgConfig.quotaRenewsAt}
+                            size="lg"
+                        />
+                    </div>
+                    <div className="grid grid-cols-3 gap-3 mt-4">
                         <div className="rounded-lg border border-border bg-muted/40 p-3 text-center">
-                            <p className="mb-1 text-xs text-muted-foreground">Total Quota</p>
-                            <p className="text-xl font-bold">{orgConfig.totalQuota.toLocaleString()}</p>
+                            <p className="mb-1 text-xs text-muted-foreground">Total Budget</p>
+                            <p className="text-xl font-bold">{orgConfig.totalBudget.toLocaleString()}</p>
                         </div>
                         <div className="rounded-lg border border-border bg-muted/40 p-3 text-center">
                             <p className="mb-1 text-xs text-muted-foreground">Allocated to Depts</p>
@@ -282,7 +291,7 @@ export default function QuotaManagementPage() {
                             </Badge>
                         </div>
                         <CardDescription>
-                            Review and respond to quota increase requests from department admins.
+                            Review and respond to budget increase requests from department admins.
                             You may approve the full amount, a custom amount, or deny the request.
                         </CardDescription>
                     </CardHeader>
@@ -290,9 +299,7 @@ export default function QuotaManagementPage() {
                         <div className="space-y-3">
                             {pendingRequests.map((req) => {
                                 const dept = depts.find((d) => d.id === req.deptId);
-                                const usagePct = dept
-                                    ? Math.round((dept.quota.used / dept.quota.total) * 100)
-                                    : 0;
+                                const usagePct = dept ? dept.percentageUsed.toFixed(1) : 0;
                                 return (
                                     <div
                                         key={req.id}
@@ -313,12 +320,12 @@ export default function QuotaManagementPage() {
                                                         <p className="text-sm font-semibold">{req.deptName}</p>
                                                         <span className="text-xs text-muted-foreground">via {req.requestedBy}</span>
                                                         <Badge variant="outline" className="border-warning/30 bg-warning/10 text-xs text-warning">
-                                                            +{req.amount.toLocaleString()} requested
+                                                            +{req.amount.toLocaleString()} credits requested
                                                         </Badge>
                                                     </div>
                                                     {dept && (
                                                         <p className="mt-0.5 text-xs text-muted-foreground">
-                                                            Current allocation: {dept.quota.total.toLocaleString()} · {usagePct}% used
+                                                            Current allocation: {dept.budget.toLocaleString()} · {usagePct}% used
                                                         </p>
                                                     )}
                                                     <p className="mt-1.5 text-sm text-muted-foreground">{req.reason}</p>
@@ -359,9 +366,9 @@ export default function QuotaManagementPage() {
                         <div>
                             <CardTitle className="text-base font-semibold">Department Allocations</CardTitle>
                             <CardDescription>
-                                Distribute and adjust quota across departments. Allocated&nbsp;
+                                Distribute and adjust budget across departments. Allocated&nbsp;
                                 <span className="font-medium text-foreground">{totalAllocated.toLocaleString()}</span>
-                                &nbsp;/&nbsp;{orgConfig.totalQuota.toLocaleString()} ·{" "}
+                                &nbsp;/&nbsp;{orgConfig.totalBudget.toLocaleString()} ·{" "}
                                 <span className={cn("font-medium", unallocated < 500 ? "text-danger" : "text-success")}>
                                     {unallocated.toLocaleString()} unallocated
                                 </span>
@@ -380,15 +387,16 @@ export default function QuotaManagementPage() {
                                 <TableHead className="text-right">Allocated</TableHead>
                                 <TableHead className="text-right">Used</TableHead>
                                 <TableHead className="text-right">Remaining</TableHead>
-                                <TableHead>Usage</TableHead>
+                                <TableHead className="text-center">Usage</TableHead>
                                 <TableHead>Health</TableHead>
                                 <TableHead className="w-14" />
                             </TableRow>
                         </TableHeader>
                         <TableBody>
                             {depts.map((dept) => {
-                                const remaining = dept.quota.total - dept.quota.used;
-                                const health = quotaHealth(dept.quota.used, dept.quota.total);
+                                const currentUsed = dept.budget * (dept.percentageUsed / 100);
+                                const remaining = dept.budget - currentUsed;
+                                const health = quotaHealth(dept.percentageUsed);
                                 return (
                                     <TableRow key={dept.id}>
                                         <TableCell>
@@ -406,18 +414,21 @@ export default function QuotaManagementPage() {
                                             </div>
                                         </TableCell>
                                         <TableCell className="text-right text-sm">{dept.employees}</TableCell>
-                                        <TableCell className="text-right text-sm font-medium">{dept.quota.total.toLocaleString()}</TableCell>
-                                        <TableCell className="text-right text-sm">{dept.quota.used.toLocaleString()}</TableCell>
+                                        <TableCell className="text-right text-sm font-medium">{dept.budget.toLocaleString()}</TableCell>
+                                        <TableCell className="text-right text-sm">{Math.round(currentUsed).toLocaleString()}</TableCell>
                                         <TableCell className={cn(
                                             "text-right text-sm font-medium",
-                                            remaining < dept.quota.total * 0.1  ? "text-danger"
-                                            : remaining < dept.quota.total * 0.3 ? "text-warning"
+                                            remaining < dept.budget * 0.1  ? "text-danger"
+                                            : remaining < dept.budget * 0.3 ? "text-warning"
                                             : "text-success",
                                         )}>
-                                            {remaining.toLocaleString()}
+                                            {Math.round(remaining).toLocaleString()}
                                         </TableCell>
-                                        <TableCell className="w-36">
-                                            <QuotaBar used={dept.quota.used} total={dept.quota.total} showLabel={false} size="sm" />
+                                        <TableCell className="w-32 flex justify-center py-2">
+                                            <QuotaGauge
+                                                percentageUsed={dept.percentageUsed}
+                                                size="sm"
+                                            />
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant="outline" className={cn("text-xs", health.cls)}>
@@ -445,9 +456,9 @@ export default function QuotaManagementPage() {
                                     {depts.reduce((s, d) => s + d.employees, 0)}
                                 </TableCell>
                                 <TableCell className="text-right text-sm font-semibold">{totalAllocated.toLocaleString()}</TableCell>
-                                <TableCell className="text-right text-sm font-semibold">{totalUsed.toLocaleString()}</TableCell>
+                                <TableCell className="text-right text-sm font-semibold">{Math.round(totalUsedCredits).toLocaleString()}</TableCell>
                                 <TableCell className="text-right text-sm font-semibold">
-                                    {(totalAllocated - totalUsed).toLocaleString()}
+                                    {Math.round(totalAllocated - totalUsedCredits).toLocaleString()}
                                 </TableCell>
                                 <TableCell colSpan={3} />
                             </TableRow>
@@ -499,7 +510,7 @@ export default function QuotaManagementPage() {
                                                         req.status === "APPROVED" ? "text-success" : "text-danger",
                                                     )}>
                                                         {req.status === "APPROVED" ? "+" : ""}
-                                                        {(req.grantedAmount ?? req.amount).toLocaleString()} requests
+                                                        {(req.grantedAmount ?? req.amount).toLocaleString()} credits
                                                     </span>
                                                 )}
                                             </div>
@@ -526,7 +537,7 @@ export default function QuotaManagementPage() {
             >
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Approve Quota Request</DialogTitle>
+                        <DialogTitle>Approve Budget Request</DialogTitle>
                     </DialogHeader>
                     {approveTarget && (() => {
                         const dept = depts.find((d) => d.id === approveTarget.deptId);
@@ -539,12 +550,12 @@ export default function QuotaManagementPage() {
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-muted-foreground">Amount requested</span>
-                                        <span className="font-medium">+{approveTarget.amount.toLocaleString()} requests</span>
+                                        <span className="font-medium">+{approveTarget.amount.toLocaleString()} credits</span>
                                     </div>
                                     {dept && (
                                         <div className="flex justify-between">
                                             <span className="text-muted-foreground">Current allocation</span>
-                                            <span className="font-medium">{dept.quota.total.toLocaleString()}</span>
+                                            <span className="font-medium">{dept.budget.toLocaleString()}</span>
                                         </div>
                                     )}
                                     <div className="flex justify-between">
@@ -562,16 +573,16 @@ export default function QuotaManagementPage() {
 
                                 {unallocated === 0 ? (
                                     <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-                                        No unallocated quota remaining. Request a platform increase before approving.
+                                        No unallocated budget remaining. Request a platform increase before approving.
                                     </div>
                                 ) : unallocated < approveTarget.amount && (
                                     <div className="rounded-lg border border-warning/30 bg-warning/10 px-3 py-2 text-xs text-warning">
-                                        Insufficient quota for the full request. You can grant up to {unallocated.toLocaleString()}.
+                                        Insufficient budget for the full request. You can grant up to {unallocated.toLocaleString()}.
                                     </div>
                                 )}
 
                                 <div className="space-y-1.5">
-                                    <Label>Requests to Allocate</Label>
+                                    <Label>Credits to Allocate</Label>
                                     <Input
                                         type="number"
                                         min="1"
@@ -615,12 +626,12 @@ export default function QuotaManagementPage() {
             >
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Deny Quota Request</DialogTitle>
+                        <DialogTitle>Deny Budget Request</DialogTitle>
                     </DialogHeader>
                     {denyTarget && (
                         <div className="space-y-3 py-1">
                             <p className="text-sm text-muted-foreground">
-                                Are you sure you want to deny the quota request from{" "}
+                                Are you sure you want to deny the budget request from{" "}
                                 <span className="font-semibold text-foreground">{denyTarget.deptName}</span>?
                             </p>
                             <div className="space-y-1 rounded-lg border border-border bg-muted/40 p-3 text-sm">
@@ -665,52 +676,55 @@ export default function QuotaManagementPage() {
                     <DialogHeader>
                         <DialogTitle>Edit Department Allocation</DialogTitle>
                     </DialogHeader>
-                    {editTarget && (
-                        <div className="space-y-4 py-1">
-                            <div className="space-y-1.5 rounded-lg border border-border bg-muted/50 p-3 text-sm">
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Department</span>
-                                    <span className="font-medium">{editTarget.name}</span>
+                    {editTarget && (() => {
+                        const currentUsed = editTarget.budget * (editTarget.percentageUsed / 100);
+                        return (
+                            <div className="space-y-4 py-1">
+                                <div className="space-y-1.5 rounded-lg border border-border bg-muted/50 p-3 text-sm">
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Department</span>
+                                        <span className="font-medium">{editTarget.name}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Current allocation</span>
+                                        <span className="font-medium">{editTarget.budget.toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Currently used</span>
+                                        <span className="font-medium">{Math.round(currentUsed).toLocaleString()}</span>
+                                    </div>
+                                    <div className="flex justify-between">
+                                        <span className="text-muted-foreground">Org unallocated</span>
+                                        <span className={cn("font-medium", unallocated < 200 ? "text-warning" : "text-success")}>
+                                            {unallocated.toLocaleString()}
+                                        </span>
+                                    </div>
                                 </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Current allocation</span>
-                                    <span className="font-medium">{editTarget.quota.total.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Currently used</span>
-                                    <span className="font-medium">{editTarget.quota.used.toLocaleString()}</span>
-                                </div>
-                                <div className="flex justify-between">
-                                    <span className="text-muted-foreground">Org unallocated</span>
-                                    <span className={cn("font-medium", unallocated < 200 ? "text-warning" : "text-success")}>
-                                        {unallocated.toLocaleString()}
-                                    </span>
+
+                                {editWouldExceed && (
+                                    <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
+                                        This increase requires {editDiff.toLocaleString()} more but only{" "}
+                                        {unallocated.toLocaleString()} is unallocated.
+                                    </div>
+                                )}
+
+                                <div className="space-y-1.5">
+                                    <Label>New Budget Allocation</Label>
+                                    <Input
+                                        type="number"
+                                        min={Math.round(currentUsed)}
+                                        value={editAmount}
+                                        onChange={(e) => setEditAmount(e.target.value)}
+                                        placeholder="Enter new total budget…"
+                                    />
+                                    <p className="text-xs text-muted-foreground">
+                                        Minimum: {Math.round(currentUsed).toLocaleString()} (current usage) ·{" "}
+                                        Max increase: +{unallocated.toLocaleString()}
+                                    </p>
                                 </div>
                             </div>
-
-                            {editWouldExceed && (
-                                <div className="rounded-lg border border-danger/30 bg-danger/10 px-3 py-2 text-xs text-danger">
-                                    This increase requires {editDiff.toLocaleString()} more but only{" "}
-                                    {unallocated.toLocaleString()} is unallocated.
-                                </div>
-                            )}
-
-                            <div className="space-y-1.5">
-                                <Label>New Quota Allocation</Label>
-                                <Input
-                                    type="number"
-                                    min={editTarget.quota.used}
-                                    value={editAmount}
-                                    onChange={(e) => setEditAmount(e.target.value)}
-                                    placeholder="Enter new total quota…"
-                                />
-                                <p className="text-xs text-muted-foreground">
-                                    Minimum: {editTarget.quota.used.toLocaleString()} (current usage) ·{" "}
-                                    Max increase: +{unallocated.toLocaleString()}
-                                </p>
-                            </div>
-                        </div>
-                    )}
+                        );
+                    })()}
                     <DialogFooter>
                         <DialogClose asChild>
                             <Button variant="outline" disabled={editing}>Cancel</Button>
@@ -736,11 +750,11 @@ export default function QuotaManagementPage() {
             >
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Request Platform Quota Increase</DialogTitle>
+                        <DialogTitle>Request Platform Budget Increase</DialogTitle>
                     </DialogHeader>
                     <div className="grid gap-4 py-2">
                         <div className="space-y-2">
-                            <Label>Additional Requests Needed</Label>
+                            <Label>Additional Credits Needed</Label>
                             <Input
                                 type="number"
                                 placeholder="5000"
@@ -753,7 +767,7 @@ export default function QuotaManagementPage() {
                             <textarea
                                 className="w-full rounded-lg border border-border bg-transparent p-3 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
                                 rows={3}
-                                placeholder="Explain why your organisation needs more quota…"
+                                placeholder="Explain why your organisation needs more budget…"
                                 value={reqReason}
                                 onChange={(e) => setReqReason(e.target.value)}
                             />

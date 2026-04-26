@@ -91,13 +91,14 @@ export default function QuotaRequestsPage() {
     }, []);
 
     const pendingCount = empRequests.filter((r) => r.status === "PENDING").length;
-    // Remaining = total quota minus already-consumed requests
-    const remaining    = quota ? quota.total - quota.used : 0;
+    // Derive used/remaining from the new DeptQuota shape
+    const usedBudget   = quota ? Math.round(quota.budget * quota.percentageUsed / 100) : 0;
+    const remaining    = quota ? quota.budget - usedBudget : 0;
 
     // Open allocation dialog — pre-fill with the lesser of requested vs available
     const openAllocate = (req: EmpQuotaRequest) => {
-        setAllocateTarget({ id: req.id, name: req.name, amount: req.amount });
-        setAllocateAmount(String(Math.min(req.amount, Math.max(0, remaining))));
+        setAllocateTarget({ id: req.id, name: req.name, amount: req.credits });
+        setAllocateAmount(String(Math.min(req.credits, Math.max(0, remaining))));
     };
 
     // Confirm allocation with a custom (or full) amount
@@ -111,17 +112,17 @@ export default function QuotaRequestsPage() {
             setEmpRequests((prev) =>
                 prev.map((r) =>
                     r.id === allocateTarget.id
-                        ? { ...r, status: "APPROVED" as const, grantedAmount: result.grantedAmount }
+                        ? { ...r, status: "APPROVED" as const, grantedCredits: result.grantedCredits }
                         : r,
                 ),
             );
-            // Reflect the committed quota in the UI immediately
-            setQuota((q) => q ? { ...q, used: q.used + result.grantedAmount } : q);
-            const partial = result.grantedAmount < allocateTarget.amount;
+            // Reflect the committed quota in the UI immediately (percentageUsed stays read-only here)
+            setQuota((q) => q ? { ...q, percentageUsed: q.budget > 0 ? Math.round(((usedBudget + result.grantedCredits) / q.budget) * 100) : 0 } : q);
+            const partial = result.grantedCredits < allocateTarget.amount;
             toast.success(
                 partial
-                    ? `Partially approved: ${result.grantedAmount} of ${allocateTarget.amount} allocated to ${allocateTarget.name}.`
-                    : `Approved ${result.grantedAmount} requests for ${allocateTarget.name}.`,
+                    ? `Partially approved: ${result.grantedCredits} of ${allocateTarget.amount} allocated to ${allocateTarget.name}.`
+                    : `Approved ${result.grantedCredits} credits for ${allocateTarget.name}.`,
             );
             setAllocateTarget(null);
         } catch (e: unknown) {
@@ -231,7 +232,7 @@ export default function QuotaRequestsPage() {
                         <CardDescription>Renews {quota.renewsAt}</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <QuotaBar used={quota.used} total={quota.total} label="Monthly AI Requests" />
+                        <QuotaBar used={usedBudget} total={quota.budget} label="Monthly Credit Budget" />
                         <p className={cn(
                             "mt-2 text-xs font-medium",
                             remaining === 0   ? "text-danger"
@@ -295,15 +296,15 @@ export default function QuotaRequestsPage() {
                                                 <div className="flex items-center gap-2 mt-0.5 flex-wrap">
                                                     {/* Show partial grant when grantedAmount differs from requested */}
                                                     {req.status === "APPROVED"
-                                                        && req.grantedAmount !== undefined
-                                                        && req.grantedAmount !== req.amount ? (
+                                                        && req.grantedCredits !== undefined
+                                                        && req.grantedCredits !== req.credits ? (
                                                         <span className="text-sm font-medium">
-                                                            <span className="text-success">+{req.grantedAmount}</span>
-                                                            <span className="text-muted-foreground text-xs"> / {req.amount} requested</span>
+                                                            <span className="text-success">+{req.grantedCredits}</span>
+                                                            <span className="text-muted-foreground text-xs"> / {req.credits} requested</span>
                                                         </span>
                                                     ) : (
                                                         <span className="text-sm font-medium text-brand-700">
-                                                            +{req.grantedAmount ?? req.amount} requests
+                                                            +{req.grantedCredits ?? req.credits} credits
                                                         </span>
                                                     )}
                                                     {statusIcon[req.status]}
@@ -357,7 +358,7 @@ export default function QuotaRequestsPage() {
                                 <div className="flex items-start justify-between gap-4">
                                     <div>
                                         <div className="flex items-center gap-2 flex-wrap">
-                                            <p className="text-sm font-medium">+{req.amount} requests</p>
+                                            <p className="text-sm font-medium">+{req.credits} credits</p>
                                             {statusIcon[req.status]}
                                             <Badge variant="outline" className={`text-xs ${statusColors[req.status]}`}>
                                                 {req.status.charAt(0) + req.status.slice(1).toLowerCase()}
@@ -398,7 +399,7 @@ export default function QuotaRequestsPage() {
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-muted-foreground">Amount requested</span>
-                                    <span className="font-medium">{allocateTarget.amount} requests</span>
+                                    <span className="font-medium">{allocateTarget.amount} credits</span>
                                 </div>
                                 <div className="flex justify-between">
                                     <span className="text-muted-foreground">Available quota</span>

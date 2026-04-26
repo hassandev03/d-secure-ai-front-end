@@ -36,7 +36,7 @@ export interface SAProfessional {
     industry: string;
     plan: string;
     status: ProfessionalStatus;
-    requests: number;
+    creditsUsed: number;
     joinedAt: string;
     lastActive: string;
     bio: string;
@@ -47,11 +47,11 @@ export interface SADashboardStats {
     activeOrganizations: number;
     totalUsers: number;
     totalProfessionals: number;
-    totalRequests: number;
-    todayRequests: number;
+    totalCreditsUsed: number;
+    todayCreditsUsed: number;
     anonymizationOps: number;
     activeSubscriptions: number;
-    avgRequestsPerUser: number;
+    avgCreditsPerUser: number;
 }
 
 export type ActivityIconType = 'user-plus' | 'check-circle' | 'zap' | 'alert' | 'settings' | 'trending-up';
@@ -85,7 +85,7 @@ export interface SAIndividualPlan {
     name: string;
     price: number;
     annualPrice: number;
-    requests: number;
+    creditBudget: string;
     maxUploadSize?: number;
     contextWindow?: number;
     allowedModels?: string[];

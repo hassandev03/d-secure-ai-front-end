@@ -61,7 +61,7 @@ const mockProfessional: User = {
     name: 'Alex Thompson',
     email: 'alex@freelance.com',
     role: 'PROFESSIONAL',
-    subscriptionTier: 'FREE',
+    subscriptionTier: 'PRO',
     isTwoFAEnabled: false,
     status: 'ACTIVE',
     jobTitle: 'Data Scientist',

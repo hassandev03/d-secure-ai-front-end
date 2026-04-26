@@ -14,7 +14,7 @@ import {
 } from "recharts";
 import PageHeader from "@/components/layout/PageHeader";
 import StatCard from "@/components/shared/StatCard";
-import QuotaBar from "@/components/shared/QuotaBar";
+import QuotaGauge from "@/components/shared/QuotaGauge";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
@@ -99,10 +99,10 @@ export default function DeptDashboardView({
                     delta={{ value: `${stats.activeEmployees} active`, trend: "up" }}
                 />
                 <StatCard
-                    title="Monthly Requests"
-                    value={stats.monthlyRequests.toLocaleString()}
+                    title="Monthly Credits"
+                    value={stats.monthlyCreditsUsed.toLocaleString()}
                     icon={Activity}
-                    delta={{ value: `Avg ${stats.avgRequestsPerEmployee} per user`, trend: "up" }}
+                    delta={{ value: `Avg ${stats.avgCreditsPerEmployee} per user`, trend: "up" }}
                     iconColor="text-info bg-info/10"
                 />
                 <StatCard
@@ -117,7 +117,7 @@ export default function DeptDashboardView({
             {/* ── Quota bar ── */}
             <Card className="mt-6">
                 <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
-                    <CardTitle className="text-base font-semibold">Department Quota</CardTitle>
+                    <CardTitle className="text-base font-semibold">Department Budget</CardTitle>
                     {showQuotaRequestLink && (
                         <Link href={quotaHref}>
                             <Button variant="ghost" size="sm">Request more &rarr;</Button>
@@ -125,11 +125,12 @@ export default function DeptDashboardView({
                     )}
                 </CardHeader>
                 <CardContent>
-                    <QuotaBar
-                        used={stats.monthlyRequests}
-                        total={stats.monthlyQuota}
-                        label="Monthly AI Requests"
-                    />
+                    <div className="flex justify-center py-2">
+                        <QuotaGauge
+                            percentageUsed={stats.quotaUtilization}
+                            size="md"
+                        />
+                    </div>
                 </CardContent>
             </Card>
 
@@ -431,8 +432,8 @@ export default function DeptDashboardView({
                                     </p>
                                 </div>
                                 <p className="text-sm font-semibold text-foreground">
-                                    {u.requests}{" "}
-                                    <span className="text-xs text-muted-foreground font-normal">requests</span>
+                                    {u.creditsUsed}{" "}
+                                    <span className="text-xs text-muted-foreground font-normal">credits</span>
                                 </p>
                             </div>
                         ))}

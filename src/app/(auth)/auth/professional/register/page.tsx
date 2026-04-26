@@ -190,7 +190,7 @@ export default function ProfessionalRegisterPage() {
                                     <div className="flex items-center justify-between">
                                         <div>
                                             <h3 className="font-semibold text-foreground">{plan.name}</h3>
-                                            <p className="text-sm text-muted-foreground">{plan.requests.toLocaleString()} requests/month</p>
+                                            <p className="text-sm text-muted-foreground">{plan.creditBudget} budget</p>
                                         </div>
                                         <div className="text-right">
                                             <span className="text-2xl font-bold text-foreground">${plan.price}</span>

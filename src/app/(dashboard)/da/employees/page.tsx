@@ -68,7 +68,7 @@ export default function EmployeeManagementPage() {
             // Seed the default role selection with the first role
             if (roles.length > 0) {
                 setNewRoleId(roles[0].id);
-                setNewLimit(String(roles[0].defaultDailyLimit));
+                setNewLimit(String(roles[0].defaultCreditLimit));
             }
         } catch {
             toast.error("Failed to load organisation roles.");
@@ -81,7 +81,7 @@ export default function EmployeeManagementPage() {
     const [search, setSearch]               = useState("");
     const [statusFilter, setStatusFilter]   = useState("all");
     const [roleFilter, setRoleFilter]       = useState("all");
-    const [sortBy, setSortBy]               = useState<"requests" | "name">("requests");
+    const [sortBy, setSortBy]               = useState<"creditsUsed" | "name">("creditsUsed");
     const [page, setPage]                   = useState(1);
 
     // ── Dialogs ──────────────────────────────────────────────────────────
@@ -119,7 +119,7 @@ export default function EmployeeManagementPage() {
         if (statusFilter !== "all") list = list.filter((e) => e.status.toLowerCase() === statusFilter);
         if (roleFilter   !== "all") list = list.filter((e) => e.roleName === roleFilter);
         if (sortBy === "name")     list.sort((a, b) => a.name.localeCompare(b.name));
-        else                       list.sort((a, b) => b.requests - a.requests);
+        else                       list.sort((a, b) => b.creditsUsed - a.creditsUsed);
         return list;
     }, [employees, search, statusFilter, roleFilter, sortBy]);
 
@@ -127,7 +127,7 @@ export default function EmployeeManagementPage() {
     const paginated     = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
     const activeCount   = employees.filter((e) => e.status === "ACTIVE").length;
     const inactiveCount = employees.filter((e) => e.status === "INACTIVE").length;
-    const totalRequests = employees.reduce((s, e) => s + e.requests, 0);
+    const totalCredits = employees.reduce((s, e) => s + e.creditsUsed, 0);
     const resetPage     = () => setPage(1);
 
     // ── Actions ──────────────────────────────────────────────────────────
@@ -151,7 +151,7 @@ export default function EmployeeManagementPage() {
                 roleId:    role.id,
                 roleName:  role.name,
                 status:    "ACTIVE",
-                dailyLimit: parseInt(newLimit) || role.defaultDailyLimit,
+                creditLimit: parseInt(newLimit) || role.defaultCreditLimit,
             });
             setEmployees((prev) => [emp, ...prev]);
             setNewName(""); setNewEmail(""); setNewLimit("30");
@@ -178,7 +178,7 @@ export default function EmployeeManagementPage() {
     };
 
     const handleRestrictToggle = async (emp: DeptEmployee) => {
-        const restricting = emp.dailyLimit !== 0;
+        const restricting = emp.creditLimit !== 0;
         try {
             const updated = await setEmployeeRestriction(emp.id, restricting);
             setEmployees((prev) => prev.map((e) => e.id === emp.id ? updated : e));
@@ -196,7 +196,7 @@ export default function EmployeeManagementPage() {
         try {
             const updated = await updateEmployeeLimit(limitTarget.id, val);
             setEmployees((prev) => prev.map((e) => e.id === limitTarget.id ? updated : e));
-            toast.success(`Daily limit for ${limitTarget.name} set to ${val}.`);
+            toast.success(`Credit limit for ${limitTarget.name} set to ${val}.`);
         } catch {
             toast.error("Failed to update limit.");
         } finally {
@@ -249,8 +249,8 @@ export default function EmployeeManagementPage() {
                     <p className="text-xs text-muted-foreground mt-0.5">Inactive</p>
                 </CardContent></Card>
                 <Card><CardContent className="p-4 text-center">
-                    <p className="text-2xl font-bold text-brand-700">{totalRequests.toLocaleString()}</p>
-                    <p className="text-xs text-muted-foreground mt-0.5">Total Requests</p>
+                    <p className="text-2xl font-bold text-brand-700">{totalCredits.toLocaleString()}</p>
+                    <p className="text-xs text-muted-foreground mt-0.5">Total Credits Used</p>
                 </CardContent></Card>
             </div>
 
@@ -286,7 +286,7 @@ export default function EmployeeManagementPage() {
                             <Select value={sortBy} onValueChange={(v) => setSortBy(v as typeof sortBy)}>
                                 <SelectTrigger className="w-36"><SelectValue placeholder="Sort" /></SelectTrigger>
                                 <SelectContent>
-                                    <SelectItem value="requests">Most Active</SelectItem>
+                                    <SelectItem value="creditsUsed">Most Active</SelectItem>
                                     <SelectItem value="name">Name A–Z</SelectItem>
                                 </SelectContent>
                             </Select>
@@ -325,8 +325,8 @@ export default function EmployeeManagementPage() {
                                 <TableHead>Employee</TableHead>
                                 <TableHead>Role</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead className="text-center">Requests</TableHead>
-                                <TableHead className="text-center">Daily Limit</TableHead>
+                                <TableHead className="text-center">Credits Used</TableHead>
+                                <TableHead className="text-center">Credit Limit</TableHead>
                                 <TableHead>Last Active</TableHead>
                                 <TableHead className="w-10" />
                             </TableRow>
@@ -350,12 +350,12 @@ export default function EmployeeManagementPage() {
                                     <TableCell><span className="text-sm text-muted-foreground">{m.roleName}</span></TableCell>
                                     <TableCell><StatusBadge status={m.status} /></TableCell>
                                     <TableCell className="text-center">
-                                        <span className="text-sm font-medium">{m.requests.toLocaleString()}</span>
+                                        <span className="text-sm font-medium">{m.creditsUsed.toLocaleString()}</span>
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        {m.dailyLimit === 0
+                                        {m.creditLimit === 0
                                             ? <Badge variant="outline" className="text-xs bg-danger/10 text-danger border-danger/20">Restricted</Badge>
-                                            : <span className="text-sm">{m.dailyLimit}/day</span>
+                                            : <span className="text-sm">{m.creditLimit.toLocaleString()}</span>
                                         }
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">{m.lastActive}</TableCell>
@@ -370,14 +370,14 @@ export default function EmployeeManagementPage() {
                                                 <DropdownMenuItem onClick={() => setActivityTarget(m)}>
                                                     <Activity className="mr-2 h-3.5 w-3.5" /> View Activity
                                                 </DropdownMenuItem>
-                                                <DropdownMenuItem onClick={() => { setLimitTarget(m); setEditLimit(String(m.dailyLimit)); }}>
-                                                    <Shield className="mr-2 h-3.5 w-3.5" /> Set Daily Limit
+                                                <DropdownMenuItem onClick={() => { setLimitTarget(m); setEditLimit(String(m.creditLimit)); }}>
+                                                    <Shield className="mr-2 h-3.5 w-3.5" /> Set Credit Limit
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
                                                     onClick={() => handleRestrictToggle(m)}
-                                                    className={m.dailyLimit === 0 ? "text-success focus:text-success" : "text-warning focus:text-warning"}
+                                                    className={m.creditLimit === 0 ? "text-success focus:text-success" : "text-warning focus:text-warning"}
                                                 >
-                                                    {m.dailyLimit === 0 ? "Unrestrict Access" : "Restrict Access"}
+                                                    {m.creditLimit === 0 ? "Unrestrict Access" : "Restrict Access"}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem
@@ -454,7 +454,7 @@ export default function EmployeeManagementPage() {
                                     onValueChange={(v) => {
                                         setNewRoleId(v);
                                         const role = orgRoles.find((r) => r.id === v);
-                                        if (role) setNewLimit(String(role.defaultDailyLimit));
+                                        if (role) setNewLimit(String(role.defaultCreditLimit));
                                     }}
                                 >
                                     <SelectTrigger><SelectValue placeholder="Select role…" /></SelectTrigger>
@@ -472,7 +472,7 @@ export default function EmployeeManagementPage() {
                             )}
                         </div>
                         <div className="space-y-2">
-                            <Label>Daily Request Limit</Label>
+                            <Label>Credit Limit</Label>
                             <Input
                                 type="number"
                                 value={newLimit}
@@ -510,13 +510,13 @@ export default function EmployeeManagementPage() {
             {/* ── Set Limit Dialog ────────────────────────────────────────── */}
             <Dialog open={!!limitTarget} onOpenChange={(o) => !o && setLimitTarget(null)}>
                 <DialogContent>
-                    <DialogHeader><DialogTitle>Set Daily Limit</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>Set Credit Limit</DialogTitle></DialogHeader>
                     <div className="py-2 space-y-3">
                         <p className="text-sm text-muted-foreground">
                             Setting limit for <strong>{limitTarget?.name}</strong>. Use&nbsp;<strong>0</strong> to restrict access entirely.
                         </p>
                         <div className="space-y-2">
-                            <Label>Daily Request Limit</Label>
+                            <Label>Credit Limit</Label>
                             <Input type="number" value={editLimit} onChange={(e) => setEditLimit(e.target.value)} min="0" autoFocus />
                         </div>
                     </div>
@@ -536,14 +536,14 @@ export default function EmployeeManagementPage() {
                     <div className="py-2 space-y-4">
                         <div className="grid grid-cols-2 gap-3">
                             <div className="rounded-lg border border-border p-4 text-center">
-                                <p className="text-2xl font-bold">{activityTarget?.requests.toLocaleString()}</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">Total Requests</p>
+                                <p className="text-2xl font-bold">{activityTarget?.creditsUsed.toLocaleString()}</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Total Credits Used</p>
                             </div>
                             <div className="rounded-lg border border-border p-4 text-center">
                                 <p className="text-2xl font-bold">
-                                    {activityTarget?.dailyLimit === 0 ? "—" : activityTarget?.dailyLimit}
+                                    {activityTarget?.creditLimit === 0 ? "—" : activityTarget?.creditLimit}
                                 </p>
-                                <p className="text-xs text-muted-foreground mt-0.5">Daily Limit</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Credit Limit</p>
                             </div>
                         </div>
                         <Separator />

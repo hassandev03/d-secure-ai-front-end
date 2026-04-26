@@ -227,8 +227,8 @@ export default function SubscriptionsPage() {
                                     <CardContent className="flex-1 px-6">
                                         <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 mb-6">
                                             <div className="flex items-center justify-between text-sm">
-                                                <span className="text-muted-foreground font-medium">Monthly Requests</span>
-                                                <span className="font-bold">{plan.requests.toLocaleString()}</span>
+                                                <span className="text-muted-foreground font-medium">Monthly creditBudget</span>
+                                                <span className="font-bold">{plan.creditBudget.toLocaleString()}</span>
                                             </div>
                                             <div className="h-px bg-border w-full" />
                                             <div className="flex items-center justify-between text-sm">

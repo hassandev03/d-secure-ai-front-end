@@ -147,8 +147,8 @@ export default function ProfessionalProfilePage({ params }: { params: Promise<{ 
                         <Card>
                             <CardContent className="p-4 flex flex-col items-center justify-center text-center space-y-1">
                                 <Activity className="h-5 w-5 text-brand-500 mb-1" />
-                                <span className="text-2xl font-bold">{profile.requests.toLocaleString()}</span>
-                                <span className="text-xs text-muted-foreground">Total Requests</span>
+                                <span className="text-2xl font-bold">{profile.creditsUsed.toLocaleString()}</span>
+                                <span className="text-xs text-muted-foreground">Credits Used</span>
                             </CardContent>
                         </Card>
                         <Card>

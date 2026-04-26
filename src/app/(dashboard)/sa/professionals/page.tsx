@@ -90,8 +90,8 @@ export default function ProfessionalsPage() {
 
     const handleExport = () => {
         const rows = [
-            ["Name", "Email", "Job Title", "Industry", "Plan", "Status", "Requests", "Joined"],
-            ...filtered.map((p) => [p.name, p.email, p.jobTitle, p.industry, p.plan, p.status, p.requests, p.joinedAt]),
+            ["Name", "Email", "Job Title", "Industry", "Plan", "Status", "creditsUsed", "Joined"],
+            ...filtered.map((p) => [p.name, p.email, p.jobTitle, p.industry, p.plan, p.status, p.creditsUsed, p.joinedAt]),
         ];
         const csv = rows.map((r) => r.join(",")).join("\n");
         const blob = new Blob([csv], { type: "text/csv" });
@@ -211,7 +211,7 @@ export default function ProfessionalsPage() {
                                 <TableHead>Role &amp; Industry</TableHead>
                                 <TableHead className="text-center">Plan</TableHead>
                                 <TableHead className="text-center">Status</TableHead>
-                                <TableHead className="text-center">Requests</TableHead>
+                                <TableHead className="text-center">creditsUsed</TableHead>
                                 <TableHead>Joined</TableHead>
                                 <TableHead className="w-10" />
                             </TableRow>
@@ -247,7 +247,7 @@ export default function ProfessionalsPage() {
                                         <div className="flex justify-center"><StatusBadge status={p.status} /></div>
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        <span className="text-sm font-medium">{p.requests.toLocaleString()}</span>
+                                        <span className="text-sm font-medium">{p.creditsUsed.toLocaleString()}</span>
                                     </TableCell>
                                     <TableCell className="text-sm text-muted-foreground">
                                         {new Date(p.joinedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}

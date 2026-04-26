@@ -107,42 +107,42 @@ const professionals: SAProfessional[] = [
     {
         id: 'pro-001', name: 'Alex Thompson', email: 'alex@freelance.com',
         jobTitle: 'Data Scientist', industry: 'Technology', plan: 'PRO',
-        status: 'ACTIVE', requests: 320, joinedAt: '2025-06-01',
+        status: 'ACTIVE', creditsUsed: 320, joinedAt: '2025-06-01',
         lastActive: '2 hours ago',
         bio: 'Experienced data scientist using secure AI to analyze large datasets while maintaining full compliance and data privacy standards.',
     },
     {
         id: 'pro-002', name: 'Maria Santos', email: 'maria@consulting.io',
         jobTitle: 'Legal Consultant', industry: 'Legal', plan: 'MAX',
-        status: 'ACTIVE', requests: 890, joinedAt: '2025-04-15',
+        status: 'ACTIVE', creditsUsed: 890, joinedAt: '2025-04-15',
         lastActive: '30 minutes ago',
         bio: 'Senior legal consultant leveraging AI-powered document analysis and anonymization tools for complex litigation and contract review.',
     },
     {
         id: 'pro-003', name: 'David Chen', email: 'david@design.co',
         jobTitle: 'UX Researcher', industry: 'Technology', plan: 'FREE',
-        status: 'ACTIVE', requests: 15, joinedAt: '2025-08-20',
+        status: 'ACTIVE', creditsUsed: 15, joinedAt: '2025-08-20',
         lastActive: '1 day ago',
         bio: 'UX researcher exploring privacy-first AI tools for user research and data analysis in design workflows.',
     },
     {
         id: 'pro-004', name: 'Fatima Al-Rashid', email: 'fatima@health.org',
         jobTitle: 'Clinical Researcher', industry: 'Healthcare', plan: 'PRO',
-        status: 'DEACTIVATED', requests: 0, joinedAt: '2025-05-10',
+        status: 'DEACTIVATED', creditsUsed: 0, joinedAt: '2025-05-10',
         lastActive: 'Never',
         bio: 'Clinical researcher focused on leveraging AI to analyze patient data while ensuring HIPAA compliance and data anonymization.',
     },
     {
         id: 'pro-005', name: 'James Wilson', email: 'james@finance.net',
         jobTitle: 'Financial Analyst', industry: 'Finance', plan: 'PRO',
-        status: 'ACTIVE', requests: 540, joinedAt: '2025-07-03',
+        status: 'ACTIVE', creditsUsed: 540, joinedAt: '2025-07-03',
         lastActive: '5 hours ago',
         bio: 'Financial analyst using AI-powered tools for secure market analysis and regulatory compliance reporting.',
     },
     {
         id: 'pro-006', name: 'Priya Sharma', email: 'priya@edu.academy',
         jobTitle: 'Research Fellow', industry: 'Education', plan: 'FREE',
-        status: 'SUSPENDED', requests: 0, joinedAt: '2025-09-12',
+        status: 'SUSPENDED', creditsUsed: 0, joinedAt: '2025-09-12',
         lastActive: '2 weeks ago',
         bio: 'Research fellow in educational technology, exploring AI applications in academic research with privacy preservation.',
     },
@@ -181,9 +181,9 @@ const enterprisePlans: SAEnterprisePlan[] = [
 ];
 
 const individualPlans: SAIndividualPlan[] = [
-    { key: 'FREE', name: SUBSCRIPTION_PLANS.FREE.name, price: SUBSCRIPTION_PLANS.FREE.price, annualPrice: SUBSCRIPTION_PLANS.FREE.annualPrice, requests: SUBSCRIPTION_PLANS.FREE.requests, maxUploadSize: 5, contextWindow: 4000, allowedModels: ['GPT-4o mini'], features: SUBSCRIPTION_PLANS.FREE.features, excluded: SUBSCRIPTION_PLANS.FREE.excluded, active: 180, maxCost: 0.5 },
-    { key: 'PRO', name: SUBSCRIPTION_PLANS.PRO.name, price: SUBSCRIPTION_PLANS.PRO.price, annualPrice: SUBSCRIPTION_PLANS.PRO.annualPrice, requests: SUBSCRIPTION_PLANS.PRO.requests, maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'], features: SUBSCRIPTION_PLANS.PRO.features, excluded: SUBSCRIPTION_PLANS.PRO.excluded, active: 54, popular: true, maxCost: 15 },
-    { key: 'MAX', name: SUBSCRIPTION_PLANS.MAX.name, price: SUBSCRIPTION_PLANS.MAX.price, annualPrice: SUBSCRIPTION_PLANS.MAX.annualPrice, requests: SUBSCRIPTION_PLANS.MAX.requests, maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'], features: SUBSCRIPTION_PLANS.MAX.features, excluded: SUBSCRIPTION_PLANS.MAX.excluded, active: 33, maxCost: 50 },
+    { key: 'FREE', name: SUBSCRIPTION_PLANS.FREE.name, price: SUBSCRIPTION_PLANS.FREE.price, annualPrice: SUBSCRIPTION_PLANS.FREE.annualPrice, creditBudget: SUBSCRIPTION_PLANS.FREE.creditBudget, maxUploadSize: 5, contextWindow: 4000, allowedModels: ['GPT-4o mini'], features: SUBSCRIPTION_PLANS.FREE.features, excluded: SUBSCRIPTION_PLANS.FREE.excluded, active: 180, maxCost: 0.5 },
+    { key: 'PRO', name: SUBSCRIPTION_PLANS.PRO.name, price: SUBSCRIPTION_PLANS.PRO.price, annualPrice: SUBSCRIPTION_PLANS.PRO.annualPrice, creditBudget: SUBSCRIPTION_PLANS.PRO.creditBudget, maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'], features: SUBSCRIPTION_PLANS.PRO.features, excluded: SUBSCRIPTION_PLANS.PRO.excluded, active: 54, popular: true, maxCost: 15 },
+    { key: 'MAX', name: SUBSCRIPTION_PLANS.MAX.name, price: SUBSCRIPTION_PLANS.MAX.price, annualPrice: SUBSCRIPTION_PLANS.MAX.annualPrice, creditBudget: SUBSCRIPTION_PLANS.MAX.creditBudget, maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'], features: SUBSCRIPTION_PLANS.MAX.features, excluded: SUBSCRIPTION_PLANS.MAX.excluded, active: 33, maxCost: 50 },
 ];
 
 const addonPackages: SAAddonPackage[] = [
@@ -263,17 +263,17 @@ export async function getDashboardStats(): Promise<SADashboardStats> {
     const activeOrgs = organizations.filter((o) => o.status === 'ACTIVE').length;
     const totalPros = professionals.length;
     const totalUsers = organizations.reduce((s, o) => s + o.employees, 0) + totalPros;
-    const totalRequests = 49400;
+    const totalCreditsUsed = 49400;
     return {
         totalOrganizations: organizations.length,
         activeOrganizations: activeOrgs,
         totalUsers,
         totalProfessionals: totalPros,
-        totalRequests,
-        todayRequests: 420,
+        totalCreditsUsed,
+        todayCreditsUsed: 420,
         anonymizationOps: 38200,
         activeSubscriptions: organizations.length + totalPros,
-        avgRequestsPerUser: Math.round(totalRequests / totalUsers),
+        avgCreditsPerUser: Math.round(totalCreditsUsed / totalUsers),
     };
 }
 
@@ -354,7 +354,9 @@ export async function getRevenueStats(): Promise<SARevenueStats> {
         totalRevenue += plan.price;
         const maxCost = plan.maxCost || 15;
         
-        const usedRatio = plan.requests > 0 ? (pro.requests / plan.requests) : 0;
+        // creditBudget is a string like "$25.00/mo"; parse the numeric value for ratio
+        const budgetValue = parseFloat((plan.creditBudget ?? '0').replace(/[^0-9.]/g, '')) || 1;
+        const usedRatio = Math.min(pro.creditsUsed / budgetValue, 1);
         totalCost += usedRatio * maxCost;
         maxPossibleCost += maxCost;
     }
