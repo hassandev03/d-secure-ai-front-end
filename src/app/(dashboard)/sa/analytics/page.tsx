@@ -56,28 +56,27 @@ export default function AnalyticsPage() {
         { name: "Est. Cost", value: revStats.totalCost, color: "#EF4444" },
     ];
 
-    const dailyRequests = [
-        { day: "Mon", requests: 410 }, { day: "Tue", requests: 480 },
-        { day: "Wed", requests: 520 }, { day: "Thu", requests: 460 },
-        { day: "Fri", requests: 490 }, { day: "Sat", requests: 180 },
-        { day: "Sun", requests: 240 },
+    const dailyCredits = [
+        { day: "Mon", credits: 4100 }, { day: "Tue", credits: 4800 },
+        { day: "Wed", credits: 5200 }, { day: "Thu", credits: 4600 },
+        { day: "Fri", credits: 4900 }, { day: "Sat", credits: 1800 },
+        { day: "Sun", credits: 2400 },
     ];
 
     const monthlyTrend = [
-        { month: "Jul", users: Math.round(stats.totalUsers * 0.25), requests: 3200 },
-        { month: "Aug", users: Math.round(stats.totalUsers * 0.40), requests: 5100 },
-        { month: "Sep", users: Math.round(stats.totalUsers * 0.55), requests: 6800 },
-        { month: "Oct", users: Math.round(stats.totalUsers * 0.80), requests: 8900 },
-        { month: "Nov", users: Math.round(stats.totalUsers * 0.90), requests: 10500 },
-        { month: "Dec", users: stats.totalUsers, requests: 12400 },
+        { month: "Jul", users: Math.round(stats.totalUsers * 0.25), credits: 3200 },
+        { month: "Aug", users: Math.round(stats.totalUsers * 0.40), credits: 5100 },
+        { month: "Sep", users: Math.round(stats.totalUsers * 0.55), credits: 6800 },
+        { month: "Oct", users: Math.round(stats.totalUsers * 0.80), credits: 8900 },
+        { month: "Nov", users: Math.round(stats.totalUsers * 0.90), credits: 10500 },
+        { month: "Dec", users: stats.totalUsers, credits: 12400 },
     ];
 
-    const sortedOrgs = [...orgs].sort((a, b) => b.quota.used - a.quota.used);
-    const totalOrgUsage = orgs.reduce((sum, o) => sum + o.quota.used, 0);
+    const sortedOrgs = [...orgs].sort((a, b) => b.quota.percentageUsed - a.quota.percentageUsed);
     const topOrgs = sortedOrgs.slice(0, 5).map(o => ({
         name: o.name,
-        requests: o.quota.used,
-        pct: totalOrgUsage > 0 ? Math.round((o.quota.used / totalOrgUsage) * 100) : 0
+        percentageUsed: o.quota.percentageUsed,
+        budget: o.quota.budget,
     }));
 
     return (
@@ -172,17 +171,17 @@ export default function AnalyticsPage() {
             </div>
 
             <div className="grid gap-6 lg:grid-cols-2">
-                {/* Daily requests bar chart */}
+                {/* Daily credits bar chart */}
                 <Card>
-                    <CardHeader><CardTitle className="text-base font-semibold">Daily Requests</CardTitle></CardHeader>
+                    <CardHeader><CardTitle className="text-base font-semibold">Daily Credit Spend</CardTitle></CardHeader>
                     <CardContent>
                         <ResponsiveContainer width="100%" height={280}>
-                            <BarChart data={dailyRequests}>
+                            <BarChart data={dailyCredits}>
                                 <CartesianGrid strokeDasharray="3 3" stroke="#E2E8F0" />
                                 <XAxis dataKey="day" tick={{ fontSize: 12 }} />
-                                <YAxis tick={{ fontSize: 12 }} />
-                                <RechartsTooltip />
-                                <Bar dataKey="requests" fill="#3B82F6" radius={[6, 6, 0, 0]} />
+                                <YAxis tick={{ fontSize: 12 }} tickFormatter={(v) => `${v} CU`} />
+                                <RechartsTooltip formatter={(v: number | undefined) => [`${(v ?? 0).toLocaleString()} CU`, 'Credits']} />
+                                <Bar dataKey="credits" name="Credits (CU)" fill="#3B82F6" radius={[6, 6, 0, 0]} />
                             </BarChart>
                         </ResponsiveContainer>
                     </CardContent>
@@ -228,7 +227,7 @@ export default function AnalyticsPage() {
                             <RechartsTooltip />
                             <Legend />
                             <Line yAxisId="left" type="monotone" dataKey="users" stroke="#3B82F6" strokeWidth={2} dot={{ r: 4 }} name="Users" />
-                            <Line yAxisId="right" type="monotone" dataKey="requests" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} name="Requests" />
+                            <Line yAxisId="right" type="monotone" dataKey="credits" stroke="#10B981" strokeWidth={2} dot={{ r: 4 }} name="Credits (CU)" />
                         </LineChart>
                     </ResponsiveContainer>
                 </CardContent>
@@ -242,9 +241,9 @@ export default function AnalyticsPage() {
                         {topOrgs.map((org) => (
                             <div key={org.name} className="flex items-center gap-4">
                                 <p className="w-28 text-sm font-medium truncate">{org.name}</p>
-                                <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-brand-500" style={{ width: `${org.pct}%` }} /></div>
-                                <p className="w-20 text-right text-sm text-muted-foreground">{org.requests.toLocaleString()}</p>
-                                <p className="w-12 text-right text-xs font-semibold text-foreground">{org.pct}%</p>
+                                <div className="flex-1 h-2.5 rounded-full bg-muted overflow-hidden"><div className="h-full rounded-full bg-brand-500" style={{ width: `${org.percentageUsed}%` }} /></div>
+                                <p className="w-20 text-right text-sm text-muted-foreground">${org.budget.toLocaleString()}</p>
+                                <p className="w-12 text-right text-xs font-semibold text-foreground">{org.percentageUsed}%</p>
                             </div>
                         ))}
                     </div>

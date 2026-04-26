@@ -88,14 +88,14 @@ export default function SuperAdminDashboard() {
                     iconColor="text-info bg-info/10"
                 />
                 <StatCard
-                    title="Today's creditsUsed"
+                    title="Credits Used Today"
                     value={stats.todayCreditsUsed.toLocaleString()}
                     icon={Activity}
                     delta={{ value: "+12% vs yesterday", trend: "up" }}
                     iconColor="text-success bg-success/10"
                 />
                 <StatCard
-                    title="Avg creditsUsed / User"
+                    title="Avg Credits / User"
                     value={stats.avgCreditsPerUser}
                     icon={TrendingUp}
                     delta={{ value: "Per registered user, all-time", trend: "flat" }}
@@ -136,9 +136,9 @@ export default function SuperAdminDashboard() {
                                     <p className="text-xs text-muted-foreground mt-0.5">{org.industry} · {org.employees} employees</p>
                                 </div>
                                 <div className="w-32 hidden sm:block">
-                                    <QuotaBar used={org.quota.used} total={org.quota.total} size="sm" showLabel={false} />
+                                    <QuotaBar used={org.quota.percentageUsed} total={100} size="sm" showLabel={false} />
                                     <p className="mt-1 text-[11px] text-muted-foreground text-right">
-                                        {org.quota.used.toLocaleString()}/{org.quota.total.toLocaleString()}
+                                        {org.quota.percentageUsed}% · ${org.quota.budget.toLocaleString()}
                                     </p>
                                 </div>
                                 <ArrowUpRight className="h-4 w-4 shrink-0 text-muted-foreground hidden lg:block" />

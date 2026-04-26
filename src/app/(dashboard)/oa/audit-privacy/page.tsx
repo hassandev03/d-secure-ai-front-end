@@ -60,7 +60,7 @@ const MOCK_CHAT: Record<string, { role: "user" | "assistant"; content: string; a
     default: [
         { role: "user",      content: "Please summarize the performance review for Sarah Connor. Her email is sarah.connor@acme.com and her SSN is 123-45-6789.",
           anonymized: "Please summarize the performance review for [PERSON_NAME_1]. Her email is [EMAIL_1] and her SSN is [SSN_1]." },
-        { role: "assistant", content: "Based on the anonymized query, here is a summary of [PERSON_NAME_1]'s performance reviewâ€¦" },
+        { role: "assistant", content: "Based on the anonymized query, here is a summary of [PERSON_NAME_1]'s performance review..." },
         { role: "user",      content: "Also pull their credit card on file: 4532-1234-5678-9012.",
           anonymized: "Also pull their credit card on file: [CARD_NUMBER_1]." },
         { role: "assistant", content: "The card ending in [CARD_NUMBER_1] has been located. All financial identifiers have been masked." },
@@ -327,7 +327,7 @@ function PrivacyEngineSim() {
                                                 <div className="absolute inset-0 animate-ping rounded-full bg-brand-500/20" />
                                                 <Bot className="relative z-10 h-7 w-7 text-brand-600" />
                                             </div>
-                                            <span className="mt-3 text-xs font-bold uppercase tracking-widest text-slate-700">Detecting PIIâ€¦</span>
+                                            <span className="mt-3 text-xs font-bold uppercase tracking-widest text-slate-700">Detecting PII...</span>
                                         </motion.div>
                                     ) : simResult ? (
                                         <motion.div key="anon-content" initial={{ opacity: 0 }} animate={{ opacity: 1 }} className="p-4 h-full flex flex-col gap-2">
@@ -362,7 +362,7 @@ function PrivacyEngineSim() {
                             disabled={anonymizing || !input.trim()}
                         >
                             {anonymizing
-                                ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Anonymizingâ€¦</>
+                                ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Anonymizing...</>
                                 : <><Sparkles className="mr-2 h-4 w-4" /> Anonymize</>
                             }
                         </Button>
@@ -376,7 +376,7 @@ function PrivacyEngineSim() {
                                         disabled={sending}
                                     >
                                         {sending
-                                            ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Sending to AIâ€¦</>
+                                            ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Sending to AI...</>
                                             : <><Play className="mr-2 h-4 w-4 fill-current" /> Send to AI</>
                                         }
                                     </Button>
@@ -469,7 +469,7 @@ function QueryLogsTable({ logs, onView }: { logs: OAQueryLog[]; onView: (log: OA
                     <Search className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground" />
                     <input
                         type="text"
-                        placeholder="Search logsâ€¦"
+                        placeholder="Search logs..."
                         value={search}
                         onChange={(e) => setSearch(e.target.value)}
                         className="h-8 rounded-md border border-border bg-background pl-8 pr-3 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-brand-500/30 w-48"

@@ -198,7 +198,7 @@ export default function QuotaRequestsPage() {
                             <DialogHeader><DialogTitle>Request Quota Increase</DialogTitle></DialogHeader>
                             <div className="grid gap-4 py-4">
                                 <div className="space-y-2">
-                                    <Label>Additional Requests Needed</Label>
+                                    <Label>Additional Credits Needed (CU)</Label>
                                     <Input type="number" placeholder="500" value={newAmount} onChange={(e) => setNewAmount(e.target.value)} />
                                 </div>
                                 <div className="space-y-2">
@@ -241,7 +241,7 @@ export default function QuotaRequestsPage() {
                         )}>
                             {remaining === 0
                                 ? "No quota remaining — employee requests cannot be approved."
-                                : `${remaining} request${remaining !== 1 ? "s" : ""} available to allocate`
+                                : `${remaining.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CU available to allocate`
                             }
                         </p>
                     </CardContent>

@@ -563,7 +563,7 @@ export default function AccessControlPage() {
                                                 />
                                             </div>
                                             <div className="flex items-center gap-2 rounded-lg bg-muted/60 px-3 py-2">
-                                                <span className="text-xs text-muted-foreground flex-1">Daily Limit</span>
+                                                <span className="text-xs text-muted-foreground flex-1">Credit Limit (CU)</span>
                                                 <Input
                                                     type="number"
                                                     value={emp.limit}

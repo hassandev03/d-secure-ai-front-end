@@ -76,8 +76,8 @@ export default function OrganizationsPage() {
 
     const handleExport = () => {
         const rows = [
-            ["Name", "Domain", "Industry", "Country", "Status", "Plan", "Employees", "Quota Used", "Quota Total", "Registered"],
-            ...filtered.map((o) => [o.name, o.domain, o.industry, o.country, o.status, o.plan, o.employees, o.quota.used, o.quota.total, o.registeredAt]),
+            ["Name", "Domain", "Industry", "Country", "Status", "Plan", "Employees", "Quota Used (%)", "Budget (CU)", "Registered"],
+            ...filtered.map((o) => [o.name, o.domain, o.industry, o.country, o.status, o.plan, o.employees, o.quota.percentageUsed, o.quota.budget, o.registeredAt]),
         ];
         const csv = rows.map((r) => r.join(",")).join("\n");
         const blob = new Blob([csv], { type: "text/csv" });
@@ -233,7 +233,7 @@ export default function OrganizationsPage() {
                                         <span className="text-sm font-medium">{org.employees}</span>
                                     </TableCell>
                                     <TableCell className="w-44">
-                                        <QuotaBar used={org.quota.used} total={org.quota.total} size="sm" />
+                                        <QuotaBar used={org.quota.percentageUsed} total={100} size="sm" label={`${org.quota.percentageUsed}% of $${org.quota.budget.toLocaleString()}`} />
                                     </TableCell>
                                     <TableCell>
                                         <span className="text-sm font-medium text-foreground/80">{org.plan}</span>

@@ -804,17 +804,17 @@ export default function OrgSettingsPage() {
                                         value={orgPolicy.defaultCreditLimit}
                                         onChange={(e) => setOrgPolicy((p) => ({ ...p, defaultCreditLimit: parseInt(e.target.value) || 0 }))}
                                     />
-                                    <p className="text-xs text-muted-foreground">creditBudget per employee per day.</p>
+                                    <p className="text-xs text-muted-foreground">Default USD credit budget per employee per month.</p>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Max Daily Limit</Label>
+                                    <Label>Max Credit Limit ($ / employee / mo)</Label>
                                     <Input
                                         type="number"
                                         min={0}
-                                        value={orgPolicy.maxDailyLimit}
-                                        onChange={(e) => setOrgPolicy((p) => ({ ...p, maxDailyLimit: parseInt(e.target.value) || 0 }))}
+                                        value={orgPolicy.maxCreditLimit}
+                                        onChange={(e) => setOrgPolicy((p) => ({ ...p, maxCreditLimit: parseInt(e.target.value) || 0 }))}
                                     />
-                                    <p className="text-xs text-muted-foreground">Upper cap — depts cannot exceed this.</p>
+                                    <p className="text-xs text-muted-foreground">Upper cap (USD) — no department can exceed this per-employee limit.</p>
                                 </div>
                                 <div className="flex items-end">
                                     <Button
@@ -912,7 +912,7 @@ export default function OrgSettingsPage() {
                                                         {modelCount}/{MODELS.length} models
                                                     </Badge>
                                                     <Badge variant="outline" className="text-[10px]">
-                                                        {dept.creditLimit}/day
+                                                        {dept.creditLimit} CU/mo
                                                     </Badge>
                                                 </div>
 
@@ -972,7 +972,7 @@ export default function OrgSettingsPage() {
                                                             {modelCount}/{MODELS.length} models
                                                         </Badge>
                                                         <Badge variant="outline" className="text-[10px]">
-                                                            {dept.creditLimit}/day
+                                                            {dept.creditLimit} CU/mo
                                                         </Badge>
                                                     </div>
 

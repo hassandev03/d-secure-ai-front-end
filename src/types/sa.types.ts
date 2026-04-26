@@ -13,7 +13,7 @@ export interface SAOrganization {
     billingCycle: 'MONTHLY' | 'ANNUAL';
     employees: number;
     departments: number;
-    quota: { used: number; total: number };
+    quota: { percentageUsed: number; budget: number };
     registeredAt: string;
     adminName: string;
     adminEmail: string;
@@ -25,7 +25,10 @@ export interface SAOrganization {
 export interface SADepartment {
     name: string;
     employees: number;
-    quota: { used: number; total: number };
+    quota: {
+        percentageUsed: number;
+        budget: number;
+    };
 }
 
 export interface SAProfessional {

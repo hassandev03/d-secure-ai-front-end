@@ -153,8 +153,8 @@ export default function OrgAdminDashboard() {
                 {/* Department Quota Usage — "Which teams are consuming the most quota?" */}
                 <Card className="flex flex-col">
                     <CardHeader>
-                        <CardTitle className="text-base font-semibold">Department Quota Usage</CardTitle>
-                        <CardDescription>Total AI requests consumed by each department this month.</CardDescription>
+                        <CardTitle className="text-base font-semibold">Department Credit Usage</CardTitle>
+                        <CardDescription>Credits (CU) consumed by each department this month.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-1 min-h-75 pb-4">
                         <ResponsiveContainer width="100%" height="100%">
@@ -164,9 +164,9 @@ export default function OrgAdminDashboard() {
                                 <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} width={90} />
                                 <RechartsTooltip
                                     contentStyle={TOOLTIP_STYLE}
-                                    formatter={(value: any) => [`${value} requests`, "Usage"]}
+                                    formatter={(value: number | undefined) => [`${(value ?? 0).toLocaleString()} CU`, "Credits Used"]}
                                 />
-                                <Bar dataKey="used" name="Requests" radius={[0, 4, 4, 0]} barSize={18}>
+                                <Bar dataKey="used" name="Credits (CU)" radius={[0, 4, 4, 0]} barSize={18}>
                                     {deptUsage.map((entry) => (
                                         <Cell key={entry.name} fill={entry.color} />
                                     ))}
@@ -253,7 +253,7 @@ export default function OrgAdminDashboard() {
                             />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
                             <RechartsTooltip contentStyle={TOOLTIP_STYLE} />
-                            <Area type="monotone" dataKey="requests" name="Requests" stroke="#3b82f6" strokeWidth={2} fill="url(#gradOrgRequests)" />
+                            <Area type="monotone" dataKey="creditsUsed" name="Credits Used (CU)" stroke="#3b82f6" strokeWidth={2} fill="url(#gradOrgRequests)" />
                         </AreaChart>
                     </ResponsiveContainer>
                 </CardContent>

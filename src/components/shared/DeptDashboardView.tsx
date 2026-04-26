@@ -23,9 +23,9 @@ import {
     getDeptDashboardStats, getDeptDailyRequests, getDeptModelUsage,
     getDeptUsageTrend, getDeptRoleUsage, getDeptTopUsers,
     getDeptRequestTypeBreakdown,
-    type DeptDashboardStats, type DailyRequestPoint, type ModelUsageSlice,
+    type DeptDashboardStats, type DailyUsagePoint, type ModelUsageSlice,
     type UsageTrendPoint, type RoleUsagePoint, type DeptEmployee,
-    type RequestTypePoint,
+    type UsageTypePoint,
 } from "@/services/da.service";
 
 interface DeptDashboardViewProps {
@@ -52,13 +52,13 @@ export default function DeptDashboardView({
     headerActions,
 }: DeptDashboardViewProps) {
     const [stats, setStats] = useState<DeptDashboardStats | null>(null);
-    const [daily, setDaily] = useState<DailyRequestPoint[]>([]);
+    const [daily, setDaily] = useState<DailyUsagePoint[]>([]);
     const [models, setModels] = useState<ModelUsageSlice[]>([]);
     const [usageTrend, setUsageTrend] = useState<UsageTrendPoint[]>([]);
     const [trendRange, setTrendRange] = useState<7 | 30>(7);
     const [roles, setRoles] = useState<RoleUsagePoint[]>([]);
     const [topUsers, setTopUsers] = useState<DeptEmployee[]>([]);
-    const [requestTypes, setRequestTypes] = useState<RequestTypePoint[]>([]);
+    const [usageTypes, setUsageTypes] = useState<UsageTypePoint[]>([]);
 
     useEffect(() => {
         getDeptDashboardStats().then(setStats);
@@ -66,7 +66,7 @@ export default function DeptDashboardView({
         getDeptModelUsage().then(setModels);
         getDeptRoleUsage().then(setRoles);
         getDeptTopUsers(5).then(setTopUsers);
-        getDeptRequestTypeBreakdown().then(setRequestTypes);
+        getDeptRequestTypeBreakdown().then(setUsageTypes);
     }, []);
 
     const loadTrend = useCallback((range: 7 | 30) => {
@@ -136,23 +136,24 @@ export default function DeptDashboardView({
 
             {/* ── Row 1: Daily Activity + Model Usage ── */}
             <div className="mt-6 grid gap-6 lg:grid-cols-2 items-stretch">
-                {/* Daily Requests Trend */}
+                {/* Daily Credits Trend */}
                 <Card className="flex flex-col">
                     <CardHeader>
-                        <CardTitle className="text-base font-semibold">Daily Request Activity</CardTitle>
+                        <CardTitle className="text-base font-semibold">Daily Credit Activity</CardTitle>
                     </CardHeader>
                     <CardContent className="flex-1 min-h-[300px] w-full pb-4">
                         <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={daily} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                                 <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E2E8F0" />
                                 <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} dy={10} />
-                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
+                                <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} tickFormatter={(v) => `${v} CU`} />
                                 <RechartsTooltip
                                     cursor={{ fill: "#f1f5f9" }}
                                     contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
+                                    formatter={(v: number | undefined) => [`${(v ?? 0).toFixed(2)} CU`, undefined as never]}
                                 />
                                 <Legend wrapperStyle={{ paddingTop: "20px", fontSize: "12px" }} />
-                                <Bar dataKey="requests" name="AI Requests" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
+                                <Bar dataKey="credits" name="Credits Used (CU)" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={20} />
                                 <Bar dataKey="activeUsers" name="Active Users" fill="#10b981" radius={[4, 4, 0, 0]} barSize={20} />
                             </BarChart>
                         </ResponsiveContainer>
@@ -249,8 +250,8 @@ export default function DeptDashboardView({
                             <Legend wrapperStyle={{ paddingTop: "16px", fontSize: "12px" }} />
                             <Area
                                 type="monotone"
-                                dataKey="requests"
-                                name="Requests"
+                                dataKey="credits"
+                                name="Credits Used (CU)"
                                 stroke="#3b82f6"
                                 strokeWidth={2}
                                 fill="url(#gradRequests)"
@@ -284,25 +285,25 @@ export default function DeptDashboardView({
                                 contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0", boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.1)" }}
                             />
                             <Legend wrapperStyle={{ paddingTop: "16px", fontSize: "12px" }} />
-                            <Bar dataKey="totalRequests" name="Total Requests" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={24} />
-                            <Bar dataKey="avgRequests" name="Avg / Employee" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={24} />
+                            <Bar dataKey="totalCredits" name="Total Credits (CU)" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={24} />
+                            <Bar dataKey="avgCredits" name="Avg Credits / Employee (CU)" fill="#f59e0b" radius={[4, 4, 0, 0]} barSize={24} />
                         </BarChart>
                     </ResponsiveContainer>
                 </CardContent>
             </Card>
 
-            {/* ── Request Type Breakdown ── */}
-            {requestTypes.length > 0 && (() => {
-                const highPct = requestTypes
+            {/* ── Usage Type Breakdown ── */}
+            {usageTypes.length > 0 && (() => {
+                const highPct = usageTypes
                     .filter((r) => r.priority === 'high')
                     .reduce((s, r) => s + r.percentage, 0);
 
-                const priorityBadge = (p: RequestTypePoint['priority']) => {
+                const priorityBadge = (p: UsageTypePoint['priority']) => {
                     if (p === 'high')   return 'bg-red-100 text-red-700';
                     if (p === 'medium') return 'bg-amber-100 text-amber-700';
                     return 'bg-emerald-100 text-emerald-700';
                 };
-                const priorityLabel = (p: RequestTypePoint['priority']) => {
+                const priorityLabel = (p: UsageTypePoint['priority']) => {
                     if (p === 'high')   return 'High Priority';
                     if (p === 'medium') return 'Medium';
                     return 'Routine';
@@ -311,7 +312,7 @@ export default function DeptDashboardView({
                 return (
                     <Card className="mt-6">
                         <CardHeader>
-                            <CardTitle className="text-base font-semibold">Request Type Breakdown</CardTitle>
+                            <CardTitle className="text-base font-semibold">Credit Usage by Type</CardTitle>
                         </CardHeader>
                         <CardContent>
                             <div className="flex flex-col lg:flex-row gap-6">
@@ -319,7 +320,7 @@ export default function DeptDashboardView({
                                 <div className="flex-1 min-h-[220px]">
                                     <ResponsiveContainer width="100%" height={220}>
                                         <BarChart
-                                            data={requestTypes}
+                                            data={usageTypes}
                                             layout="vertical"
                                             margin={{ top: 0, right: 56, left: 10, bottom: 0 }}
                                         >
@@ -329,6 +330,7 @@ export default function DeptDashboardView({
                                                 axisLine={false}
                                                 tickLine={false}
                                                 tick={{ fontSize: 11, fill: "#64748b" }}
+                                                tickFormatter={(v) => `${v} CU`}
                                             />
                                             <YAxis
                                                 type="category"
@@ -342,17 +344,18 @@ export default function DeptDashboardView({
                                                 cursor={{ fill: "#f1f5f9" }}
                                                 contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }}
                                                 formatter={(value: number | undefined) => [
-                                                    `${(value ?? 0).toLocaleString()} requests`,
-                                                    'Count',
+                                                    `${(value ?? 0).toFixed(2)} CU`,
+                                                    'Spend',
                                                 ]}
                                             />
-                                            <Bar dataKey="count" radius={[0, 4, 4, 0]} barSize={20}>
-                                                {requestTypes.map((entry) => (
+                                            <Bar dataKey="credits" radius={[0, 4, 4, 0]} barSize={20}>
+                                                {usageTypes.map((entry) => (
                                                     <Cell key={entry.type} fill={entry.color} />
                                                 ))}
                                                 <LabelList
-                                                    dataKey="count"
+                                                    dataKey="credits"
                                                     position="right"
+                                                    formatter={(v) => `${Number(v ?? 0)} CU`}
                                                     style={{ fontSize: 11, fill: "#64748b", fontWeight: 600 }}
                                                 />
                                             </Bar>
@@ -362,7 +365,7 @@ export default function DeptDashboardView({
 
                                 {/* Priority legend */}
                                 <div className="w-full lg:w-64 space-y-2">
-                                    {requestTypes.map((rt) => (
+                                    {usageTypes.map((rt) => (
                                         <div
                                             key={rt.type}
                                             className="flex items-start gap-2.5 rounded-lg border border-border p-3"
@@ -379,7 +382,7 @@ export default function DeptDashboardView({
                                                     </span>
                                                 </div>
                                                 <p className="text-xs text-muted-foreground mt-0.5">
-                                                    {rt.count.toLocaleString()} requests &middot; {rt.percentage}%
+                                                    ${rt.credits.toFixed(2)} &middot; {rt.percentage}%
                                                 </p>
                                             </div>
                                         </div>
@@ -387,10 +390,10 @@ export default function DeptDashboardView({
                                 </div>
                             </div>
 
-                            {/* Actionable callout for high-priority request types */}
+                            {/* Actionable callout for high-priority usage types */}
                             {highPct > 0 && (
                                 <p className="mt-4 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2.5 text-xs text-amber-800">
-                                    <span className="font-semibold">Note:</span> High-priority request types (File Upload &amp; Speech Input) account for <span className="font-semibold">{highPct}%</span> of all requests. Verify that the relevant policies are enabled under{" "}
+                                    <span className="font-semibold">Note:</span> High-priority usage types (File Upload &amp; Speech Input) account for <span className="font-semibold">{highPct}%</span> of total credit spend. Verify that the relevant policies are enabled under{" "}
                                     <Link href={`${linkPrefix}/access-control`} className="underline underline-offset-2">
                                         Access Control
                                     </Link>

@@ -4,7 +4,11 @@
  * Architecture:
  *   - All canonical mock data lives in the private constants below (DEPTS,
  *     EMPLOYEES, QUOTA_REQUESTS, etc.).  No other OA page file contains seed
- *     data arrays.
+ *     data — if you need to display a number in an OA page, derive it from
+ *     the objects defined here, or add a new field here.
+ *
+ * Credit values are derived from costCalculator.ts (Module H formula) so that
+ * every portal displays consistent, physically-meaningful USD amounts.
  *   - Every exported function maps 1-to-1 to a real backend endpoint (shown
  *     in the JSDoc comment).  Swap the mock body for an axios/fetch call when
  *     the Python backend is ready — frontend pages require zero changes.
@@ -14,6 +18,7 @@
 
 import { delay } from './api';
 import type { LLMModel } from '@/types/chat.types';
+import { estimateMonthlyCreditsFixed } from '@/lib/costCalculator';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Canonical types
@@ -65,7 +70,8 @@ export type OAOrgPolicy = {
     allModels:         boolean;
     permittedModels:   LLMModel[];
     defaultCreditLimit: number;
-    maxDailyLimit:     number;
+    /** Maximum USD credit limit allowed per employee/month — depts cannot exceed this */
+    maxCreditLimit:    number;
     allowApiAccess:    boolean;
 };
 
@@ -247,7 +253,7 @@ const ORG_POLICY: OAOrgPolicy = {
     allModels:         false,
     permittedModels:   ["gpt-5-1", "claude-4-6-sonnet", "gemini-3-1-pro"] as LLMModel[],
     defaultCreditLimit: 50,
-    maxDailyLimit:     200,
+    maxCreditLimit:     200,
     allowApiAccess:    false,
 };
 
@@ -282,19 +288,28 @@ const DEPTS: OADepartment[] = [
     { id: "dept-006", name: "Operations",  head: "James Wilson",  headEmail: "james@acme.com",  employees: 8,  percentageUsed: 44.2, budget: 700,  color: "#F59E0B" },
 ];
 
+// OA employee creditsUsed — derived from the same role profiles used in da.service.ts
+// so that SA, OA, and DA portals all see internally consistent credit values.
+const OA_ROLE_BUDGETS = {
+    DEPT_ADMIN: estimateMonthlyCreditsFixed({ queriesPerDay: 6, avgInputWords: 250, avgOutputWords: 400, modelKey: 'gpt-4o',           fileQueryPct: 0.20, avgFileWords: 600, ragPct: 0.20 }),
+    EMPLOYEE:   estimateMonthlyCreditsFixed({ queriesPerDay: 5, avgInputWords: 200, avgOutputWords: 350, modelKey: 'claude-4-5-haiku', fileQueryPct: 0.15, avgFileWords: 400, ragPct: 0.05 }),
+};
+const oa = (role: 'EMPLOYEE' | 'DEPT_ADMIN', frac: number, limit: number) =>
+    ({ creditsUsed: Math.round(OA_ROLE_BUDGETS[role] * frac * 10) / 10, creditLimit: limit });
+
 const EMPLOYEES: OAEmployee[] = [
-    { id: "emp-001", name: "John Miller",    email: "john@acme.com",    departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 180, creditLimit: 50,  lastActive: "2026-03-13" },
-    { id: "emp-002", name: "Emma Davis",     email: "emma@acme.com",    departmentId: "dept-002", department: "Marketing",   role: "DEPT_ADMIN", status: "ACTIVE",   creditsUsed: 95,  creditLimit: 100, lastActive: "2026-03-13" },
-    { id: "emp-003", name: "Carlos Ruiz",    email: "carlos@acme.com",  departmentId: "dept-003", department: "Sales",       role: "EMPLOYEE",   status: "PENDING",  creditsUsed: 0,   creditLimit: 30,  lastActive: "—" },
-    { id: "emp-004", name: "Aisha Patel",    email: "aisha@acme.com",   departmentId: "dept-004", department: "Finance",     role: "DEPT_ADMIN", status: "ACTIVE",   creditsUsed: 210, creditLimit: 100, lastActive: "2026-03-12" },
-    { id: "emp-005", name: "Mike Chen",      email: "mike@acme.com",    departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "INACTIVE", creditsUsed: 45,  creditLimit: 0,   lastActive: "2026-02-15" },
-    { id: "emp-006", name: "Sophie Laurent", email: "sophie@acme.com",  departmentId: "dept-005", department: "HR",          role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 60,  creditLimit: 30,  lastActive: "2026-03-13" },
-    { id: "emp-007", name: "Raj Patel",      email: "raj@acme.com",     departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 320, creditLimit: 50,  lastActive: "2026-03-13" },
-    { id: "emp-008", name: "Lisa Wang",      email: "lisa@acme.com",    departmentId: "dept-006", department: "Operations",  role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 78,  creditLimit: 30,  lastActive: "2026-03-12" },
-    { id: "emp-009", name: "Tom Brennan",    email: "tom@acme.com",     departmentId: "dept-003", department: "Sales",       role: "DEPT_ADMIN", status: "ACTIVE",   creditsUsed: 134, creditLimit: 100, lastActive: "2026-03-13" },
-    { id: "emp-010", name: "Nina Hoffmann",  email: "nina@acme.com",    departmentId: "dept-004", department: "Finance",     role: "EMPLOYEE",   status: "ACTIVE",   creditsUsed: 88,  creditLimit: 30,  lastActive: "2026-03-11" },
-    { id: "emp-011", name: "Kevin Park",     email: "kevin@acme.com",   departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "PENDING",  creditsUsed: 0,   creditLimit: 30,  lastActive: "—" },
-    { id: "emp-012", name: "Priya Sharma",   email: "priya@acme.com",   departmentId: "dept-005", department: "HR",          role: "DEPT_ADMIN", status: "ACTIVE",   creditsUsed: 112, creditLimit: 100, lastActive: "2026-03-13" },
+    { id: "emp-001", name: "John Miller",    email: "john@acme.com",    departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   ...oa('EMPLOYEE',   0.72, 50),  lastActive: "2026-03-13" },
+    { id: "emp-002", name: "Emma Davis",     email: "emma@acme.com",    departmentId: "dept-002", department: "Marketing",   role: "DEPT_ADMIN", status: "ACTIVE",   ...oa('DEPT_ADMIN', 0.38, 100), lastActive: "2026-03-13" },
+    { id: "emp-003", name: "Carlos Ruiz",    email: "carlos@acme.com",  departmentId: "dept-003", department: "Sales",       role: "EMPLOYEE",   status: "PENDING",  creditsUsed: 0,   creditLimit: 30,  lastActive: "—"         },
+    { id: "emp-004", name: "Aisha Patel",    email: "aisha@acme.com",   departmentId: "dept-004", department: "Finance",     role: "DEPT_ADMIN", status: "ACTIVE",   ...oa('DEPT_ADMIN', 0.84, 100), lastActive: "2026-03-12" },
+    { id: "emp-005", name: "Mike Chen",      email: "mike@acme.com",    departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "INACTIVE", ...oa('EMPLOYEE',   0.18, 0),   lastActive: "2026-02-15" },
+    { id: "emp-006", name: "Sophie Laurent", email: "sophie@acme.com",  departmentId: "dept-005", department: "HR",          role: "EMPLOYEE",   status: "ACTIVE",   ...oa('EMPLOYEE',   0.24, 30),  lastActive: "2026-03-13" },
+    { id: "emp-007", name: "Raj Patel",      email: "raj@acme.com",     departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "ACTIVE",   ...oa('EMPLOYEE',   0.97, 50),  lastActive: "2026-03-13" },
+    { id: "emp-008", name: "Lisa Wang",      email: "lisa@acme.com",    departmentId: "dept-006", department: "Operations",  role: "EMPLOYEE",   status: "ACTIVE",   ...oa('EMPLOYEE',   0.31, 30),  lastActive: "2026-03-12" },
+    { id: "emp-009", name: "Tom Brennan",    email: "tom@acme.com",     departmentId: "dept-003", department: "Sales",       role: "DEPT_ADMIN", status: "ACTIVE",   ...oa('DEPT_ADMIN', 0.53, 100), lastActive: "2026-03-13" },
+    { id: "emp-010", name: "Nina Hoffmann",  email: "nina@acme.com",    departmentId: "dept-004", department: "Finance",     role: "EMPLOYEE",   status: "ACTIVE",   ...oa('EMPLOYEE',   0.35, 30),  lastActive: "2026-03-11" },
+    { id: "emp-011", name: "Kevin Park",     email: "kevin@acme.com",   departmentId: "dept-001", department: "Engineering", role: "EMPLOYEE",   status: "PENDING",  creditsUsed: 0,   creditLimit: 30,  lastActive: "—"         },
+    { id: "emp-012", name: "Priya Sharma",   email: "priya@acme.com",   departmentId: "dept-005", department: "HR",          role: "DEPT_ADMIN", status: "ACTIVE",   ...oa('DEPT_ADMIN', 0.45, 100), lastActive: "2026-03-13" },
 ];
 
 const QUOTA_REQUESTS: OAQuotaRequest[] = [
@@ -428,16 +443,19 @@ function buildModelUsage(): OrgModelUsageSlice[] {
 }
 
 function buildUsageTrend(days: number): OrgUsageTrendPoint[] {
-    const avg   = DEPTS.reduce((s, d) => s + d.budget * (d.percentageUsed / 100), 0) / 30;
+    // Total monthly credits consumed across all departments
+    const monthlyTotal = DEPTS.reduce((s, d) => s + d.budget * (d.percentageUsed / 100), 0);
+    // Formula: total = 22 workdays*X + 8 weekend days*0.2X  →  X = total/23.6
+    const workdayAvg   = monthlyTotal / 23.6;
+    const weekendAvg   = workdayAvg * 0.2;
     const today = new Date();
     return Array.from({ length: days }, (_, i) => {
         const d = new Date(today);
         d.setDate(d.getDate() - (days - 1 - i));
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-        const factor    = isWeekend ? 0.15 + Math.random() * 0.15 : 0.7 + Math.random() * 0.6;
         return {
-            date:     d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            creditsUsed: Math.round(avg * factor),
+            date:        d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            creditsUsed: Math.round((isWeekend ? weekendAvg : workdayAvg) * 100) / 100,
         };
     });
 }

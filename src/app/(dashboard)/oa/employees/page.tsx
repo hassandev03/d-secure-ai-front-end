@@ -420,7 +420,7 @@ export default function EmployeesPage() {
                                     <TableCell className="text-center">
                                         {emp.creditLimit === 0
                                             ? <Badge variant="outline" className="text-xs bg-danger/10 text-danger border-danger/20">Restricted</Badge>
-                                            : <span className="text-sm">{emp.creditLimit}/day</span>
+                                            : <span className="text-sm">{emp.creditLimit} CU/mo</span>
                                         }
                                     </TableCell>
 

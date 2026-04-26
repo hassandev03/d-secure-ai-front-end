@@ -7,6 +7,11 @@
 import { delay } from './api';
 import { MODELS } from '@/lib/constants';
 import type { LLMModel } from '@/types/chat.types';
+import {
+    estimateMonthlyCreditsFixed,
+    buildDailyCredits,
+    buildDatedTrend,
+} from '@/lib/costCalculator';
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -111,42 +116,72 @@ export type DASystemPrompt = {
  * Org-defined job roles.
  * Backend route (future): GET /api/v1/org/roles
  */
+// Role monthly credit budgets are derived from the cost formula (Module H):
+// estimateMonthlyCreditsFixed gives the expected USD spend for a typical employee
+// in that role over a 22-workday month.
+//
+// Profile assumptions per role:
+//   Tech Lead        — 8 queries/day, long prompts (300w in / 500w out), GPT-4o, 30% file use
+//   Senior Developer — 6 queries/day, 250w/400w, GPT-4o, 20% file use
+//   Developer        — 5 queries/day, 200w/350w, claude-4-5-haiku, 15% file use
+//   DevOps Engineer  — 4 queries/day, 200w/300w, gemini-3-1-pro, 10% file use
+//   QA Engineer      — 4 queries/day, 150w/250w, gpt-4o-mini, 5% file use
+//   Business Analyst — 4 queries/day, 200w/300w, claude-4-6-sonnet, 20% file use, 20% RAG
+//   Project Manager  — 3 queries/day, 150w/200w, gpt-4o-mini, 10% file use
+//   Designer         — 3 queries/day, 100w/200w, gemini-3-1-flash, 5% file use
+const ROLE_BUDGETS = {
+    'role-1': estimateMonthlyCreditsFixed({ queriesPerDay: 8, avgInputWords: 300, avgOutputWords: 500, modelKey: 'gpt-4o',           fileQueryPct: 0.30, avgFileWords: 800, ragPct: 0.10 }),
+    'role-2': estimateMonthlyCreditsFixed({ queriesPerDay: 6, avgInputWords: 250, avgOutputWords: 400, modelKey: 'gpt-4o',           fileQueryPct: 0.20, avgFileWords: 600, ragPct: 0.10 }),
+    'role-3': estimateMonthlyCreditsFixed({ queriesPerDay: 5, avgInputWords: 200, avgOutputWords: 350, modelKey: 'claude-4-5-haiku', fileQueryPct: 0.15, avgFileWords: 400, ragPct: 0.05 }),
+    'role-4': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'gemini-3-1-pro',  fileQueryPct: 0.10, avgFileWords: 300, ragPct: 0.05 }),
+    'role-5': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 150, avgOutputWords: 250, modelKey: 'gpt-4o-mini',     fileQueryPct: 0.05, avgFileWords: 200, ragPct: 0.00 }),
+    'role-6': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'claude-4-6-sonnet',fileQueryPct: 0.20, avgFileWords: 500, ragPct: 0.20 }),
+    'role-7': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 150, avgOutputWords: 200, modelKey: 'gpt-4o-mini',     fileQueryPct: 0.10, avgFileWords: 300, ragPct: 0.10 }),
+    'role-8': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 100, avgOutputWords: 200, modelKey: 'gemini-3-1-flash', fileQueryPct: 0.05, avgFileWords: 200, ragPct: 0.00 }),
+} as Record<string, number>;
+
 const MOCK_ORG_ROLES: OrgRole[] = [
-    { id: 'role-1', name: 'Tech Lead',        description: 'Technical team lead',             defaultCreditLimit: 60 },
-    { id: 'role-2', name: 'Senior Developer', description: 'Senior software engineer',        defaultCreditLimit: 50 },
-    { id: 'role-3', name: 'Developer',        description: 'Software engineer',               defaultCreditLimit: 30 },
-    { id: 'role-4', name: 'DevOps Engineer',  description: 'Infrastructure and operations',   defaultCreditLimit: 40 },
-    { id: 'role-5', name: 'QA Engineer',      description: 'Quality assurance engineer',      defaultCreditLimit: 25 },
-    { id: 'role-6', name: 'Business Analyst', description: 'Business and product analysis',   defaultCreditLimit: 20 },
-    { id: 'role-7', name: 'Project Manager',  description: 'Project coordination & delivery', defaultCreditLimit: 20 },
-    { id: 'role-8', name: 'Designer',         description: 'UI/UX and product design',        defaultCreditLimit: 20 },
+    { id: 'role-1', name: 'Tech Lead',        description: 'Technical team lead',             defaultCreditLimit: Math.ceil(ROLE_BUDGETS['role-1']) },
+    { id: 'role-2', name: 'Senior Developer', description: 'Senior software engineer',        defaultCreditLimit: Math.ceil(ROLE_BUDGETS['role-2']) },
+    { id: 'role-3', name: 'Developer',        description: 'Software engineer',               defaultCreditLimit: Math.ceil(ROLE_BUDGETS['role-3']) },
+    { id: 'role-4', name: 'DevOps Engineer',  description: 'Infrastructure and operations',   defaultCreditLimit: Math.ceil(ROLE_BUDGETS['role-4']) },
+    { id: 'role-5', name: 'QA Engineer',      description: 'Quality assurance engineer',      defaultCreditLimit: Math.ceil(ROLE_BUDGETS['role-5']) },
+    { id: 'role-6', name: 'Business Analyst', description: 'Business and product analysis',   defaultCreditLimit: Math.ceil(ROLE_BUDGETS['role-6']) },
+    { id: 'role-7', name: 'Project Manager',  description: 'Project coordination & delivery', defaultCreditLimit: Math.ceil(ROLE_BUDGETS['role-7']) },
+    { id: 'role-8', name: 'Designer',         description: 'UI/UX and product design',        defaultCreditLimit: Math.ceil(ROLE_BUDGETS['role-8']) },
 ];
 
 /**
  * Department employees.
  * Backend route (future): GET /api/v1/dept/{deptId}/employees
  */
+// creditsUsed = estimateMonthlyCreditsFixed with a partial-month multiplier
+// to simulate different stages of the billing period.
+// creditLimit = the role's formula-derived monthly budget ceiling.
+const c = (roleId: string, partialMonthFraction: number) =>
+    Math.round(ROLE_BUDGETS[roleId] * partialMonthFraction * 1000) / 1000;
+
 const MOCK_DEPT_EMPLOYEES: DeptEmployee[] = [
-    { id: "1",  name: "Raj Patel",       email: "raj@acme.com",       roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   creditsUsed: 32.0, creditLimit: 50, lastActive: "Today"      },
-    { id: "2",  name: "John Miller",     email: "john@acme.com",      roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed: 18.0, creditLimit: 30, lastActive: "Today"      },
-    { id: "3",  name: "Alice Brown",     email: "alice@acme.com",     roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   creditsUsed: 15.0, creditLimit: 25, lastActive: "Yesterday"  },
-    { id: "4",  name: "Bob Wilson",      email: "bob@acme.com",       roleId: "role-4", roleName: "DevOps Engineer",  status: "ACTIVE",   creditsUsed: 12.0, creditLimit: 40, lastActive: "Yesterday"  },
-    { id: "5",  name: "Mike Chen",       email: "mike@acme.com",      roleId: "role-3", roleName: "Developer",        status: "INACTIVE", creditsUsed:  4.5, creditLimit:  0, lastActive: "3 days ago" },
-    { id: "6",  name: "Emily Zhao",      email: "emily@acme.com",     roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   creditsUsed:  8.8, creditLimit: 50, lastActive: "Today"      },
-    { id: "7",  name: "Tom Baker",       email: "tom@acme.com",       roleId: "role-1", roleName: "Tech Lead",        status: "ACTIVE",   creditsUsed: 21.0, creditLimit: 60, lastActive: "Today"      },
-    { id: "8",  name: "Sara Kim",        email: "sara@acme.com",      roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed:  9.5, creditLimit: 30, lastActive: "Today"      },
-    { id: "9",  name: "David Lee",       email: "david@acme.com",     roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   creditsUsed:  6.7, creditLimit: 25, lastActive: "2 days ago" },
-    { id: "10", name: "Priya Singh",     email: "priya@acme.com",     roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed: 14.3, creditLimit: 30, lastActive: "Today"      },
-    { id: "11", name: "Liam Turner",     email: "liam@acme.com",      roleId: "role-4", roleName: "DevOps Engineer",  status: "ACTIVE",   creditsUsed:  7.8, creditLimit: 40, lastActive: "Yesterday"  },
-    { id: "12", name: "Olivia Martin",   email: "olivia@acme.com",    roleId: "role-3", roleName: "Developer",        status: "INACTIVE", creditsUsed:  1.2, creditLimit:  0, lastActive: "1 week ago" },
-    { id: "13", name: "James Anderson",  email: "james@acme.com",     roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   creditsUsed: 19.8, creditLimit: 50, lastActive: "Today"      },
-    { id: "14", name: "Mia Thompson",    email: "mia@acme.com",       roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   creditsUsed:  5.6, creditLimit: 25, lastActive: "Today"      },
-    { id: "15", name: "Noah Garcia",     email: "noah@acme.com",      roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed: 16.7, creditLimit: 30, lastActive: "Today"      },
-    { id: "16", name: "Ava Martinez",    email: "ava@acme.com",       roleId: "role-1", roleName: "Tech Lead",        status: "ACTIVE",   creditsUsed: 24.5, creditLimit: 60, lastActive: "Yesterday"  },
-    { id: "17", name: "William Jackson", email: "william@acme.com",   roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed:  8.9, creditLimit: 30, lastActive: "Today"      },
-    { id: "18", name: "Isabella White",  email: "isabella@acme.com",  roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   creditsUsed: 13.4, creditLimit: 50, lastActive: "Today"      },
-    { id: "19", name: "Ethan Harris",    email: "ethan@acme.com",     roleId: "role-3", roleName: "Developer",        status: "INACTIVE", creditsUsed:  2.3, creditLimit:  0, lastActive: "5 days ago" },
-    { id: "20", name: "Sophia Clark",    email: "sophia@acme.com",    roleId: "role-4", roleName: "DevOps Engineer",  status: "ACTIVE",   creditsUsed: 10.2, creditLimit: 40, lastActive: "Today"      },
+    { id: "1",  name: "Raj Patel",       email: "raj@acme.com",       roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   creditsUsed: c('role-2', 0.65), creditLimit: Math.ceil(ROLE_BUDGETS['role-2']), lastActive: "Today"      },
+    { id: "2",  name: "John Miller",     email: "john@acme.com",      roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed: c('role-3', 0.60), creditLimit: Math.ceil(ROLE_BUDGETS['role-3']), lastActive: "Today"      },
+    { id: "3",  name: "Alice Brown",     email: "alice@acme.com",     roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   creditsUsed: c('role-5', 0.58), creditLimit: Math.ceil(ROLE_BUDGETS['role-5']), lastActive: "Yesterday"  },
+    { id: "4",  name: "Bob Wilson",      email: "bob@acme.com",       roleId: "role-4", roleName: "DevOps Engineer",  status: "ACTIVE",   creditsUsed: c('role-4', 0.55), creditLimit: Math.ceil(ROLE_BUDGETS['role-4']), lastActive: "Yesterday"  },
+    { id: "5",  name: "Mike Chen",       email: "mike@acme.com",      roleId: "role-3", roleName: "Developer",        status: "INACTIVE", creditsUsed: c('role-3', 0.18), creditLimit: 0,                               lastActive: "3 days ago" },
+    { id: "6",  name: "Emily Zhao",      email: "emily@acme.com",     roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   creditsUsed: c('role-2', 0.35), creditLimit: Math.ceil(ROLE_BUDGETS['role-2']), lastActive: "Today"      },
+    { id: "7",  name: "Tom Baker",       email: "tom@acme.com",       roleId: "role-1", roleName: "Tech Lead",        status: "ACTIVE",   creditsUsed: c('role-1', 0.52), creditLimit: Math.ceil(ROLE_BUDGETS['role-1']), lastActive: "Today"      },
+    { id: "8",  name: "Sara Kim",        email: "sara@acme.com",      roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed: c('role-3', 0.38), creditLimit: Math.ceil(ROLE_BUDGETS['role-3']), lastActive: "Today"      },
+    { id: "9",  name: "David Lee",       email: "david@acme.com",     roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   creditsUsed: c('role-5', 0.27), creditLimit: Math.ceil(ROLE_BUDGETS['role-5']), lastActive: "2 days ago" },
+    { id: "10", name: "Priya Singh",     email: "priya@acme.com",     roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed: c('role-3', 0.57), creditLimit: Math.ceil(ROLE_BUDGETS['role-3']), lastActive: "Today"      },
+    { id: "11", name: "Liam Turner",     email: "liam@acme.com",      roleId: "role-4", roleName: "DevOps Engineer",  status: "ACTIVE",   creditsUsed: c('role-4', 0.31), creditLimit: Math.ceil(ROLE_BUDGETS['role-4']), lastActive: "Yesterday"  },
+    { id: "12", name: "Olivia Martin",   email: "olivia@acme.com",    roleId: "role-3", roleName: "Developer",        status: "INACTIVE", creditsUsed: c('role-3', 0.05), creditLimit: 0,                               lastActive: "1 week ago" },
+    { id: "13", name: "James Anderson",  email: "james@acme.com",     roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   creditsUsed: c('role-2', 0.79), creditLimit: Math.ceil(ROLE_BUDGETS['role-2']), lastActive: "Today"      },
+    { id: "14", name: "Mia Thompson",    email: "mia@acme.com",       roleId: "role-5", roleName: "QA Engineer",      status: "ACTIVE",   creditsUsed: c('role-5', 0.22), creditLimit: Math.ceil(ROLE_BUDGETS['role-5']), lastActive: "Today"      },
+    { id: "15", name: "Noah Garcia",     email: "noah@acme.com",      roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed: c('role-3', 0.67), creditLimit: Math.ceil(ROLE_BUDGETS['role-3']), lastActive: "Today"      },
+    { id: "16", name: "Ava Martinez",    email: "ava@acme.com",       roleId: "role-1", roleName: "Tech Lead",        status: "ACTIVE",   creditsUsed: c('role-1', 0.61), creditLimit: Math.ceil(ROLE_BUDGETS['role-1']), lastActive: "Yesterday"  },
+    { id: "17", name: "William Jackson", email: "william@acme.com",   roleId: "role-3", roleName: "Developer",        status: "ACTIVE",   creditsUsed: c('role-3', 0.35), creditLimit: Math.ceil(ROLE_BUDGETS['role-3']), lastActive: "Today"      },
+    { id: "18", name: "Isabella White",  email: "isabella@acme.com",  roleId: "role-2", roleName: "Senior Developer", status: "ACTIVE",   creditsUsed: c('role-2', 0.53), creditLimit: Math.ceil(ROLE_BUDGETS['role-2']), lastActive: "Today"      },
+    { id: "19", name: "Ethan Harris",    email: "ethan@acme.com",     roleId: "role-3", roleName: "Developer",        status: "INACTIVE", creditsUsed: c('role-3', 0.09), creditLimit: 0,                               lastActive: "5 days ago" },
+    { id: "20", name: "Sophia Clark",    email: "sophia@acme.com",    roleId: "role-4", roleName: "DevOps Engineer",  status: "ACTIVE",   creditsUsed: c('role-4', 0.41), creditLimit: Math.ceil(ROLE_BUDGETS['role-4']), lastActive: "Today"      },
 ];
 
 const ALL_MODEL_IDS = MODELS.map((m) => m.id) as LLMModel[];
@@ -265,7 +300,7 @@ const MOCK_ORG_QUOTA_HISTORY: OrgQuotaRequest[] = [
  * Counts are derived at runtime from MOCK_DEPT_EMPLOYEES.
  * Backend route (future): GET /api/v1/dept/{deptId}/dashboard/request-types
  */
-const MOCK_REQUEST_TYPE_META: Omit<RequestTypePoint, 'count' | 'percentage'>[] = [
+const MOCK_REQUEST_TYPE_META: Omit<UsageTypePoint, 'credits' | 'percentage'>[] = [
     {
         type:        'Text Query',
         priority:    'low',
@@ -507,14 +542,19 @@ export type DeptDashboardStats = {
     quotaUtilization: number;
 };
 
-export type DailyRequestPoint = {
+export type DailyUsagePoint = {
     date: string;
-    requests: number;
+    /** Credits consumed (USD) on this day */
+    credits: number;
     activeUsers: number;
 };
 
+/** @deprecated Use DailyUsagePoint */
+export type DailyRequestPoint = DailyUsagePoint;
+
 export type ModelUsageSlice = {
     name: string;
+    /** Credits (USD) consumed via this model */
     value: number;
     color: string;
 };
@@ -528,20 +568,25 @@ export type RoleUsagePoint = {
 
 export type UsageTrendPoint = {
     date: string;
-    requests: number;
+    /** Credits (USD) consumed on this day */
+    credits: number;
     activeUsers: number;
 };
 
-export type RequestTypePoint = {
+export type UsageTypePoint = {
     type: string;
-    count: number;
+    /** Credits (USD) consumed by this usage type */
+    credits: number;
     percentage: number;
-    /** Privacy / operational importance of this request type */
+    /** Privacy / operational importance of this usage type */
     priority: 'high' | 'medium' | 'low';
     /** Short description shown in tooltips / callouts */
     description: string;
     color: string;
 };
+
+/** @deprecated Use UsageTypePoint */
+export type RequestTypePoint = UsageTypePoint;
 
 // ─── Dashboard analytics mock data builders ─────────────────────────────────
 
@@ -555,21 +600,31 @@ const MODEL_COLORS: Record<string, string> = {
     'Gemini 3.1 Flash':  '#F97316',
 };
 
-function buildDailyRequests(employees: DeptEmployee[]): DailyRequestPoint[] {
-    const totalRequests = employees.reduce((s, e) => s + e.creditsUsed, 0);
-    const activeCount = employees.filter((e) => e.status === 'ACTIVE').length;
-    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const weights = [0.18, 0.19, 0.20, 0.17, 0.15, 0.06, 0.05];
-    const userWeights = [0.85, 0.90, 0.88, 0.82, 0.78, 0.25, 0.18];
-    return days.map((date, i) => ({
+function buildDailyRequests(employees: DeptEmployee[]): DailyUsagePoint[] {
+    const totalCredits = employees.reduce((s, e) => s + e.creditsUsed, 0);
+    const activeCount   = employees.filter((e) => e.status === 'ACTIVE').length;
+    // Use formula-based day distribution: weekday avg / weekend ~20% of weekday
+    // total = 22*X + 8*0.2X  →  X = total / 23.6
+    const workdayAvg   = totalCredits / 23.6;
+    const weekendAvg   = workdayAvg * 0.2;
+    const DAY_DATA: Array<{ date: string; isWeekend: boolean; userPct: number }> = [
+        { date: 'Mon', isWeekend: false, userPct: 0.85 },
+        { date: 'Tue', isWeekend: false, userPct: 0.90 },
+        { date: 'Wed', isWeekend: false, userPct: 0.88 },
+        { date: 'Thu', isWeekend: false, userPct: 0.82 },
+        { date: 'Fri', isWeekend: false, userPct: 0.78 },
+        { date: 'Sat', isWeekend: true,  userPct: 0.25 },
+        { date: 'Sun', isWeekend: true,  userPct: 0.18 },
+    ];
+    return DAY_DATA.map(({ date, isWeekend, userPct }) => ({
         date,
-        requests: Math.round(totalRequests * weights[i]),
-        activeUsers: Math.round(activeCount * userWeights[i]),
+        credits:     Math.round((isWeekend ? weekendAvg : workdayAvg) * 100) / 100,
+        activeUsers: Math.round(activeCount * userPct),
     }));
 }
 
 function buildModelUsage(employees: DeptEmployee[]): ModelUsageSlice[] {
-    const totalRequests = employees.reduce((s, e) => s + e.creditsUsed, 0);
+    const totalCredits = employees.reduce((s, e) => s + e.creditsUsed, 0);
     const slices: { name: string; pct: number }[] = [
         { name: 'Claude 4.6 Sonnet', pct: 0.27 },
         { name: 'GPT-5.1',           pct: 0.20 },
@@ -581,31 +636,29 @@ function buildModelUsage(employees: DeptEmployee[]): ModelUsageSlice[] {
     ];
     return slices.map((s) => ({
         name: s.name,
-        value: Math.round(totalRequests * s.pct),
+        value: Math.round(totalCredits * s.pct * 10) / 10,
         color: MODEL_COLORS[s.name] || '#94A3B8',
     }));
 }
 
 function buildUsageTrend(employees: DeptEmployee[], days: number): UsageTrendPoint[] {
-    const totalRequests = employees.reduce((s, e) => s + e.creditsUsed, 0);
-    const activeCount = employees.filter((e) => e.status === 'ACTIVE').length;
-    const avgDaily = totalRequests / 30;
-    const points: UsageTrendPoint[] = [];
-
+    const totalCredits = employees.reduce((s, e) => s + e.creditsUsed, 0);
+    const activeCount  = employees.filter((e) => e.status === 'ACTIVE').length;
+    // workdayAvg derived from formula: total = 22*X + 8*0.2X → X = total/23.6
+    const workdayAvg   = totalCredits / 23.6;
+    const weekendAvg   = workdayAvg * 0.2;
     const today = new Date();
-    for (let i = days - 1; i >= 0; i--) {
+    return Array.from({ length: days }, (_, i) => {
         const d = new Date(today);
-        d.setDate(d.getDate() - i);
+        d.setDate(d.getDate() - (days - 1 - i));
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
-        const factor = isWeekend ? 0.15 + Math.random() * 0.15 : 0.7 + Math.random() * 0.6;
-        const userFactor = isWeekend ? 0.1 + Math.random() * 0.15 : 0.6 + Math.random() * 0.35;
-        points.push({
-            date: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            requests: Math.round(avgDaily * factor),
-            activeUsers: Math.max(1, Math.round(activeCount * userFactor)),
-        });
-    }
-    return points;
+        const userPct   = isWeekend ? 0.22 : 0.80;
+        return {
+            date:        d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            credits:     Math.round((isWeekend ? weekendAvg : workdayAvg) * 100) / 100,
+            activeUsers: Math.max(1, Math.round(activeCount * userPct)),
+        };
+    });
 }
 
 function buildRoleUsage(employees: DeptEmployee[]): RoleUsagePoint[] {
@@ -681,18 +734,18 @@ export async function getDeptTopUsers(limit: number = 5): Promise<DeptEmployee[]
 }
 
 /**
- * Breaks the department's total requests down by type (Text, Code, File Upload, etc.).
- * Counts are derived proportionally from the actual request total so they always sum correctly.
- * GET /api/v1/dept/{deptId}/dashboard/request-types
+ * Breaks the department's total credit consumption down by usage type.
+ * Credits are derived proportionally from the actual total so they always sum correctly.
+ * GET /api/v1/dept/{deptId}/dashboard/usage-types
  */
-export async function getDeptRequestTypeBreakdown(): Promise<RequestTypePoint[]> {
+export async function getDeptRequestTypeBreakdown(): Promise<UsageTypePoint[]> {
     await delay(250);
     const total = MOCK_DEPT_EMPLOYEES.reduce((s, e) => s + e.creditsUsed, 0);
     // Distribution weights — must sum to 1.0  (Text Query, File Upload, Speech Input)
     const weights = [0.55, 0.30, 0.15];
     return MOCK_REQUEST_TYPE_META.map((meta, i) => ({
         ...meta,
-        count:      Math.round(total * weights[i]),
+        credits:    Math.round(total * weights[i] * 10) / 10,
         percentage: Math.round(weights[i] * 100),
     }));
 }

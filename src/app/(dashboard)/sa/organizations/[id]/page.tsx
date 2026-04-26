@@ -90,7 +90,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                 <Card className="lg:col-span-2">
                     <CardHeader><CardTitle className="text-base font-semibold">Quota Usage</CardTitle></CardHeader>
                     <CardContent>
-                        <QuotaBar used={org.quota.used} total={org.quota.total} label="Organization Total" />
+                        <QuotaBar used={org.quota.percentageUsed} total={100} label={`Organization Total — $${org.quota.budget.toLocaleString()} budget`} />
                         <Separator className="my-6" />
                         <h4 className="mb-4 text-sm font-semibold text-foreground">Department Breakdown</h4>
                         <div className="space-y-4">
@@ -98,9 +98,9 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                                 <div key={dept.name} className="flex items-center gap-4">
                                     <p className="w-28 text-sm font-medium text-foreground truncate">{dept.name}</p>
                                     <div className="flex-1">
-                                        <QuotaBar used={dept.quota.used} total={dept.quota.total} showLabel={false} size="sm" />
+                                        <QuotaBar used={dept.quota.percentageUsed} total={100} showLabel={false} size="sm" />
                                     </div>
-                                    <p className="w-20 text-right text-xs text-muted-foreground">{dept.employees} users</p>
+                                    <p className="w-32 text-right text-xs text-muted-foreground">{dept.quota.percentageUsed}% · {dept.employees} users</p>
                                 </div>
                             ))}
                         </div>
