@@ -18,6 +18,7 @@ import {
     getSubscriptionPlans, getPaymentMethods, upgradePlan, getCurrentSubscription, downgradePlan,
     type SubscriptionPlanDisplay, type PaymentMethod, type BSub,
 } from "@/services/subscription.service";
+import { getUserDashboardStats, type DashboardStats } from "@/services/dashboard.service";
 
 function formatCardNumber(value: string): string {
     const digits = value.replace(/\D/g, "").slice(0, 16);
@@ -31,6 +32,23 @@ function FieldError({ error }: { error: string | null }) {
             <AlertCircle className="h-3 w-3 shrink-0" />{error}
         </p>
     );
+}
+
+function luhnCheck(cardNumber: string): boolean {
+    const digits = cardNumber.replace(/\D/g, "");
+    if (digits.length !== 16) return false;
+    let sum = 0;
+    let isEven = false;
+    for (let i = digits.length - 1; i >= 0; i--) {
+        let digit = parseInt(digits.charAt(i), 10);
+        if (isEven) {
+            digit *= 2;
+            if (digit > 9) digit -= 9;
+        }
+        sum += digit;
+        isEven = !isEven;
+    }
+    return sum % 10 === 0;
 }
 
 const currentYear = new Date().getFullYear();
@@ -70,6 +88,7 @@ export default function SubscriptionPage() {
     const [savedCards, setSavedCards] = useState<PaymentMethod[]>([]);
     const [useNewCard, setUseNewCard] = useState(false);
     const [activeSub, setActiveSub] = useState<BSub | null>(null);
+    const [quotaStats, setQuotaStats] = useState<DashboardStats | null>(null);
 
     const [cardName,      setCardName]      = useState(user?.name || "");
     const [newCardNumber, setNewCardNumber] = useState("");
@@ -85,15 +104,18 @@ export default function SubscriptionPage() {
             getSubscriptionPlans(),
             getPaymentMethods(),
             getCurrentSubscription(),
-        ]).then(([plans, cards, sub]) => {
+            getUserDashboardStats(),
+        ]).then(([plans, cards, sub, stats]) => {
             setPlansData(plans);
             setSavedCards(cards);
             setActiveSub(sub);
+            setQuotaStats(stats);
             // Sync current plan from real subscription
             if (sub) {
-                // Find the matching plan from the list by plan_id is not available here,
-                // so we match by checking which plan's price matches; simplest is to
-                // just leave currentPlanKey as initialized from user.subscriptionTier.
+                const matchedPlan = plans.find((p) => p.planId === sub.plan_id);
+                if (matchedPlan) {
+                    setCurrentPlanKey(matchedPlan.key);
+                }
             }
             setIsLoadingPlans(false);
         });
@@ -153,9 +175,10 @@ export default function SubscriptionPage() {
 
     const validateCardForm = (): boolean => {
         const digits = newCardNumber.replace(/\D/g, "");
+        const isCardValid = luhnCheck(newCardNumber);
         const errs: Record<string, string | null> = {
             cardName:    !cardName.trim()     ? "Name on card is required." : null,
-            cardNumber:  digits.length !== 16 ? "Card number must be 16 digits." : null,
+            cardNumber:  !isCardValid ? "Invalid card number." : null,
             expiryMonth: !expiryMonth         ? "Select a month." : null,
             expiryYear:  !expiryYear          ? "Select a year." : null,
             cvv:         !/^\d{3,4}$/.test(cvv) ? "CVV must be 3 or 4 digits." : null,
@@ -319,9 +342,9 @@ export default function SubscriptionPage() {
                     </div>
                     <div className="mt-4 flex justify-center py-2">
                         <QuotaGauge
-                            percentageUsed={activePlan.key === "FREE" ? 30 : 27.7}
+                            percentageUsed={quotaStats?.percentageUsed ?? 0}
                             planName={activePlan.name}
-                            renewsAt="2026-05-01T00:00:00Z"
+                            renewsAt={quotaStats?.periodEndsAt || nextBillingDate || new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString()}
                             size="md"
                         />
                     </div>

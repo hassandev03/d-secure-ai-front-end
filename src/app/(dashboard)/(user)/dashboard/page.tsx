@@ -15,10 +15,10 @@ import {
 import { useAuthStore } from "@/store/auth.store";
 
 import {
-    getUserDashboardStats, getDailyActivity, getModelUsageBreakdown, getEntityTypeBreakdown,
-    type DashboardStats, type DailyActivityPoint, type ModelUsagePoint, type EntityTypePoint
+    getDashboardSummary,
+    type DashboardStats, type DailyActivityPoint, type ModelUsagePoint, type EntityTypePoint, type DashboardSummaryResponse
 } from "@/services/dashboard.service";
-import { getChatSessions, type ChatSessionSummary } from "@/services/chat.service";
+import { type ChatSessionSummary } from "@/services/chat.service";
 
 export default function UserDashboard() {
     const { user } = useAuthStore();
@@ -29,13 +29,52 @@ export default function UserDashboard() {
     const [entities, setEntities] = useState<EntityTypePoint[]>([]);
     const [recentSessions, setRecentSessions] = useState<ChatSessionSummary[]>([]);
 
+    const [isLoading, setIsLoading] = useState(true);
+
     useEffect(() => {
-        getUserDashboardStats().then(setStats);
-        getDailyActivity(7).then(setActivity);
-        getModelUsageBreakdown().then(setModels);
-        getEntityTypeBreakdown().then(setEntities);
-        getChatSessions().then(sessions => setRecentSessions(sessions.slice(0, 5)));
+        setIsLoading(true);
+        getDashboardSummary().then((data) => {
+            if (data) {
+                setStats(data.stats);
+                setActivity(data.dailyActivity);
+                setModels(data.models);
+                setEntities(data.entities);
+                setRecentSessions(data.recentSessions);
+            } else {
+                setStats({
+                    totalRequestsThisMonth: 0,
+                    totalSessions: 0,
+                    entitiesAnonymized: 0,
+                    quotaRemaining: 50,
+                    quotaTotal: 50,
+                    avgEntitiesPerRequest: 0,
+                    percentageUsed: 0,
+                    planName: "Free",
+                    periodEndsAt: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
+                });
+            }
+            setIsLoading(false);
+        });
     }, []);
+
+    if (isLoading) {
+        return (
+            <div className="mx-auto max-w-7xl space-y-6">
+                <PageHeader title="My Dashboard" subtitle="Your personal D-SecureAI usage overview." />
+                <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+                    {[1, 2, 3, 4].map((i) => <div key={i} className="h-28 rounded-xl bg-muted animate-pulse" />)}
+                </div>
+                <div className="h-48 rounded-xl bg-muted animate-pulse mt-6" />
+                <div className="grid gap-6 lg:grid-cols-2 mt-6">
+                    <div className="h-[400px] rounded-xl bg-muted animate-pulse" />
+                    <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-1">
+                        <div className="h-[190px] rounded-xl bg-muted animate-pulse" />
+                        <div className="h-[190px] rounded-xl bg-muted animate-pulse" />
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     if (!stats) return null;
 
@@ -101,6 +140,11 @@ export default function UserDashboard() {
                                 <Line type="monotone" dataKey="quotaUtilizedPct" name="Quota Used (%)" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: "#f59e0b", strokeWidth: 2, stroke: "#fff" }} />
                             </ComposedChart>
                         </ResponsiveContainer>
+                        {activity.length === 0 && (
+                            <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                                No activity recorded yet.
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -122,6 +166,11 @@ export default function UserDashboard() {
                                     <Legend verticalAlign="middle" align="right" layout="vertical" iconType="circle" wrapperStyle={{ fontSize: '12px', right: 0 }} />
                                 </PieChart>
                             </ResponsiveContainer>
+                            {models.length === 0 && (
+                                <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                                    No model usage data.
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
 
@@ -143,6 +192,11 @@ export default function UserDashboard() {
                                     </Bar>
                                 </BarChart>
                             </ResponsiveContainer>
+                            {entities.length === 0 && (
+                                <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground">
+                                    No entity data available.
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </div>
@@ -155,20 +209,24 @@ export default function UserDashboard() {
                 </CardHeader>
                 <CardContent>
                     <div className="space-y-3">
-                        {recentSessions.map((s) => (
-                            <Link key={s.id} href={`/chat?id=${s.id}`}>
-                                <div className="flex items-center gap-4 rounded-lg border border-border p-3 transition-colors hover:bg-muted/50 cursor-pointer">
-                                    <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 shrink-0">
-                                        <MessageSquare className="h-4 w-4 text-brand-600" />
+                        {recentSessions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground py-2">No recent sessions found.</p>
+                        ) : (
+                            recentSessions.map((s) => (
+                                <Link key={s.id} href={`/chat?id=${s.id}`}>
+                                    <div className="flex items-center gap-4 rounded-lg border border-border p-3 transition-colors hover:bg-muted/50 cursor-pointer mb-2">
+                                        <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-brand-50 shrink-0">
+                                            <MessageSquare className="h-4 w-4 text-brand-600" />
+                                        </div>
+                                        <div className="flex-1 min-w-0">
+                                            <p className="text-sm font-medium truncate">{s.title}</p>
+                                            <p className="text-xs text-muted-foreground">{s.modelName} · {s.messageCount} messages</p>
+                                        </div>
+                                        <p className="text-xs text-muted-foreground shrink-0">{s.lastMessageAt}</p>
                                     </div>
-                                    <div className="flex-1 min-w-0">
-                                        <p className="text-sm font-medium truncate">{s.title}</p>
-                                        <p className="text-xs text-muted-foreground">{s.modelName} · {s.messageCount} messages</p>
-                                    </div>
-                                    <p className="text-xs text-muted-foreground shrink-0">{s.lastMessageAt}</p>
-                                </div>
-                            </Link>
-                        ))}
+                                </Link>
+                            ))
+                        )}
                     </div>
                 </CardContent>
             </Card>

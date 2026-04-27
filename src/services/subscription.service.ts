@@ -35,6 +35,7 @@ export interface SubscriptionPlanDisplay {
     price: number;
     creditBudget: string;
     features: { text: string; included: boolean }[];
+    planId?: string;
 }
 
 // ── Backend shapes ────────────────────────────────────────────────────────────
@@ -89,6 +90,7 @@ export async function getSubscriptionPlans(): Promise<SubscriptionPlanDisplay[]>
                     ...(p.features ?? []).map((t) => ({ text: t, included: true })),
                     ...(p.excluded_features ?? []).map((t) => ({ text: t, included: false })),
                 ],
+                planId: p.plan_id,
             };
         });
     } catch {
