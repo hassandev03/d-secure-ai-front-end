@@ -1,12 +1,24 @@
-export type LLMProvider = 'openai' | 'anthropic' | 'google';
+export type LLMProvider = 'openai' | 'anthropic' | 'google' | 'azure';
+
 export type LLMModel =
-    | 'gpt-5-1'
+    // Azure OpenAI deployments
+    | 'gpt-4.1'
     | 'gpt-4o'
-    | 'claude-4-6-sonnet'
-    | 'claude-4-5-haiku'
-    | 'claude-4-6-opus'
-    | 'gemini-3-1-pro'
-    | 'gemini-3-1-flash';
+    | 'gpt-4o-mini'
+    // Anthropic Claude (4.x family)
+    | 'claude-opus-4-5'
+    | 'claude-sonnet-4-5'
+    | 'claude-haiku-4-5'
+    // Anthropic Claude (3.x — kept for backward compat with stored sessions)
+    | 'claude-3-5-sonnet-20241022'
+    | 'claude-3-5-haiku-20241022'
+    | 'claude-3-opus-20240229'
+    | 'claude-3-haiku-20240307'
+    // Google Gemini
+    | 'gemini-2.0-flash'
+    | 'gemini-1.5-pro'
+    | 'gemini-1.5-flash'
+    | 'gemini-2.5-pro-preview-05-06';
 
 /**
  * Canonical Chat Session shape — mirrors backend GET /api/v1/chat/sessions/:id
@@ -17,9 +29,9 @@ export interface ChatSession {
     userId?: string;          // optional: not always returned on list endpoints
     title: string;
     model: LLMModel;
-    modelName: string;        // display name, e.g. "Claude 4.6 Sonnet"
+    modelName: string;        // display name, e.g. "GPT-4.1"
     provider: LLMProvider;
-    providerName: string;     // display name, e.g. "Anthropic"
+    providerName: string;     // display name, e.g. "Azure OpenAI"
     messageCount: number;
     createdAt: string;        // ISO date
     lastMessageAt: string;    // ISO date or display label

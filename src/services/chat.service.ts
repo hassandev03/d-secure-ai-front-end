@@ -98,24 +98,30 @@ const PROVIDER_DISPLAY: Record<string, string> = {
     openai: 'OpenAI',
     anthropic: 'Anthropic',
     google: 'Google',
+    azure: 'Azure OpenAI',
 };
 
 // Model display names map (extend as needed)
 const MODEL_DISPLAY: Record<string, string> = {
-    'gpt-4o': 'GPT-4o',
-    'gpt-4o-mini': 'GPT-4o mini',
-    'gpt-5-1': 'GPT-5.1',
+    // Azure OpenAI
+    'gpt-4.1':           'GPT-4.1',
+    'gpt-4o':            'GPT-4o',
+    'gpt-4o-mini':       'GPT-4o mini',
+    'gpt-4-turbo':       'GPT-4 Turbo',
+    // Anthropic Claude 4.x
+    'claude-opus-4-5':   'Claude Opus',
+    'claude-sonnet-4-5': 'Claude Sonnet',
+    'claude-haiku-4-5':  'Claude Haiku',
+    // Anthropic Claude 3.x (legacy stored sessions)
     'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
-    'claude-3-5-haiku-20241022': 'Claude 3.5 Haiku',
-    'claude-3-opus-20240229': 'Claude 3 Opus',
-    'gemini-1-5-pro-latest': 'Gemini 1.5 Pro',
-    'gemini-1-5-flash-latest': 'Gemini 1.5 Flash',
-    // Frontend UI model IDs (used in session creation)
-    'claude-4-6-sonnet': 'Claude 4.6 Sonnet',
-    'claude-4-5-haiku': 'Claude 4.5 Haiku',
-    'claude-4-6-opus': 'Claude 4.6 Opus',
-    'gemini-3-1-pro': 'Gemini 3.1 Pro',
-    'gemini-3-1-flash': 'Gemini 3.1 Flash',
+    'claude-3-5-haiku-20241022':  'Claude 3.5 Haiku',
+    'claude-3-opus-20240229':     'Claude 3 Opus',
+    'claude-3-haiku-20240307':    'Claude 3 Haiku',
+    // Google Gemini
+    'gemini-2.0-flash':               'Gemini 2.0 Flash',
+    'gemini-1.5-pro':                 'Gemini 1.5 Pro',
+    'gemini-1.5-flash':               'Gemini 1.5 Flash',
+    'gemini-2.5-pro-preview-05-06':   'Gemini 2.5 Pro',
 };
 
 function mapSession(b: BackendSession): ChatSession {

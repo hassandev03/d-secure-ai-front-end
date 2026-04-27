@@ -6,6 +6,7 @@ import { useAuthStore } from "@/store/auth.store";
 import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen, Edit, FileMusic, Loader2, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
+import * as contextService from "@/services/context.service";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -16,40 +17,48 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Switch } from "@/components/ui/switch";
 
-/* ── Mock data ─────────────────────────── */
-const initialTerms = [
-    { id: 1, term: "Project Enigma", definition: "Internal codename for new ML pipeline", category: "Project" },
-    { id: 2, term: "DataPipe v3", definition: "Legacy ETL framework being phased out", category: "Technical" },
-    { id: 3, term: "CTRL Protocol", definition: "Internal data handling standard v2.3", category: "Compliance" },
-    { id: 4, term: "NeuroSense", definition: "Proprietary NLP model for medical text classification", category: "Product" },
-];
+interface ExtractedEntity { id: string | number; type: string; original: string; description: string; checked: boolean; }
+interface StagedDoc { id: string | number; name: string; size: string; file: File; }
 
-const initialDocs = [
-    { id: 1, name: "NDA_Template.pdf", size: "1.2 MB", uploadedAt: "2025-11-20" },
-    { id: 2, name: "Domain_Glossary.xlsx", size: "340 KB", uploadedAt: "2025-11-15" },
-    { id: 3, name: "Research_Notes_Q4.pdf", size: "2.8 MB", uploadedAt: "2025-12-01" },
-];
-
-const initialPatterns = [
-    { id: 1, label: "Client ID", pattern: "CLT-[0-9]{5}", example: "CLT-00421", active: true },
-    { id: 2, label: "Internal Doc Ref", pattern: "DOC-[A-Z]{3}-[0-9]+", example: "DOC-FIN-42", active: true },
-];
-
-interface ExtractedEntity { id: number; type: string; original: string; description: string; checked: boolean; }
-interface StagedDoc { id: number; name: string; size: string; file: File; }
+const formatSize = (bytes: number) => {
+    const sizeInMB = bytes / (1024 * 1024);
+    return sizeInMB > 1 ? `${sizeInMB.toFixed(1)} MB` : `${(bytes / 1024).toFixed(0)} KB`;
+};
 
 export default function MyContextPage() {
-    const [terms, setTerms] = useState(initialTerms);
-    const [docs, setDocs] = useState(initialDocs);
-    const [patterns, setPatterns] = useState(initialPatterns);
+    const [terms, setTerms] = useState<contextService.GlossaryTerm[]>([]);
+    const [docs, setDocs] = useState<contextService.ContextDocument[]>([]);
+    const [patterns, setPatterns] = useState<contextService.CustomPattern[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
 
     // Processing Workflow State
     const [stagedDocs, setStagedDocs] = useState<StagedDoc[]>([]);
     const [processingDoc, setProcessingDoc] = useState<StagedDoc | null>(null);
     const [isExtracting, setIsExtracting] = useState(false);
     const [extractedEntities, setExtractedEntities] = useState<ExtractedEntity[]>([]);
-    const [editingEntityId, setEditingEntityId] = useState<number | null>(null);
+    const [editingEntityId, setEditingEntityId] = useState<string | number | null>(null);
     const [editEntityForm, setEditEntityForm] = useState<Partial<ExtractedEntity>>({});
+
+    useEffect(() => {
+        const loadData = async () => {
+            try {
+                const [termsData, patternsData, docsData] = await Promise.all([
+                    contextService.getGlossary(),
+                    contextService.getPatterns(),
+                    contextService.getContextDocuments(),
+                ]);
+                setTerms(termsData);
+                setPatterns(patternsData);
+                setDocs(docsData);
+            } catch (err) {
+                console.error("Failed to load context data:", err);
+                toast.error("Failed to load your context data.");
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, []);
 
     const startEditingEntity = (entity: ExtractedEntity) => {
         setEditingEntityId(entity.id);
@@ -72,8 +81,8 @@ export default function MyContextPage() {
     const [newCat, setNewCat] = useState("");
 
     // Editing Dialogs
-    const [editingTerm, setEditingTerm] = useState<typeof initialTerms[0] | null>(null);
-    const [editingPattern, setEditingPattern] = useState<typeof initialPatterns[0] | null>(null);
+    const [editingTerm, setEditingTerm] = useState<contextService.GlossaryTerm | null>(null);
+    const [editingPattern, setEditingPattern] = useState<contextService.CustomPattern | null>(null);
     const [isPatternAddModalOpen, setIsPatternAddModalOpen] = useState(false);
 
     // Pattern Add form
@@ -95,42 +104,101 @@ export default function MyContextPage() {
         }
     }, [user, router]);
 
-    const handleAddTerm = () => {
+    const handleAddTerm = async () => {
         if (!newTerm || !newDef) return;
-        setTerms((prev) => [...prev, { id: Date.now(), term: newTerm, definition: newDef, category: newCat || "General" }]);
-        setNewTerm(""); setNewDef(""); setNewCat("");
-        toast.success(`Term "${newTerm}" added!`);
+        try {
+            const added = await contextService.createGlossaryTerm({ term: newTerm, definition: newDef, category: newCat || "General" });
+            setTerms((prev) => [added, ...prev]);
+            setNewTerm(""); setNewDef(""); setNewCat("");
+            toast.success(`Term "${newTerm}" added!`);
+        } catch (err) {
+            toast.error("Failed to add term.");
+        }
     };
 
-    const handleSaveEditTerm = () => {
+    const handleSaveEditTerm = async () => {
         if (!editingTerm) return;
-        setTerms(prev => prev.map(t => t.id === editingTerm.id ? editingTerm : t));
-        setEditingTerm(null);
-        toast.success("Term updated successfully.");
+        try {
+            const updated = await contextService.updateGlossaryTerm(editingTerm.term_id, {
+                term: editingTerm.term,
+                definition: editingTerm.definition,
+                category: editingTerm.category
+            });
+            setTerms(prev => prev.map(t => t.term_id === editingTerm.term_id ? updated : t));
+            setEditingTerm(null);
+            toast.success("Term updated successfully.");
+        } catch (err) {
+            toast.error("Failed to update term.");
+        }
     };
 
-    const handleRemoveTerm = (id: number) => setTerms((prev) => prev.filter((t) => t.id !== id));
-    const handleRemoveDoc = (id: number) => setDocs((prev) => prev.filter((d) => d.id !== id));
+    const handleRemoveTerm = async (id: string) => {
+        try {
+            await contextService.deleteGlossaryTerm(id);
+            setTerms((prev) => prev.filter((t) => t.term_id !== id));
+            toast.success("Term removed.");
+        } catch (err) {
+            toast.error("Failed to remove term.");
+        }
+    };
 
-    const handleAddPattern = () => {
+    const handleRemoveDoc = async (id: string) => {
+        try {
+            await contextService.deleteContextDocument(id);
+            setDocs((prev) => prev.filter((d) => d.file_id !== id));
+            toast.success("Document removed.");
+        } catch (err) {
+            toast.error("Failed to remove document.");
+        }
+    };
+
+    const handleAddPattern = async () => {
         if (!newPatLabel || !newPatRegex) return;
-        setPatterns(prev => [...prev, { id: Date.now(), label: newPatLabel, pattern: newPatRegex, example: newPatExample, active: true }]);
-        setNewPatLabel(""); setNewPatRegex(""); setNewPatExample("");
-        setIsPatternAddModalOpen(false);
-        toast.success("Pattern added successfully.");
+        try {
+            const added = await contextService.createPattern({ label: newPatLabel, pattern: newPatRegex, example: newPatExample, is_active: true });
+            setPatterns(prev => [added, ...prev]);
+            setNewPatLabel(""); setNewPatRegex(""); setNewPatExample("");
+            setIsPatternAddModalOpen(false);
+            toast.success("Pattern added successfully.");
+        } catch (err) {
+            toast.error("Failed to add pattern.");
+        }
     };
 
-    const handleSaveEditPattern = () => {
+    const handleSaveEditPattern = async () => {
         if (!editingPattern) return;
-        setPatterns(prev => prev.map(p => p.id === editingPattern.id ? editingPattern : p));
-        setEditingPattern(null);
-        toast.success("Pattern updated successfully.");
+        try {
+            const updated = await contextService.updatePattern(editingPattern.pattern_id, {
+                label: editingPattern.label,
+                pattern: editingPattern.pattern,
+                example: editingPattern.example,
+                is_active: editingPattern.is_active
+            });
+            setPatterns(prev => prev.map(p => p.pattern_id === editingPattern.pattern_id ? updated : p));
+            setEditingPattern(null);
+            toast.success("Pattern updated successfully.");
+        } catch (err) {
+            toast.error("Failed to update pattern.");
+        }
     };
 
-    const handleRemovePattern = (id: number) => setPatterns(prev => prev.filter(p => p.id !== id));
+    const handleRemovePattern = async (id: string) => {
+        try {
+            await contextService.deletePattern(id);
+            setPatterns(prev => prev.filter(p => p.pattern_id !== id));
+            toast.success("Pattern removed.");
+        } catch (err) {
+            toast.error("Failed to remove pattern.");
+        }
+    };
 
-    const togglePatternActive = (id: number) => {
-        setPatterns(prev => prev.map(p => p.id === id ? { ...p, active: !p.active } : p));
+    const togglePatternActive = async (id: string, current: boolean) => {
+        try {
+            const updated = await contextService.updatePattern(id, { is_active: !current });
+            setPatterns(prev => prev.map(p => p.pattern_id === id ? updated : p));
+        } catch (err) {
+            toast.error("Failed to toggle pattern status.");
+        }
     };
 
     // Document Processing Logic
@@ -157,33 +225,35 @@ export default function MyContextPage() {
         setExtractedEntities(prev => prev.map(e => e.id === id ? { ...e, checked: !e.checked } : e));
     };
 
-    const handleSaveEntities = () => {
+    const handleSaveEntities = async () => {
         if (!processingDoc) return;
 
         // Add checked entities to glossary terms
-        const newTerms = extractedEntities.filter(e => e.checked).map(e => ({
-            id: Date.now() + Math.random(),
-            term: e.original,
-            definition: e.description || `Extracted ${e.type} from ${processingDoc.name}`,
-            category: e.type
-        }));
+        const entitiesToSave = extractedEntities.filter(e => e.checked);
+        
+        try {
+            if (entitiesToSave.length > 0) {
+                const results = await Promise.all(entitiesToSave.map(e => 
+                    contextService.createGlossaryTerm({
+                        term: e.original,
+                        definition: e.description || `Extracted ${e.type} from ${processingDoc.name}`,
+                        category: e.type
+                    })
+                ));
+                setTerms(prev => [...results, ...prev]);
+                toast.success(`Added ${results.length} terms to Glossary.`);
+            }
 
-        if (newTerms.length > 0) {
-            setTerms(prev => [...prev, ...newTerms]);
-            toast.success(`Added ${newTerms.length} terms to Glossary.`);
+            // Upload the file to DB
+            const uploadedFile = await contextService.uploadContextDocument(processingDoc.file);
+            setDocs(prev => [uploadedFile, ...prev]);
+
+            setStagedDocs(prev => prev.filter(d => d.id !== processingDoc.id));
+            setProcessingDoc(null);
+            toast.success(`${processingDoc.name} processed and saved to DB.`);
+        } catch (err) {
+            toast.error("Failed to save context from document.");
         }
-
-        // Move doc to uploaded
-        setDocs(prev => [{
-            id: processingDoc.id,
-            name: processingDoc.name,
-            size: processingDoc.size,
-            uploadedAt: new Date().toISOString().split('T')[0]
-        }, ...prev]);
-
-        setStagedDocs(prev => prev.filter(d => d.id !== processingDoc.id));
-        setProcessingDoc(null);
-        toast.success(`${processingDoc.name} processed and saved.`);
     };
 
     // Dropzone logic
@@ -257,33 +327,41 @@ export default function MyContextPage() {
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-base">Your Glossary</CardTitle>
-                            <CardDescription>{terms.length} terms — applied to all chats automatically</CardDescription>
+                        <CardDescription>{terms.length} terms — applied to all chats automatically</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-3">
-                                {terms.map((entry) => (
-                                    <div key={entry.id} className="flex items-start justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 group">
-                                        <div className="flex-1">
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-sm font-semibold text-foreground">{entry.term}</p>
-                                                <Badge variant="outline" className="text-[10px]">{entry.category}</Badge>
+                            {isLoading ? (
+                                <div className="space-y-3">
+                                    {[1, 2, 3].map(i => (
+                                        <div key={i} className="h-20 w-full rounded-lg bg-muted animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {terms.map((entry) => (
+                                        <div key={entry.term_id} className="flex items-start justify-between rounded-lg border border-border p-4 transition-colors hover:bg-muted/50 group">
+                                            <div className="flex-1">
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-sm font-semibold text-foreground">{entry.term}</p>
+                                                    <Badge variant="outline" className="text-[10px]">{entry.category}</Badge>
+                                                </div>
+                                                <p className="mt-1 text-sm text-muted-foreground">{entry.definition}</p>
                                             </div>
-                                            <p className="mt-1 text-sm text-muted-foreground">{entry.definition}</p>
+                                            <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingTerm(entry)}>
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger shrink-0" onClick={() => handleRemoveTerm(entry.term_id)}>
+                                                    <Trash2 className="h-4 w-4" />
+                                                </Button>
+                                            </div>
                                         </div>
-                                        <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingTerm(entry)}>
-                                                <Edit className="h-4 w-4" />
-                                            </Button>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger shrink-0" onClick={() => handleRemoveTerm(entry.id)}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
-                                        </div>
-                                    </div>
-                                ))}
-                                {terms.length === 0 && (
-                                    <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No terms added yet</p></div>
-                                )}
-                            </div>
+                                    ))}
+                                    {terms.length === 0 && (
+                                        <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No terms added yet</p></div>
+                                    )}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -351,25 +429,35 @@ export default function MyContextPage() {
                             <CardDescription>{docs.length} documents — used for context enrichment in all chats</CardDescription>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-3">
-                                {docs.map((doc) => (
-                                    <div key={doc.id} className="flex items-center justify-between rounded-lg border border-border p-4">
-                                        <div className="flex items-center gap-3">
-                                            <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50"><FileText className="h-5 w-5 text-brand-600" /></div>
-                                            <div>
-                                                <p className="text-sm font-medium">{doc.name}</p>
-                                                <p className="text-xs text-muted-foreground">{doc.size} · Uploaded {doc.uploadedAt}</p>
+                            {isLoading ? (
+                                <div className="space-y-3">
+                                    {[1, 2].map(i => (
+                                        <div key={i} className="h-16 w-full rounded-lg bg-muted animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="space-y-3">
+                                    {docs.map((doc) => (
+                                        <div key={doc.file_id} className="flex items-center justify-between rounded-lg border border-border p-4">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50"><FileText className="h-5 w-5 text-brand-600" /></div>
+                                                <div>
+                                                    <p className="text-sm font-medium">{doc.filename}</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {formatSize(doc.file_size_bytes)} · Uploaded {new Date(doc.created_at).toLocaleDateString()}
+                                                    </p>
+                                                </div>
                                             </div>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemoveDoc(doc.file_id)}>
+                                                <Trash2 className="h-4 w-4" />
+                                            </Button>
                                         </div>
-                                        <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemoveDoc(doc.id)}>
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                ))}
-                                {docs.length === 0 && (
-                                    <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No documents uploaded yet</p></div>
-                                )}
-                            </div>
+                                    ))}
+                                    {docs.length === 0 && (
+                                        <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No documents uploaded yet</p></div>
+                                    )}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -389,34 +477,42 @@ export default function MyContextPage() {
                             </div>
                         </CardHeader>
                         <CardContent>
-                            <div className="space-y-4">
-                                {patterns.map((p) => (
-                                    <div key={p.id} className="flex items-center justify-between rounded-lg border border-border p-4 overflow-hidden group">
-                                        <div>
-                                            <p className="text-sm font-medium flex items-center gap-2">
-                                                {p.label}
-                                                <Badge variant={p.active ? "default" : "secondary"} className={p.active ? "bg-success/10 text-success hover:bg-success/20 border-0" : ""}>{p.active ? "Active" : "Disabled"}</Badge>
-                                            </p>
-                                            <code className="mt-1.5 inline-block text-xs bg-muted px-2 py-0.5 rounded font-mono border border-border/50">{p.pattern}</code>
-                                            {p.example && <p className="text-[11px] text-muted-foreground mt-1.5">Example: {p.example}</p>}
-                                        </div>
-                                        <div className="flex items-center gap-2 sm:gap-4">
-                                            <Switch checked={p.active} onCheckedChange={() => togglePatternActive(p.id)} />
-                                            <div className="flex items-center gap-1">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingPattern(p)}>
-                                                    <Edit className="h-4 w-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemovePattern(p.id)}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
+                            {isLoading ? (
+                                <div className="space-y-4">
+                                    {[1, 2].map(i => (
+                                        <div key={i} className="h-24 w-full rounded-lg bg-muted animate-pulse" />
+                                    ))}
+                                </div>
+                            ) : (
+                                <div className="space-y-4">
+                                    {patterns.map((p) => (
+                                        <div key={p.pattern_id} className="flex items-center justify-between rounded-lg border border-border p-4 overflow-hidden group">
+                                            <div>
+                                                <p className="text-sm font-medium flex items-center gap-2">
+                                                    {p.label}
+                                                    <Badge variant={p.is_active ? "default" : "secondary"} className={p.is_active ? "bg-success/10 text-success hover:bg-success/20 border-0" : ""}>{p.is_active ? "Active" : "Disabled"}</Badge>
+                                                </p>
+                                                <code className="mt-1.5 inline-block text-xs bg-muted px-2 py-0.5 rounded font-mono border border-border/50">{p.pattern}</code>
+                                                {p.example && <p className="text-[11px] text-muted-foreground mt-1.5">Example: {p.example}</p>}
+                                            </div>
+                                            <div className="flex items-center gap-2 sm:gap-4">
+                                                <Switch checked={p.is_active} onCheckedChange={() => togglePatternActive(p.pattern_id, p.is_active)} />
+                                                <div className="flex items-center gap-1">
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingPattern(p)}>
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemovePattern(p.pattern_id)}>
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
                                             </div>
                                         </div>
-                                    </div>
-                                ))}
-                                {patterns.length === 0 && (
-                                    <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No patterns added yet</p></div>
-                                )}
-                            </div>
+                                    ))}
+                                    {patterns.length === 0 && (
+                                        <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No patterns added yet</p></div>
+                                    )}
+                                </div>
+                            )}
                         </CardContent>
                     </Card>
                 </TabsContent>
@@ -471,10 +567,18 @@ export default function MyContextPage() {
                             <Label>Example Match <span className="text-muted-foreground font-normal">(Optional)</span></Label>
                             <Input
                                 placeholder="e.g. ACCT-123456"
-                                value={editingPattern ? editingPattern.example : newPatExample}
+                                value={editingPattern ? (editingPattern.example || "") : newPatExample}
                                 onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, example: e.target.value }) : setNewPatExample(e.target.value)}
                             />
                         </div>
+                    </div>
+                    <div className="flex items-center justify-between px-1 py-2 mb-2">
+                        <Label className="text-sm font-medium">Pattern Status</Label>
+                        <Switch 
+                            checked={editingPattern ? editingPattern.is_active : true} 
+                            onCheckedChange={v => editingPattern && setEditingPattern({...editingPattern, is_active: v})}
+                            disabled={!editingPattern}
+                        />
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => { setEditingPattern(null); setIsPatternAddModalOpen(false); }}>Cancel</Button>

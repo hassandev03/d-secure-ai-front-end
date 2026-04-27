@@ -3,14 +3,67 @@ import type { LLMModel, ModelOption } from '@/types/chat.types';
 export const APP_NAME = 'D-SecureAI';
 export const APP_TAGLINE = 'Secure AI. Seamlessly.';
 
+/**
+ * MODELS catalogue — only models with working API keys are listed.
+ *
+ * Provider → Backend key mapping:
+ *   azure     → Azure OpenAI Service (gpt-4.1 deployment via Azure API)
+ *   anthropic → Anthropic Claude     (Free tier: 5 req/min, 4K out tokens/min)
+ *   google    → Google Gemini        (google-genai SDK, Gemini API key)
+ */
 export const MODELS: ModelOption[] = [
-    { id: 'gpt-5-1', name: 'GPT-5.1', provider: 'openai', providerName: 'OpenAI', isAvailable: true },
-    { id: 'gpt-4o', name: 'GPT-4o', provider: 'openai', providerName: 'OpenAI', isAvailable: true },
-    { id: 'claude-4-6-sonnet', name: 'Claude 4.6 Sonnet', provider: 'anthropic', providerName: 'Anthropic', isAvailable: true },
-    { id: 'claude-4-5-haiku', name: 'Claude 4.5 Haiku', provider: 'anthropic', providerName: 'Anthropic', isAvailable: true },
-    { id: 'claude-4-6-opus', name: 'Claude 4.6 Opus', provider: 'anthropic', providerName: 'Anthropic', isAvailable: true },
-    { id: 'gemini-3-1-pro', name: 'Gemini 3.1 Pro', provider: 'google', providerName: 'Google', isAvailable: true },
-    { id: 'gemini-3-1-flash', name: 'Gemini 3.1 Flash', provider: 'google', providerName: 'Google', isAvailable: true },
+    // ── Azure OpenAI (primary GPT endpoint) ─────────────────────────────────
+    {
+        id: 'gpt-4.1',
+        name: 'GPT-4.1',
+        provider: 'azure',
+        providerName: 'Azure OpenAI',
+        isAvailable: true,
+    },
+    {
+        id: 'gpt-4o',
+        name: 'GPT-4o',
+        provider: 'azure',
+        providerName: 'Azure OpenAI',
+        isAvailable: true,
+    },
+    // ── Anthropic Claude (free tier) ─────────────────────────────────────────
+    {
+        id: 'claude-haiku-4-5',
+        name: 'Claude Haiku',
+        provider: 'anthropic',
+        providerName: 'Anthropic',
+        isAvailable: true,
+    },
+    {
+        id: 'claude-sonnet-4-5',
+        name: 'Claude Sonnet',
+        provider: 'anthropic',
+        providerName: 'Anthropic',
+        isAvailable: true,
+    },
+    {
+        id: 'claude-opus-4-5',
+        name: 'Claude Opus',
+        provider: 'anthropic',
+        providerName: 'Anthropic',
+        isAvailable: true,
+    },
+    // ── Google Gemini ────────────────────────────────────────────────────────
+    {
+        id: 'gemini-2.0-flash',
+        name: 'Gemini 2.0 Flash',
+        provider: 'google',
+        providerName: 'Google',
+        isAvailable: true,
+    },
+    {
+        id: 'gemini-1.5-pro',
+        name: 'Gemini 1.5 Pro',
+        provider: 'google',
+        providerName: 'Google',
+        isAvailable: true,
+    },
 ];
 
 export const INDUSTRIES = [
@@ -93,4 +146,4 @@ export const PORTAL_ROUTES = {
     USER: { prefix: '', label: 'User' },
 } as const;
 
-export const DEFAULT_MODEL: LLMModel = 'claude-4-6-sonnet';
+export const DEFAULT_MODEL: LLMModel = 'gpt-4.1';
