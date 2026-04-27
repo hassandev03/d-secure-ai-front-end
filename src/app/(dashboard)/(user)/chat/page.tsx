@@ -4,7 +4,7 @@ import { useState, useRef, useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
     Send, Plus, Paperclip, Mic, Bot, User, Shield, Sparkles,
-    ChevronDown, Eye, ExternalLink, X, FileText
+    ChevronDown, Eye, ExternalLink, X, FileText, AlertTriangle, CreditCard, Lock
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -14,7 +14,11 @@ import { MODELS, DEFAULT_MODEL } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
 import type { LLMModel } from "@/types/chat.types";
-import { getChatSession, getChatMessages, sendMessage, type ChatMessage, type AnonymizedEntity } from "@/services/chat.service";
+import {
+    getChatSession, getChatMessages, sendMessage,
+    QuotaExceededError, SubscriptionRequiredError, PolicyViolationError,
+    type ChatMessage, type AnonymizedEntity,
+} from "@/services/chat.service";
 
 /* ── Entity type colours ────────────────────────────── */
 const entityColors: Record<string, string> = {
@@ -69,6 +73,15 @@ export default function ChatPage() {
     const [expandedEntities, setExpandedEntities] = useState<string | null>(null);
     const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
+    // Error banner state — cleared on each new send attempt
+    type ChatError =
+        | { kind: 'quota';        message: string }
+        | { kind: 'subscription'; message: string }
+        | { kind: 'policy';       message: string }
+        | { kind: 'generic';      message: string }
+        | null;
+    const [chatError, setChatError] = useState<ChatError>(null);
+
     const bottomRef = useRef<HTMLDivElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -116,37 +129,30 @@ export default function ChatPage() {
     };
 
     const handleSend = async () => {
-        if (!input.trim() && attachedFiles.length === 0 || isLoading) return;
+        if ((!input.trim() && attachedFiles.length === 0) || isLoading) return;
 
         const currentInput = input;
         const currentFiles = attachedFiles;
         setInput("");
         setAttachedFiles([]);
+        setChatError(null);   // clear previous error on every new attempt
         setIsLoading(true);
 
-        // Optimistically show a placeholder user message immediately
-        const tempId = `temp-${Date.now()}`;
-        const optimisticUserMsg: Message = {
-            id: tempId,
-            role: "user",
-            content: currentInput,
-            files: currentFiles.length > 0 ? currentFiles.map(f => f.name) : undefined,
-            timestamp: new Date(),
-        };
-        setMessages(prev => [...prev, optimisticUserMsg]);
+        // IMPORTANT: We do NOT render an optimistic user message here.
+        // We only add messages AFTER the backend confirms the full round-trip
+        // so the user never sees a message with no AI response (partial answer).
+        // A typing indicator is shown via isLoading instead.
 
         try {
-            // Blocker 2 Fix: call sendMessage() from the service layer.
-            // BACKEND SWAP: Replace sendMessage() body with api.post() — zero UI changes needed.
-            // The backend returns { userMessage, assistantMessage } with real anonymizedContent
-            // and entities populated by the anonymization engine.
+            // file_ids would come from a prior upload step (Module F).
+            // currentFiles is preserved here for when that's wired up.
+            void currentFiles;
             const { userMessage, assistantMessage } = await sendMessage(
-                sessionId || 'new',
+                sessionId,
                 currentInput,
-                currentFiles.length > 0 ? currentFiles : undefined
+                model,
             );
 
-            // Replace optimistic message with the real one from the server
             const mapMsg = (m: ChatMessage): Message => ({
                 id: m.id,
                 role: m.role === 'system' ? 'assistant' : m.role,
@@ -154,17 +160,24 @@ export default function ChatPage() {
                 anonymizedContent: m.anonymizedContent,
                 entities: m.entities,
                 files: m.files,
-                timestamp: new Date(m.createdAt),
+                timestamp: new Date(m.createdAt as string),
             });
 
-            setMessages(prev => [
-                ...prev.filter(m => m.id !== tempId),
-                mapMsg(userMessage),
-                mapMsg(assistantMessage),
-            ]);
-        } catch {
-            // On error, remove the optimistic message
-            setMessages(prev => prev.filter(m => m.id !== tempId));
+            setMessages(prev => [...prev, mapMsg(userMessage), mapMsg(assistantMessage)]);
+
+        } catch (err: unknown) {
+            // Classify the error and show the appropriate banner.
+            // The message was never added to state, so there is no partial answer to clean up.
+            if (err instanceof QuotaExceededError) {
+                setChatError({ kind: 'quota', message: err.detail });
+            } else if (err instanceof SubscriptionRequiredError) {
+                setChatError({ kind: 'subscription', message: err.detail });
+            } else if (err instanceof PolicyViolationError) {
+                setChatError({ kind: 'policy', message: err.detail });
+            } else {
+                const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
+                setChatError({ kind: 'generic', message: msg });
+            }
         } finally {
             setIsLoading(false);
         }
@@ -394,6 +407,45 @@ export default function ChatPage() {
                 )}
                 <div ref={bottomRef} />
             </div>
+
+            {/* ─── Error / Quota Banner ─── */}
+            {chatError && (
+                <div className={cn(
+                    "mt-3 mb-1 rounded-xl border px-4 py-3 flex items-start gap-3 text-sm shrink-0",
+                    chatError.kind === 'quota'        && "border-amber-200 bg-amber-50 text-amber-900",
+                    chatError.kind === 'subscription' && "border-red-200 bg-red-50 text-red-900",
+                    chatError.kind === 'policy'       && "border-purple-200 bg-purple-50 text-purple-900",
+                    chatError.kind === 'generic'      && "border-red-200 bg-red-50 text-red-900",
+                )}>
+                    {chatError.kind === 'quota' && <CreditCard className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />}
+                    {chatError.kind === 'subscription' && <CreditCard className="h-4 w-4 mt-0.5 shrink-0 text-red-600" />}
+                    {chatError.kind === 'policy' && <Lock className="h-4 w-4 mt-0.5 shrink-0 text-purple-600" />}
+                    {chatError.kind === 'generic' && <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-red-600" />}
+                    <div className="flex-1 min-w-0">
+                        <p className="font-semibold">
+                            {chatError.kind === 'quota'        && 'Credit Budget Exhausted'}
+                            {chatError.kind === 'subscription' && 'Subscription Required'}
+                            {chatError.kind === 'policy'       && 'Action Blocked by Policy'}
+                            {chatError.kind === 'generic'      && 'Request Failed'}
+                        </p>
+                        <p className="text-[12px] mt-0.5 opacity-80">{chatError.message}</p>
+                        {(chatError.kind === 'quota' || chatError.kind === 'subscription') && (
+                            <Link
+                                href="/subscription"
+                                className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold underline underline-offset-2"
+                            >
+                                Upgrade plan <ExternalLink className="h-3 w-3" />
+                            </Link>
+                        )}
+                    </div>
+                    <button
+                        onClick={() => setChatError(null)}
+                        className="ml-auto shrink-0 rounded p-0.5 opacity-60 hover:opacity-100 transition-opacity"
+                    >
+                        <X className="h-3.5 w-3.5" />
+                    </button>
+                </div>
+            )}
 
             {/* ─── Input area ─── */}
             <div className="mt-4 shrink-0">

@@ -122,7 +122,7 @@ export default function ProfilePage() {
         }
         setSaving(true);
         try {
-            const result = await updateUserProfile({ name: `${firstName.trim()} ${lastName.trim()}`, email, phone, country, jobTitle, industry, bio });
+            const result = await updateUserProfile({ name: `${firstName.trim()} ${lastName.trim()}`, phone, country, jobTitle, industry });
             if (result.success && result.user) updateUser(result.user);
             toast.success("Profile saved successfully.");
         } catch {
@@ -132,6 +132,8 @@ export default function ProfilePage() {
         }
     };
 
+    const [pwLoading, setPwLoading] = useState(false);
+
     const handlePasswordChange = async () => {
         const newPwErrors: Record<string, string | null> = {
             currentPassword: !currentPassword ? "Current password is required." : null,
@@ -140,9 +142,17 @@ export default function ProfilePage() {
         };
         setPwErrors(newPwErrors);
         if (Object.values(newPwErrors).some((e) => e !== null)) return;
-        setPasswordOpen(false);
-        setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setPwErrors({});
-        toast.success("Password updated successfully.");
+        setPwLoading(true);
+        try {
+            await changePassword(currentPassword, newPassword);
+            setPasswordOpen(false);
+            setCurrentPassword(""); setNewPassword(""); setConfirmPassword(""); setPwErrors({});
+            toast.success("Password updated successfully.");
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : "Failed to update password.");
+        } finally {
+            setPwLoading(false);
+        }
     };
 
     const planKey = user?.subscriptionTier || "FREE";
@@ -305,7 +315,7 @@ export default function ProfilePage() {
                                     </div>
                                 </div>
                                 <DialogFooter>
-                                    <Button onClick={handlePasswordChange} className="bg-brand-600 hover:bg-brand-700">Save changes</Button>
+                                    <Button onClick={handlePasswordChange} className="bg-brand-600 hover:bg-brand-700" disabled={pwLoading}>{pwLoading ? <><Loader2 className="mr-2 h-4 w-4 animate-spin" />Saving…</> : "Save changes"}</Button>
                                 </DialogFooter>
                             </DialogContent>
                         </Dialog>

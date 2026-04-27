@@ -1,7 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { QRCodeSVG } from "qrcode.react";
 import { Sparkles, Eye, EyeOff, Loader2, Mail, Check, ArrowRight, ArrowLeft } from "lucide-react";
 import { toast } from "sonner";
 import AuthLayout from "@/components/auth/AuthLayout";
@@ -10,7 +11,10 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { register } from "@/services/auth.service";
+import { register, resendVerificationEmail, setup2FA, verify2FA, getCurrentUser } from "@/services/auth.service";
+
+
+
 import { useAuthStore } from "@/store/auth.store";
 import { INDUSTRIES, SUBSCRIPTION_PLANS } from "@/lib/constants";
 import Link from "next/link";
@@ -22,6 +26,21 @@ export default function ProfessionalRegisterPage() {
     const { setUser } = useAuthStore();
     const [step, setStep] = useState(1);
     const [isLoading, setIsLoading] = useState(false);
+
+    // 2FA state
+    const [qrUri, setQrUri] = useState("");
+    const [isVerifying2FA, setIsVerifying2FA] = useState(false);
+
+    useEffect(() => {
+        if (step === 4) {
+            setup2FA().then(data => {
+                setQrUri(data.provisioningUri);
+            }).catch(() => {
+                toast.error("Failed to initialize 2FA setup");
+            });
+        }
+    }, [step]);
+
 
     // Step 1 fields
     const [name, setName] = useState("");
@@ -158,27 +177,55 @@ export default function ProfessionalRegisterPage() {
                         </div>
                         <h1 className="text-2xl font-bold text-foreground">Verify your email</h1>
                         <p className="text-sm text-muted-foreground">We&apos;ve sent a verification link to <strong>{email}</strong>.</p>
-                        <Button variant="outline" size="sm">Resend email</Button>
+                        <Button variant="outline" size="sm" onClick={async () => {
+                            try { await resendVerificationEmail(email); toast.success("Verification email resent."); }
+                            catch { toast.error("Could not resend. Please try again."); }
+                        }}>Resend email</Button>
                         <button onClick={() => setStep(2)} className="block mx-auto text-sm text-muted-foreground hover:text-foreground">Change email address</button>
-                        <Button className="w-full bg-brand-600 hover:bg-brand-700" onClick={() => setStep(4)}>
+                        <Button className="w-full bg-brand-600 hover:bg-brand-700" onClick={async () => {
+                            const user = await getCurrentUser();
+                            if (user?.emailVerifiedAt) {
+                                setStep(4);
+                            } else {
+                                toast.error("Email not verified yet. Please check your inbox and click the link.");
+                            }
+                        }}>
                             I&apos;ve verified my email <ArrowRight className="ml-2 h-4 w-4" />
                         </Button>
                     </div>
                 )}
+
 
                 {/* Step 4: 2FA Setup */}
                 {step === 4 && (
                     <div className="space-y-6">
                         <h1 className="text-2xl font-bold text-foreground text-center">Secure your account</h1>
                         <p className="text-sm text-muted-foreground text-center">Set up two-factor authentication with your authenticator app.</p>
-                        <div className="mx-auto flex h-48 w-48 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/50">
-                            <p className="text-xs text-muted-foreground text-center px-4">QR Code Placeholder<br />(Scan with authenticator app)</p>
+                        <div className="mx-auto flex h-48 w-48 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/50 overflow-hidden bg-white">
+                            {qrUri ? (
+                                <QRCodeSVG value={qrUri} size={160} />
+                            ) : (
+                                <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />
+                            )}
                         </div>
                         <p className="text-sm text-muted-foreground text-center">Enter the 6-digit code to confirm setup:</p>
-                        <OTPInput onComplete={() => setStep(5)} />
+                        <OTPInput onComplete={async (code) => {
+                            setIsVerifying2FA(true);
+                            try {
+                                await verify2FA({ code });
+                                toast.success("2FA verified and enabled!");
+                                setStep(5);
+                            } catch {
+                                toast.error("Invalid verification code. Please try again.");
+                            } finally {
+                                setIsVerifying2FA(false);
+                            }
+                        }} disabled={isVerifying2FA} />
+                        {isVerifying2FA && <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-3 w-3 animate-spin"/> Verifying...</p>}
                         <button onClick={() => setStep(5)} className="block w-full text-center text-sm text-muted-foreground hover:text-foreground">Skip for now</button>
                     </div>
                 )}
+
 
                 {/* Step 5: Choose Plan */}
                 {step === 5 && (

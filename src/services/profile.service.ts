@@ -1,51 +1,78 @@
-import { delay } from './api';
+/**
+ * profile.service.ts — Real backend integration
+ *
+ * Backend routes (prefix /api/v1/users):
+ *   PATCH /me                  → update profile fields
+ *   POST  /me/change-password  → change password (requires current)
+ *   POST  /auth/2fa/setup      → enable 2FA → returns secret + QR URI
+ *   POST  /auth/2fa/verify     → confirm 2FA code (activates it)
+ *   DELETE /auth/2fa/disable   → disable 2FA
+ */
+import api from './api';
 import type { User } from '@/types/user.types';
-
-/* ══════════════════════════════════════════════════════
-   Types
-   ══════════════════════════════════════════════════════ */
 
 export interface ProfileUpdatePayload {
     name?: string;
-    email?: string;
-    phone?: string;
-    country?: string;
     jobTitle?: string;
     industry?: string;
-    bio?: string;
-    avatar?: File;
+    country?: string;
+    phone?: string;
+    avatarUrl?: string;
 }
 
-/* ══════════════════════════════════════════════════════
-   Service Functions
-   ══════════════════════════════════════════════════════ */
-
-/** PUT /api/v1/users/me */
-export async function updateUserProfile(_payload: ProfileUpdatePayload): Promise<{ success: boolean; user: Partial<User> }> {
-    await delay(600);
-    return { success: true, user: {} };
+/** PATCH /api/v1/users/me */
+export async function updateUserProfile(
+    payload: ProfileUpdatePayload
+): Promise<{ success: boolean; user: Partial<User> }> {
+    const { data } = await api.patch('/users/me', {
+        name:      payload.name,
+        job_title: payload.jobTitle,
+        industry:  payload.industry,
+        country:   payload.country,
+        phone:     payload.phone,
+        avatar_url: payload.avatarUrl,
+    });
+    return {
+        success: true,
+        user: {
+            name:     data.name,
+            jobTitle: data.job_title,
+            industry: data.industry,
+            country:  data.country,
+            phone:    data.phone,
+            avatar:   data.avatar_url,
+        },
+    };
 }
 
-/** POST /api/v1/users/me/avatar */
-export async function uploadAvatar(_file: File): Promise<{ avatarUrl: string }> {
-    await delay(500);
-    return { avatarUrl: URL.createObjectURL(_file) };
-}
-
-/** PUT /api/v1/users/me/password */
-export async function changePassword(_current: string, _newPassword: string): Promise<{ success: boolean }> {
-    await delay(500);
+/** POST /api/v1/users/me/change-password */
+export async function changePassword(
+    currentPassword: string,
+    newPassword: string
+): Promise<{ success: boolean }> {
+    await api.post('/users/me/change-password', {
+        current_password: currentPassword,
+        new_password: newPassword,
+    });
     return { success: true };
 }
 
-/** POST /api/v1/users/me/2fa/enable */
+/** POST /api/v1/auth/2fa/setup */
 export async function enable2FA(): Promise<{ secret: string; qrCode: string }> {
-    await delay(400);
-    return { secret: 'MOCK_SECRET_KEY', qrCode: 'data:image/png;base64,...' };
+    const { data } = await api.post<{ secret: string; provisioning_uri: string }>(
+        '/auth/2fa/setup'
+    );
+    return { secret: data.secret, qrCode: data.provisioning_uri };
 }
 
-/** DELETE /api/v1/users/me/2fa/disable */
+/** POST /api/v1/auth/2fa/verify */
+export async function verify2FACode(code: string): Promise<{ success: boolean }> {
+    await api.post('/auth/2fa/verify', { code });
+    return { success: true };
+}
+
+/** DELETE /api/v1/auth/2fa/disable */
 export async function disable2FA(): Promise<{ success: boolean }> {
-    await delay(400);
+    await api.delete('/auth/2fa/disable');
     return { success: true };
 }

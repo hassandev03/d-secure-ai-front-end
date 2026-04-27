@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
     LayoutDashboard,
     Building2,
@@ -12,6 +12,8 @@ import {
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
+import { useAuthStore } from "@/store/auth.store";
+import { getCurrentUser } from "@/services/auth.service";
 
 const superAdminNav: NavGroup[] = [
     {
@@ -42,7 +44,15 @@ export default function SuperAdminLayout({
 }: {
     children: React.ReactNode;
 }) {
+    const { token, setUser, isAuthenticated } = useAuthStore();
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+
+    useEffect(() => {
+        if (!isAuthenticated) {
+            getCurrentUser().then((u) => { if (u && token) setUser(u, token); });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     return (
         <div className="min-h-screen bg-background">

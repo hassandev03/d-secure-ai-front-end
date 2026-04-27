@@ -27,6 +27,9 @@ export default function SuperAdminLoginPage() {
         setIsLoading(true);
         try {
             const result = await login({ email, password, rememberMe });
+            if (result.refreshToken && typeof window !== 'undefined') {
+                localStorage.setItem('refresh_token', result.refreshToken);
+            }
             if (result.requires2FA) {
                 setPendingUser(result.user, result.token);
                 router.push("/auth/super-admin/verify-2fa");

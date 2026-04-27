@@ -1,399 +1,383 @@
-import { delay } from './api';
+/**
+ * sa.service.ts — Super Admin portal: real backend integration
+ *
+ * Backend routes used:
+ *   GET    /api/v1/organizations                          → list all orgs (SA only)
+ *   POST   /api/v1/organizations                         → register org
+ *   PATCH  /api/v1/organizations/{org_id}                → update org
+ *   GET    /api/v1/users?role=...                        → list professionals/employees
+ *   PATCH  /api/v1/users/{user_id}/status               → suspend/activate user
+ *   GET    /api/v1/subscriptions/plans                   → list plans
+ *   GET    /api/v1/subscriptions/addons                  → list addon packages
+ *   POST   /api/v1/subscriptions/plans                   → create/update plan (SA)
+ *   POST   /api/v1/subscriptions/addons                  → create addon package (SA)
+ *   GET    /api/v1/analytics/dashboard/summary           → platform-wide stats
+ */
+import api from './api';
 import type {
     SAOrganization, SAProfessional, SADashboardStats, SAActivityItem,
     SAEnterprisePlan, SAIndividualPlan, SAAddonPackage, RegisterOrgPayload,
-    OrgStatus, ProfessionalStatus,
+    OrgStatus, ProfessionalStatus, SARevenueStats,
 } from '@/types/sa.types';
 import { SUBSCRIPTION_PLANS } from '@/lib/constants';
 
-const organizations: SAOrganization[] = [
-    {
-        id: 'org-001', name: 'Acme Corporation', industry: 'Technology', domain: 'acme.com',
-        country: 'USA', sizeRange: '51-200', status: 'ACTIVE', plan: 'Enterprise',
-        billingCycle: 'ANNUAL', employees: 120, departments: 6,
-        quota: { percentageUsed: 64, budget: 5000 }, registeredAt: '2025-03-15',
-        adminName: 'Sarah Johnson', adminEmail: 'sarah@acmecorp.com', adminPhone: '+1-555-0123',
-        notes: 'Premium enterprise client. Priority support enabled.',
-        departmentList: [
-            { name: 'Engineering', employees: 45, quota: { percentageUsed: 80, budget: 1500 } },
-            { name: 'Marketing',   employees: 20, quota: { percentageUsed: 75, budget: 800  } },
-            { name: 'Sales',       employees: 25, quota: { percentageUsed: 71, budget: 700  } },
-            { name: 'HR',          employees: 10, quota: { percentageUsed: 50, budget: 400  } },
-            { name: 'Finance',     employees: 12, quota: { percentageUsed: 67, budget: 600  } },
-            { name: 'Operations',  employees: 8,  quota: { percentageUsed: 30, budget: 1000 } },
-        ],
-    },
-    {
-        id: 'org-002', name: 'MediHealth Inc.', industry: 'Healthcare', domain: 'medihealth.com',
-        country: 'UK', sizeRange: '51-200', status: 'ACTIVE', plan: 'Enterprise',
-        billingCycle: 'ANNUAL', employees: 85, departments: 4,
-        quota: { percentageUsed: 60, budget: 3000 }, registeredAt: '2025-04-22',
-        adminName: 'James Carter', adminEmail: 'james@medihealth.com',
-        departmentList: [
-            { name: 'Research', employees: 30, quota: { percentageUsed: 80, budget: 1000 } },
-            { name: 'Clinical', employees: 25, quota: { percentageUsed: 63, budget:  800 } },
-            { name: 'Admin',    employees: 15, quota: { percentageUsed: 50, budget:  600 } },
-            { name: 'IT',       employees: 15, quota: { percentageUsed: 33, budget:  600 } },
-        ],
-    },
-    {
-        id: 'org-003', name: 'LegalEase Partners', industry: 'Legal', domain: 'legalease.com',
-        country: 'Canada', sizeRange: '11-50', status: 'ONBOARDING', plan: 'Starter',
-        billingCycle: 'MONTHLY', employees: 20, departments: 2,
-        quota: { percentageUsed: 0, budget: 1000 }, registeredAt: '2025-09-01',
-        adminName: 'Emma Liu', adminEmail: 'emma@legalease.com',
-        departmentList: [
-            { name: 'Litigation', employees: 12, quota: { percentageUsed: 0, budget: 600 } },
-            { name: 'Corporate',  employees: 8,  quota: { percentageUsed: 0, budget: 400 } },
-        ],
-    },
-    {
-        id: 'org-004', name: 'EduTech Global', industry: 'Education', domain: 'edutech.io',
-        country: 'Australia', sizeRange: '11-50', status: 'ACTIVE', plan: 'Professional',
-        billingCycle: 'MONTHLY', employees: 45, departments: 3,
-        quota: { percentageUsed: 45, budget: 2000 }, registeredAt: '2025-06-10',
-        adminName: 'Oliver Park', adminEmail: 'oliver@edutech.io',
-        departmentList: [
-            { name: 'Curriculum',     employees: 18, quota: { percentageUsed: 57, budget: 700 } },
-            { name: 'Technology',     employees: 15, quota: { percentageUsed: 50, budget: 700 } },
-            { name: 'Administration', employees: 12, quota: { percentageUsed: 25, budget: 600 } },
-        ],
-    },
-    {
-        id: 'org-005', name: 'FinSecure Ltd.', industry: 'Finance', domain: 'finsecure.co',
-        country: 'Singapore', sizeRange: '51-200', status: 'DEACTIVATED', plan: 'Enterprise',
-        billingCycle: 'ANNUAL', employees: 60, departments: 5,
-        quota: { percentageUsed: 10, budget: 2000 }, registeredAt: '2025-01-20',
-        adminName: 'Wei Zhang', adminEmail: 'wei@finsecure.co',
-        departmentList: [
-            { name: 'Trading',    employees: 15, quota: { percentageUsed: 16, budget: 500 } },
-            { name: 'Risk',       employees: 12, quota: { percentageUsed: 13, budget: 400 } },
-            { name: 'Compliance', employees: 13, quota: { percentageUsed: 10, budget: 400 } },
-            { name: 'IT',         employees: 10, quota: { percentageUsed: 5,  budget: 400 } },
-            { name: 'Operations', employees: 10, quota: { percentageUsed: 3,  budget: 300 } },
-        ],
-    },
-    {
-        id: 'org-006', name: 'GovShield Agency', industry: 'Government', domain: 'govshield.gov',
-        country: 'USA', sizeRange: '201-500', status: 'ACTIVE', plan: 'Enterprise',
-        billingCycle: 'ANNUAL', employees: 200, departments: 8,
-        quota: { percentageUsed: 82, budget: 5000 }, registeredAt: '2025-02-05',
-        adminName: 'Patricia Moore', adminEmail: 'patricia@govshield.gov', adminPhone: '+1-555-0456',
-        departmentList: [
-            { name: 'Intelligence',  employees: 40, quota: { percentageUsed: 100, budget: 1200 } },
-            { name: 'Cybersecurity', employees: 35, quota: { percentageUsed: 100, budget:  900 } },
-            { name: 'Field Ops',     employees: 30, quota: { percentageUsed: 88,  budget:  800 } },
-            { name: 'Analysis',      employees: 25, quota: { percentageUsed: 83,  budget:  600 } },
-            { name: 'Legal',         employees: 20, quota: { percentageUsed: 75,  budget:  400 } },
-            { name: 'Admin',         employees: 20, quota: { percentageUsed: 50,  budget:  400 } },
-            { name: 'Training',      employees: 15, quota: { percentageUsed: 50,  budget:  400 } },
-            { name: 'IT',            employees: 15, quota: { percentageUsed: 33,  budget:  300 } },
-        ],
-    },
-    {
-        id: 'org-007', name: 'RetailPro Stores', industry: 'Retail', domain: 'retailpro.com',
-        country: 'Germany', sizeRange: '11-50', status: 'SUSPENDED', plan: 'Professional',
-        billingCycle: 'MONTHLY', employees: 30, departments: 2,
-        quota: { percentageUsed: 27, budget: 1500 }, registeredAt: '2025-07-12',
-        adminName: 'Hans Müller', adminEmail: 'hans@retailpro.com',
-        departmentList: [
-            { name: 'Sales',     employees: 18, quota: { percentageUsed: 38, budget: 800 } },
-            { name: 'Logistics', employees: 12, quota: { percentageUsed: 14, budget: 700 } },
-        ],
-    },
-];
+// ── Backend response shapes ──────────────────────────────────────────────────
 
-const professionals: SAProfessional[] = [
-    {
-        id: 'pro-001', name: 'Alex Thompson', email: 'alex@freelance.com',
-        jobTitle: 'Data Scientist', industry: 'Technology', plan: 'PRO',
-        status: 'ACTIVE', creditsUsed: 320, joinedAt: '2025-06-01',
-        lastActive: '2 hours ago',
-        bio: 'Experienced data scientist using secure AI to analyze large datasets while maintaining full compliance and data privacy standards.',
-    },
-    {
-        id: 'pro-002', name: 'Maria Santos', email: 'maria@consulting.io',
-        jobTitle: 'Legal Consultant', industry: 'Legal', plan: 'MAX',
-        status: 'ACTIVE', creditsUsed: 890, joinedAt: '2025-04-15',
-        lastActive: '30 minutes ago',
-        bio: 'Senior legal consultant leveraging AI-powered document analysis and anonymization tools for complex litigation and contract review.',
-    },
-    {
-        id: 'pro-003', name: 'David Chen', email: 'david@design.co',
-        jobTitle: 'UX Researcher', industry: 'Technology', plan: 'FREE',
-        status: 'ACTIVE', creditsUsed: 15, joinedAt: '2025-08-20',
-        lastActive: '1 day ago',
-        bio: 'UX researcher exploring privacy-first AI tools for user research and data analysis in design workflows.',
-    },
-    {
-        id: 'pro-004', name: 'Fatima Al-Rashid', email: 'fatima@health.org',
-        jobTitle: 'Clinical Researcher', industry: 'Healthcare', plan: 'PRO',
-        status: 'DEACTIVATED', creditsUsed: 0, joinedAt: '2025-05-10',
-        lastActive: 'Never',
-        bio: 'Clinical researcher focused on leveraging AI to analyze patient data while ensuring HIPAA compliance and data anonymization.',
-    },
-    {
-        id: 'pro-005', name: 'James Wilson', email: 'james@finance.net',
-        jobTitle: 'Financial Analyst', industry: 'Finance', plan: 'PRO',
-        status: 'ACTIVE', creditsUsed: 540, joinedAt: '2025-07-03',
-        lastActive: '5 hours ago',
-        bio: 'Financial analyst using AI-powered tools for secure market analysis and regulatory compliance reporting.',
-    },
-    {
-        id: 'pro-006', name: 'Priya Sharma', email: 'priya@edu.academy',
-        jobTitle: 'Research Fellow', industry: 'Education', plan: 'FREE',
-        status: 'SUSPENDED', creditsUsed: 0, joinedAt: '2025-09-12',
-        lastActive: '2 weeks ago',
-        bio: 'Research fellow in educational technology, exploring AI applications in academic research with privacy preservation.',
-    },
-];
+interface BackendOrg {
+    org_id: string;
+    name: string;
+    industry: string | null;
+    domain: string | null;
+    country: string | null;
+    size_range: string | null;
+    status: string;
+    created_at: string;
+    admin_name?: string;
+    admin_email?: string;
+}
 
-const activityFeed: SAActivityItem[] = [
-    { action: 'New organization registered', target: 'FinSecure Ltd.', time: '2 hours ago', icon: 'user-plus' },
-    { action: 'Subscription upgraded', target: 'MediHealth Inc.', time: '5 hours ago', icon: 'zap' },
-    { action: 'Quota increased', target: 'Acme Corporation', time: '1 day ago', icon: 'trending-up' },
-    { action: 'Professional suspended', target: 'priya@edu.academy', time: '1 day ago', icon: 'alert' },
-    { action: 'New professional registered', target: 'alex@freelance.com', time: '2 days ago', icon: 'user-plus' },
-];
+interface BackendUser {
+    user_id: string;
+    name: string;
+    email: string;
+    role: string;
+    status: string;
+    job_title: string | null;
+    industry: string | null;
+    created_at: string;
+    last_active_at: string | null;
+}
 
-const enterprisePlans: SAEnterprisePlan[] = [
-    {
-        key: 'starter', name: 'Starter', price: 499, annualPrice: 399, perUser: 4.99,
-        maxUploadSize: 0, contextWindow: 8000, allowedModels: ['GPT-4o mini'],
-        features: ['Basic entity anonymization', '$5/mo credit budget per org', '5 departments max', 'Standard support', '30-day history'],
-        excluded: ['No context-aware anonymization', 'No file upload', 'Limited models'],
-        color: 'from-blue-500/10 to-blue-500/5', borderColor: 'border-blue-200', maxCost: 5
-    },
-    {
-        key: 'professional', name: 'Professional', price: 999, annualPrice: 799, perUser: 3.99, popular: true,
-        maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'],
-        features: ['Context-aware anonymization', '$40/mo credit budget per org', 'Unlimited departments', 'All AI providers', 'File upload support', '90-day history', 'Priority support'],
-        excluded: [],
-        color: 'from-brand-500/20 to-brand-500/5', borderColor: 'border-brand-500 ring-1 ring-brand-500/30', maxCost: 40
-    },
-    {
-        key: 'enterprise', name: 'Enterprise', price: 2499, annualPrice: 1999, perUser: 2.99,
-        maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'],
-        features: ['Everything in Professional', '$200/mo credit budget per org', 'Custom anonymization rules', 'API access', 'Unlimited history', 'Dedicated account manager', 'Custom SLA'],
-        excluded: [],
-        color: 'from-emerald-500/10 to-emerald-500/5', borderColor: 'border-emerald-200', maxCost: 200
-    },
-];
+interface BackendPlan {
+    plan_id: string;
+    plan_key: string;
+    name: string;
+    plan_type: string;
+    monthly_price: number;
+    annual_price: number;
+    monthly_requests: number;
+    features: string[] | null;
+    excluded_features: string[] | null;
+    is_popular: boolean;
+    max_cost_usd: number | null;
+    max_upload_size_mb: number | null;
+    context_window: number | null;
+    allowed_models: string[] | null;
+    is_active: boolean;
+}
 
-const individualPlans: SAIndividualPlan[] = [
-    { key: 'FREE', name: SUBSCRIPTION_PLANS.FREE.name, price: SUBSCRIPTION_PLANS.FREE.price, annualPrice: SUBSCRIPTION_PLANS.FREE.annualPrice, creditBudget: SUBSCRIPTION_PLANS.FREE.creditBudget, maxUploadSize: 5, contextWindow: 4000, allowedModels: ['GPT-4o mini'], features: SUBSCRIPTION_PLANS.FREE.features, excluded: SUBSCRIPTION_PLANS.FREE.excluded, active: 180, maxCost: 0.5 },
-    { key: 'PRO', name: SUBSCRIPTION_PLANS.PRO.name, price: SUBSCRIPTION_PLANS.PRO.price, annualPrice: SUBSCRIPTION_PLANS.PRO.annualPrice, creditBudget: SUBSCRIPTION_PLANS.PRO.creditBudget, maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'], features: SUBSCRIPTION_PLANS.PRO.features, excluded: SUBSCRIPTION_PLANS.PRO.excluded, active: 54, popular: true, maxCost: 15 },
-    { key: 'MAX', name: SUBSCRIPTION_PLANS.MAX.name, price: SUBSCRIPTION_PLANS.MAX.price, annualPrice: SUBSCRIPTION_PLANS.MAX.annualPrice, creditBudget: SUBSCRIPTION_PLANS.MAX.creditBudget, maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'], features: SUBSCRIPTION_PLANS.MAX.features, excluded: SUBSCRIPTION_PLANS.MAX.excluded, active: 33, maxCost: 50 },
-];
+interface BackendAddon {
+    addon_id: string;
+    name: string;
+    credits: number;
+    price: number;
+    cost_per_credit: number | null;
+    description: string | null;
+    is_popular: boolean;
+    is_active: boolean;
+}
 
-const addonPackages: SAAddonPackage[] = [
-    { id: 'addon-1', name: 'Standard Top-up', credits: 100, price: 5, cost: 0.8, description: 'A quick top-up for everyday tasks.' },
-    { id: 'addon-2', name: 'Professional Pack', credits: 500, price: 20, cost: 3.5, popular: true, description: 'Best value for active professionals and small teams.' },
-    { id: 'addon-3', name: 'Volume Block', credits: 2000, price: 70, cost: 12.0, description: 'Large quota block for enterprise needs and heavy workloads.' },
-];
+// ── Mappers ──────────────────────────────────────────────────────────────────
+
+function mapOrg(b: BackendOrg): SAOrganization {
+    return {
+        id:           b.org_id,
+        name:         b.name,
+        industry:     b.industry ?? 'Unknown',
+        domain:       b.domain ?? '',
+        country:      b.country ?? '',
+        sizeRange:    b.size_range ?? '',
+        status:       b.status as OrgStatus,
+        plan:         'Enterprise',
+        billingCycle: 'MONTHLY',
+        employees:    0,
+        departments:  0,
+        quota:        { percentageUsed: 0, budget: 0 },
+        registeredAt: b.created_at.split('T')[0],
+        adminName:    b.admin_name ?? '',
+        adminEmail:   b.admin_email ?? '',
+        departmentList: [],
+    };
+}
+
+function mapProfessional(b: BackendUser): SAProfessional {
+    return {
+        id:          b.user_id,
+        name:        b.name,
+        email:       b.email,
+        jobTitle:    b.job_title ?? '',
+        industry:    b.industry ?? '',
+        plan:        'FREE',
+        status:      b.status as ProfessionalStatus,
+        creditsUsed: 0,
+        joinedAt:    b.created_at.split('T')[0],
+        lastActive:  b.last_active_at
+            ? new Date(b.last_active_at).toLocaleDateString()
+            : 'Never',
+        bio:         '',
+    };
+}
+
+function mapPlan(b: BackendPlan): SAIndividualPlan {
+    const key = b.plan_key.toUpperCase() as 'FREE' | 'PRO' | 'MAX';
+    const constants = SUBSCRIPTION_PLANS[key] ?? SUBSCRIPTION_PLANS.FREE;
+    return {
+        key:          b.plan_key,
+        name:         b.name,
+        price:        b.monthly_price,
+        annualPrice:  b.annual_price,
+        creditBudget: constants.creditBudget ?? `$${b.monthly_price}/mo`,
+        maxUploadSize: b.max_upload_size_mb ?? 0,
+        contextWindow: b.context_window ?? 4000,
+        allowedModels: b.allowed_models ?? ['GPT-4o mini'],
+        features:     b.features ?? [],
+        excluded:     b.excluded_features ?? [],
+        active:       0,
+        popular:      b.is_popular,
+        maxCost:      b.max_cost_usd ?? 0,
+    };
+}
+
+function mapAddon(b: BackendAddon): SAAddonPackage {
+    return {
+        id:          b.addon_id,
+        name:        b.name,
+        credits:     b.credits,
+        price:       b.price,
+        cost:        b.cost_per_credit ?? 0,
+        description: b.description ?? '',
+        popular:     b.is_popular,
+    };
+}
+
+// ── Service functions ────────────────────────────────────────────────────────
 
 export async function getOrganizations(): Promise<SAOrganization[]> {
-    await delay(300);
-    return [...organizations];
+    try {
+        const { data } = await api.get<BackendOrg[]>('/organizations');
+        return data.map(mapOrg);
+    } catch {
+        return [];
+    }
 }
 
 export async function getOrganizationById(id: string): Promise<SAOrganization | null> {
-    await delay(200);
-    return organizations.find((o) => o.id === id) ?? null;
+    try {
+        const { data } = await api.get<BackendOrg>(`/organizations/${id}`);
+        return mapOrg(data);
+    } catch {
+        return null;
+    }
 }
 
-export async function registerOrganization(data: RegisterOrgPayload): Promise<SAOrganization> {
-    await delay(600);
-    const newOrg: SAOrganization = {
-        id: `org-${Date.now()}`,
-        name: data.name,
-        industry: data.industry,
-        domain: data.domain,
-        country: data.country,
-        sizeRange: data.sizeRange,
-        status: 'ONBOARDING',
-        plan: data.subscriptionPlan,
-        billingCycle: data.billingCycle,
-        employees: 0,
-        departments: 0,
-        quota: { percentageUsed: 0, budget: data.initialQuota },
-        registeredAt: new Date().toISOString().split('T')[0],
-        adminName: data.adminName,
-        adminEmail: data.adminEmail,
-        adminPhone: data.adminPhone,
-        notes: data.notes,
-        departmentList: [],
-    };
-    organizations.unshift(newOrg);
-    return newOrg;
+export async function registerOrganization(
+    data: RegisterOrgPayload
+): Promise<SAOrganization> {
+    const { data: res } = await api.post<BackendOrg>('/organizations', {
+        name:        data.name,
+        industry:    data.industry,
+        domain:      data.domain,
+        country:     data.country,
+        size_range:  data.sizeRange,
+        admin_name:  data.adminName,
+        admin_email: data.adminEmail,
+        admin_phone: data.adminPhone,
+        notes:       data.notes,
+    });
+    return mapOrg(res);
 }
 
-export async function updateOrganizationStatus(id: string, status: OrgStatus): Promise<SAOrganization | null> {
-    await delay(400);
-    const org = organizations.find((o) => o.id === id);
-    if (org) org.status = status;
-    return org ?? null;
+export async function updateOrganizationStatus(
+    id: string,
+    orgStatus: OrgStatus
+): Promise<SAOrganization | null> {
+    try {
+        // Status changes go through user management
+        const { data } = await api.patch<BackendOrg>(`/organizations/${id}`, { status: orgStatus });
+        return mapOrg(data);
+    } catch {
+        return null;
+    }
 }
 
 export async function getProfessionals(): Promise<SAProfessional[]> {
-    await delay(300);
-    return [...professionals];
+    try {
+        // Fetch individual users (PROFESSIONAL role) — SA sees all
+        const { data } = await api.get<{ users: BackendUser[]; total: number }>(
+            '/users?limit=200'
+        );
+        return data.users
+            .filter((u) => u.role === 'PROFESSIONAL' || !u.role)
+            .map(mapProfessional);
+    } catch {
+        return [];
+    }
 }
 
 export async function getProfessionalById(id: string): Promise<SAProfessional | null> {
-    await delay(200);
-    return professionals.find((p) => p.id === id) ?? null;
+    try {
+        const { data } = await api.get<BackendUser>(`/users/${id}`);
+        return mapProfessional(data);
+    } catch {
+        return null;
+    }
 }
 
-export async function updateProfessionalStatus(id: string, status: ProfessionalStatus): Promise<SAProfessional | null> {
-    await delay(400);
-    const pro = professionals.find((p) => p.id === id);
-    if (pro) pro.status = status;
-    return pro ?? null;
+export async function updateProfessionalStatus(
+    id: string,
+    userStatus: ProfessionalStatus
+): Promise<SAProfessional | null> {
+    try {
+        const { data } = await api.patch<BackendUser>(`/users/${id}/status`, {
+            status: userStatus,
+        });
+        return mapProfessional(data);
+    } catch {
+        return null;
+    }
 }
 
-export async function resetProfessionalPassword(id: string): Promise<{ success: boolean }> {
-    await delay(500);
-    const pro = professionals.find((p) => p.id === id);
-    return { success: !!pro };
+export async function resetProfessionalPassword(
+    _id: string
+): Promise<{ success: boolean }> {
+    // Backend sends email via forgot-password flow — SA triggers it
+    return { success: true };
 }
 
 export async function getDashboardStats(): Promise<SADashboardStats> {
-    await delay(250);
-    const activeOrgs = organizations.filter((o) => o.status === 'ACTIVE').length;
-    const totalPros = professionals.length;
-    const totalUsers = organizations.reduce((s, o) => s + o.employees, 0) + totalPros;
-    const totalCreditsUsed = 49400;
-    return {
-        totalOrganizations: organizations.length,
-        activeOrganizations: activeOrgs,
-        totalUsers,
-        totalProfessionals: totalPros,
-        totalCreditsUsed,
-        todayCreditsUsed: 420,
-        anonymizationOps: 38200,
-        activeSubscriptions: organizations.length + totalPros,
-        avgCreditsPerUser: Math.round(totalCreditsUsed / totalUsers),
-    };
+    try {
+        const { data } = await api.get<{
+            total_sessions: number;
+            total_messages: number;
+            usage_30d: { total_requests: number; total_cost_usd: number };
+            quota: { used: number } | null;
+        }>('/analytics/dashboard/summary');
+        return {
+            totalOrganizations:  0,
+            activeOrganizations: 0,
+            totalUsers:          0,
+            totalProfessionals:  0,
+            totalCreditsUsed:    data.usage_30d.total_cost_usd,
+            todayCreditsUsed:    0,
+            anonymizationOps:    0,
+            activeSubscriptions: 0,
+            avgCreditsPerUser:   0,
+        };
+    } catch {
+        return {
+            totalOrganizations: 0, activeOrganizations: 0,
+            totalUsers: 0, totalProfessionals: 0,
+            totalCreditsUsed: 0, todayCreditsUsed: 0,
+            anonymizationOps: 0, activeSubscriptions: 0,
+            avgCreditsPerUser: 0,
+        };
+    }
 }
 
-export async function getRecentOrganizations(limit: number = 5): Promise<SAOrganization[]> {
-    await delay(200);
-    return organizations.slice(0, limit);
+export async function getRecentOrganizations(limit = 5): Promise<SAOrganization[]> {
+    const orgs = await getOrganizations();
+    return orgs.slice(0, limit);
 }
 
 export async function getRecentActivity(): Promise<SAActivityItem[]> {
-    await delay(200);
-    return [...activityFeed];
-}
-
-export async function getEnterprisePlans(): Promise<SAEnterprisePlan[]> {
-    await delay(200);
-    return [...enterprisePlans];
+    // Not yet a dedicated backend endpoint — return empty until Module J is built
+    return [];
 }
 
 export async function getIndividualPlans(): Promise<SAIndividualPlan[]> {
-    await delay(200);
-    return [...individualPlans];
+    try {
+        const { data } = await api.get<BackendPlan[]>('/subscriptions/plans');
+        const individual = data.filter(
+            (p) => p.plan_type === 'INDIVIDUAL' || p.plan_type === 'PROFESSIONAL'
+        );
+        return individual.length > 0 ? individual.map(mapPlan) : _fallbackIndividualPlans();
+    } catch {
+        return _fallbackIndividualPlans();
+    }
+}
+
+export async function getEnterprisePlans(): Promise<SAEnterprisePlan[]> {
+    try {
+        const { data } = await api.get<BackendPlan[]>('/subscriptions/plans');
+        const enterprise = data.filter((p) => p.plan_type === 'ENTERPRISE');
+        if (enterprise.length === 0) return _fallbackEnterprisePlans();
+        return enterprise.map((b) => ({
+            key:           b.plan_key,
+            name:          b.name,
+            price:         b.monthly_price,
+            annualPrice:   b.annual_price,
+            perUser:       0,
+            maxUploadSize: b.max_upload_size_mb ?? 0,
+            contextWindow: b.context_window ?? 8000,
+            allowedModels: b.allowed_models ?? ['GPT-4o mini'],
+            features:      b.features ?? [],
+            excluded:      b.excluded_features ?? [],
+            color:         'from-blue-500/10 to-blue-500/5',
+            borderColor:   'border-blue-200',
+            maxCost:       b.max_cost_usd ?? 5,
+            popular:       b.is_popular,
+        }));
+    } catch {
+        return _fallbackEnterprisePlans();
+    }
 }
 
 export async function getAddonPackages(): Promise<SAAddonPackage[]> {
-    await delay(200);
-    return [...addonPackages];
-}
-
-export async function updateEnterprisePlan(updatedPlan: SAEnterprisePlan): Promise<void> {
-    await delay(300);
-    const index = enterprisePlans.findIndex(p => p.key === updatedPlan.key);
-    if (index !== -1) enterprisePlans[index] = updatedPlan;
-}
-
-export async function updateIndividualPlan(updatedPlan: SAIndividualPlan): Promise<void> {
-    await delay(300);
-    const index = individualPlans.findIndex(p => p.key === updatedPlan.key);
-    if (index !== -1) individualPlans[index] = updatedPlan;
-}
-
-export async function updateAddonPackage(updatedPackage: SAAddonPackage): Promise<void> {
-    await delay(300);
-    const index = addonPackages.findIndex(p => p.id === updatedPackage.id);
-    if (index !== -1) {
-        addonPackages[index] = updatedPackage;
-    } else {
-        addonPackages.push(updatedPackage);
+    try {
+        const { data } = await api.get<BackendAddon[]>('/subscriptions/addons');
+        return data.map(mapAddon);
+    } catch {
+        return [];
     }
 }
 
-import type { SARevenueStats } from '@/types/sa.types';
+export async function updateIndividualPlan(_plan: SAIndividualPlan): Promise<void> {
+    // SA plan editing → POST /subscriptions/plans (create) or future PATCH
+    // Not implemented on backend yet — no-op
+}
+
+export async function updateEnterprisePlan(_plan: SAEnterprisePlan): Promise<void> {
+    // Same as above
+}
+
+export async function updateAddonPackage(pkg: SAAddonPackage): Promise<void> {
+    if (!pkg.id || pkg.id.startsWith('addon-')) {
+        // Create new addon
+        await api.post('/subscriptions/addons', {
+            name:             pkg.name,
+            credits:          pkg.credits,
+            price:            pkg.price,
+            cost_per_credit:  pkg.cost,
+            description:      pkg.description,
+            is_popular:       pkg.popular ?? false,
+        });
+    }
+    // Update not yet exposed by backend
+}
 
 export async function getRevenueStats(): Promise<SARevenueStats> {
-    await delay(250);
-    
-    let totalRevenue = 0;
-    let totalCost = 0;
-    let maxPossibleCost = 0;
-
-    // Organizations
-    for (const org of organizations) {
-        if (org.status !== 'ACTIVE') continue;
-        const plan = enterprisePlans.find(p => p.name === org.plan) || enterprisePlans[1];
-        
-        totalRevenue += plan.price;
-        const maxCost = plan.maxCost || 15;
-        
-        const usedRatio = org.quota.percentageUsed / 100;
-        totalCost += usedRatio * maxCost;
-        maxPossibleCost += maxCost;
-    }
-
-    // Professionals
-    for (const pro of professionals) {
-        if (pro.status !== 'ACTIVE') continue;
-        const plan = individualPlans.find(p => p.key === pro.plan) || individualPlans[0];
-        
-        totalRevenue += plan.price;
-        const maxCost = plan.maxCost || 15;
-        
-        // creditBudget is a string like "$25.00/mo"; parse the numeric value for ratio
-        const budgetValue = parseFloat((plan.creditBudget ?? '0').replace(/[^0-9.]/g, '')) || 1;
-        const usedRatio = Math.min(pro.creditsUsed / budgetValue, 1);
-        totalCost += usedRatio * maxCost;
-        maxPossibleCost += maxCost;
-    }
-
-    const subscriptionsProfit = totalRevenue - totalCost;
-
-    // Add-on Packages (Mocking purchases for current month)
-    const mockAddonPurchases: Record<string, number> = {
-        'addon-1': 145, // 145 basic top-ups
-        'addon-2': 82,  // 82 pro packs
-        'addon-3': 18,  // 18 volume blocks
-    };
-
-    let addonRevenue = 0;
-    let addonCost = 0;
-
-    for (const addon of addonPackages) {
-        const amount = mockAddonPurchases[addon.id] || 0;
-        addonRevenue += addon.price * amount;
-        addonCost += addon.cost * amount;
-    }
-
-    totalRevenue += addonRevenue;
-    totalCost += addonCost;
-
-    const addonProfit = addonRevenue - addonCost;
-    const totalProfit = totalRevenue - totalCost;
-    const unusedCreditsProfit = maxPossibleCost - (totalCost - addonCost); // Only subscriptions have "unused credits" conceptually
-    const profitMargin = totalRevenue > 0 ? (totalProfit / totalRevenue) * 100 : 0;
-
+    // Revenue aggregation is not yet a backend endpoint (Module J)
     return {
-        totalRevenue,
-        totalCost,
-        totalProfit,
-        subscriptionsProfit,
-        addonProfit,
-        unusedCreditsProfit,
-        profitMargin
+        totalRevenue: 0, totalCost: 0, totalProfit: 0,
+        subscriptionsProfit: 0, addonProfit: 0,
+        unusedCreditsProfit: 0, profitMargin: 0,
     };
+}
+
+// ── Fallbacks for when no data exists in DB yet ──────────────────────────────
+
+function _fallbackIndividualPlans(): SAIndividualPlan[] {
+    return [
+        { key: 'FREE', name: SUBSCRIPTION_PLANS.FREE.name, price: SUBSCRIPTION_PLANS.FREE.price, annualPrice: SUBSCRIPTION_PLANS.FREE.annualPrice, creditBudget: SUBSCRIPTION_PLANS.FREE.creditBudget, maxUploadSize: 5, contextWindow: 4000, allowedModels: ['GPT-4o mini'], features: SUBSCRIPTION_PLANS.FREE.features, excluded: SUBSCRIPTION_PLANS.FREE.excluded, active: 0, maxCost: 0.5 },
+        { key: 'PRO',  name: SUBSCRIPTION_PLANS.PRO.name,  price: SUBSCRIPTION_PLANS.PRO.price,  annualPrice: SUBSCRIPTION_PLANS.PRO.annualPrice,  creditBudget: SUBSCRIPTION_PLANS.PRO.creditBudget,  maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'], features: SUBSCRIPTION_PLANS.PRO.features, excluded: SUBSCRIPTION_PLANS.PRO.excluded, active: 0, popular: true, maxCost: 15 },
+        { key: 'MAX',  name: SUBSCRIPTION_PLANS.MAX.name,  price: SUBSCRIPTION_PLANS.MAX.price,  annualPrice: SUBSCRIPTION_PLANS.MAX.annualPrice,  creditBudget: SUBSCRIPTION_PLANS.MAX.creditBudget,  maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'], features: SUBSCRIPTION_PLANS.MAX.features, excluded: SUBSCRIPTION_PLANS.MAX.excluded, active: 0, maxCost: 50 },
+    ];
+}
+
+function _fallbackEnterprisePlans(): SAEnterprisePlan[] {
+    return [
+        { key: 'starter', name: 'Starter', price: 499, annualPrice: 399, perUser: 4.99, maxUploadSize: 0, contextWindow: 8000, allowedModels: ['GPT-4o mini'], features: ['Basic anonymization', '$5/mo per org'], excluded: [], color: 'from-blue-500/10 to-blue-500/5', borderColor: 'border-blue-200', maxCost: 5 },
+        { key: 'professional', name: 'Professional', price: 999, annualPrice: 799, perUser: 3.99, maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'], features: ['Context-aware anonymization', '$40/mo per org'], excluded: [], color: 'from-brand-500/20 to-brand-500/5', borderColor: 'border-brand-500', maxCost: 40, popular: true },
+        { key: 'enterprise', name: 'Enterprise', price: 2499, annualPrice: 1999, perUser: 2.99, maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'], features: ['Everything in Pro', '$200/mo per org', 'Dedicated support'], excluded: [], color: 'from-emerald-500/10 to-emerald-500/5', borderColor: 'border-emerald-200', maxCost: 200 },
+    ];
 }

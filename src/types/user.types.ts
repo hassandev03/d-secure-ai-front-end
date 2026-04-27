@@ -20,6 +20,7 @@ export interface User {
     industry?: string;
     country?: string;
     phone?: string;
+    emailVerifiedAt?: string;
     createdAt: string;
     lastActiveAt?: string;
 }

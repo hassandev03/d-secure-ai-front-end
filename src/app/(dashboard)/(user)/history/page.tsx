@@ -11,7 +11,8 @@ import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { subDays, format } from "date-fns";
 
-import { getChatSessions, type ChatSessionSummary } from "@/services/chat.service";
+import { getChatSessions, deleteChatSession, type ChatSessionSummary } from "@/services/chat.service";
+
 
 const providerColor: Record<string, string> = {
     OpenAI: "bg-emerald-50 text-emerald-700",
@@ -34,11 +35,20 @@ export default function HistoryPage() {
         getChatSessions().then(setSessions);
     }, []);
 
-    const handleDelete = (id: string, e: React.MouseEvent) => {
+    const handleDelete = async (id: string, e: React.MouseEvent) => {
         e.preventDefault();
+        // Optimistically remove from UI
         setSessions(prev => prev.filter(s => s.id !== id));
-        toast.success("Chat session deleted");
+        try {
+            await deleteChatSession(id);
+            toast.success("Chat session deleted");
+        } catch {
+            // Re-fetch to restore state if the delete failed
+            getChatSessions().then(setSessions);
+            toast.error("Failed to delete session");
+        }
     };
+
 
     const filtered = sessions.filter((s) => {
         const matchSearch = s.title.toLowerCase().includes(search.toLowerCase());

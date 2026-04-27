@@ -28,6 +28,10 @@ export default function UserLoginPage() {
         setIsLoading(true);
         try {
             const result = await login({ email, password, rememberMe });
+            // Persist refresh token for future re-auth
+            if (result.refreshToken && typeof window !== 'undefined') {
+                localStorage.setItem('refresh_token', result.refreshToken);
+            }
             if (result.requires2FA) {
                 setPendingUser(result.user, result.token);
                 router.push("/auth/user/verify-2fa");

@@ -12,18 +12,26 @@ import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
 import { getDeptPendingQuotaCount } from "@/services/da.service";
+import { useAuthStore } from "@/store/auth.store";
+import { getCurrentUser } from "@/services/auth.service";
 
 export default function DeptAdminLayout({
     children,
 }: {
     children: React.ReactNode;
 }) {
+    const { token, setUser, isAuthenticated } = useAuthStore();
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
 
     useEffect(() => {
         getDeptPendingQuotaCount().then(setPendingCount).catch(() => {});
+        if (!isAuthenticated) {
+            getCurrentUser().then((u) => { if (u && token) setUser(u, token); });
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);
+
 
     const deptAdminNav: NavGroup[] = useMemo(() => [
         {

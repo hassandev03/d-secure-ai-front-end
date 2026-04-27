@@ -1,19 +1,22 @@
-import { delay } from './api';
+/**
+ * dashboard.service.ts — User dashboard: real backend integration
+ *
+ * Backend routes:
+ *   GET /api/v1/analytics/usage/me?days=30    → daily usage + summary
+ *   GET /api/v1/analytics/quota/me            → quota / plan status
+ *   GET /api/v1/chat/sessions                 → session count
+ */
+import api from './api';
 import type { UserStats } from '@/types/analytics.types';
-import { MOCK_SESSIONS, MOCK_MESSAGES, ChatMessage } from './chat.service';
 
 /* ══════════════════════════════════════════════════════
    Dashboard-specific types (mirror backend response)
    ══════════════════════════════════════════════════════ */
 
 export interface DashboardStats extends UserStats {
-    /** Computed: entitiesAnonymized / totalRequestsThisMonth */
     avgEntitiesPerRequest: number;
-    /** Percentage of monthly credit budget used (0–100) */
     percentageUsed: number;
-    /** Plan name (e.g. "Pro") */
     planName: string;
-    /** ISO date of next renewal */
     periodEndsAt: string;
 }
 
@@ -21,7 +24,6 @@ export interface DailyActivityPoint {
     date: string;
     requests: number;
     entitiesAnonymized: number;
-    /** Cumulative daily quota usage as percentage of plan total */
     quotaUtilizedPct: number;
 }
 
@@ -36,149 +38,138 @@ export interface EntityTypePoint {
     count: number;
 }
 
-/* ══════════════════════════════════════════════════════
-   Mock data — realistic & internally consistent
-   ══════════════════════════════════════════════════════ */
+// ─── Backend response shapes ──────────────────────────────────────────────────
 
-// Mock quota data — in production this comes from GET /api/v1/analytics/quota/me
-const MOCK_QUOTA = {
-    plan_name: 'Pro',
-    credits_allocated: 25.00,
-    credits_used: 8.32,
-    addon_credits: 5.00,
-    effective_budget: 30.00,
-    percentage_used: 27.7,
-    period_ends_at: '2026-05-01T00:00:00Z',
-};
-
-/** GET /api/v1/dashboard/stats */
-export async function getUserDashboardStats(): Promise<DashboardStats> {
-    await delay(300);
-
-    // Aggregate stats from mock conversations
-    let totalRequests = 0;
-    let entitiesAnonymized = 0;
-
-    const allMessages = Object.values(MOCK_MESSAGES) as ChatMessage[][];
-    allMessages.forEach(messages => {
-        messages.forEach(msg => {
-            if (msg.role === 'user') {
-                totalRequests++;
-                if (msg.entities) {
-                    entitiesAnonymized += msg.entities.length;
-                }
-            }
-        });
-    });
-
-    return {
-        totalRequestsThisMonth: totalRequests,
-        totalSessions: MOCK_SESSIONS.length,
-        entitiesAnonymized,
-        quotaRemaining: 0,  // Not relevant in credit system — use percentageUsed
-        quotaTotal: 0,      // Not relevant in credit system — use percentageUsed
-        avgEntitiesPerRequest: totalRequests > 0 ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10 : 0,
-        percentageUsed: MOCK_QUOTA.percentage_used,
-        planName: MOCK_QUOTA.plan_name,
-        periodEndsAt: MOCK_QUOTA.period_ends_at,
+interface BUsageMe {
+    summary: {
+        total_requests: number;
+        total_anonymizations: number;
+        total_entities_detected: number;
+        total_cost_usd: number;
+        anonymization_rate: number;
+        top_models: { model: string; count: number }[];
+        top_entity_types: { type: string; count: number }[];
     };
+    daily: {
+        stat_date: string;
+        request_count: number;
+        anonymization_count: number;
+        entities_detected: number;
+        llm_cost_usd: number;
+        model_breakdown: Record<string, number> | null;
+    }[];
 }
 
-/** GET /api/v1/dashboard/activity?days=7 */
-export async function getDailyActivity(days: number = 7): Promise<DailyActivityPoint[]> {
-    await delay(250);
+interface BQuota {
+    plan_name: string;
+    monthly_requests: number;
+    requests_used: number;
+    requests_remaining: number;
+    period_ends_at: string;
+    requests_remaining_pct?: number;
+}
 
-    // For the activity chart, we show cumulative percentage growth across the period.
-    // In production: backend returns per-day credits_used which we map to % of effective_budget.
-    const totalPctForPeriod = MOCK_QUOTA.percentage_used;
-    let cumulative = 0;
+// ─── Colour palette for model breakdown ──────────────────────────────────────
 
-    const activityMap = new Map<string, { requests: number; entities: number }>();
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
+const MODEL_COLORS: Record<string, string> = {
+    'gpt-4o':             '#F59E0B',
+    'gpt-4o-mini':        '#10B981',
+    'claude-3-5-sonnet':  '#3B82F6',
+    'claude-3-haiku':     '#8B5CF6',
+    'gemini-1-5-pro':     '#06B6D4',
+    'gemini-1-5-flash':   '#F97316',
+};
+const FALLBACK_COLORS = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
 
-    for (let i = days - 1; i >= 0; i--) {
-        const d = new Date(today);
-        d.setDate(d.getDate() - i);
-        activityMap.set(d.toISOString().split('T')[0], { requests: 0, entities: 0 });
-    }
+// ─── Service functions ────────────────────────────────────────────────────────
 
-    // Populate data from messages
-    const allMessages = Object.values(MOCK_MESSAGES) as ChatMessage[][];
-    allMessages.forEach(messages => {
-        messages.forEach(msg => {
-            if (msg.role === 'user') {
-                const dateKey = new Date(msg.createdAt).toISOString().split('T')[0];
-                if (activityMap.has(dateKey)) {
-                    const stats = activityMap.get(dateKey)!;
-                    stats.requests++;
-                    if (msg.entities) {
-                        stats.entities += msg.entities.length;
-                    }
-                }
-            }
-        });
-    });
+/** GET /api/v1/analytics/usage/me?days=30 + /analytics/quota/me */
+export async function getUserDashboardStats(): Promise<DashboardStats> {
+    try {
+        const [usageRes, quotaRes] = await Promise.allSettled([
+            api.get<BUsageMe>('/analytics/usage/me?days=30'),
+            api.get<BQuota>('/analytics/quota/me'),
+        ]);
 
-    const totalRequests = Array.from(activityMap.values()).reduce((s, v) => s + v.requests, 0);
-    const pctPerRequest = totalRequests > 0 ? totalPctForPeriod / totalRequests : 0;
+        const usage   = usageRes.status   === 'fulfilled' ? usageRes.value.data   : null;
+        const quota   = quotaRes.status   === 'fulfilled' ? quotaRes.value.data   : null;
 
-    return Array.from(activityMap.entries()).map(([dateStr, stats]) => {
-        cumulative += stats.requests * pctPerRequest;
-        const d = new Date(dateStr);
-        const formattedDate = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const totalRequests       = usage?.summary.total_requests       ?? 0;
+        const entitiesAnonymized  = usage?.summary.total_entities_detected ?? 0;
+        const requestsUsed        = quota?.requests_used   ?? 0;
+        const monthlyLimit        = quota?.monthly_requests ?? 0;
+        const percentageUsed      = monthlyLimit > 0
+            ? Math.round((requestsUsed / monthlyLimit) * 100)
+            : 0;
 
         return {
-            date: formattedDate,
-            requests: stats.requests,
-            entitiesAnonymized: stats.entities,
-            quotaUtilizedPct: Math.round(Math.min(cumulative, 100)),
+            totalRequestsThisMonth: totalRequests,
+            totalSessions:          0,      // derived separately if needed
+            entitiesAnonymized,
+            quotaRemaining:         quota?.requests_remaining ?? 0,
+            quotaTotal:             monthlyLimit,
+            avgEntitiesPerRequest:  totalRequests > 0
+                ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10
+                : 0,
+            percentageUsed,
+            planName:    quota?.plan_name    ?? 'Free',
+            periodEndsAt: quota?.period_ends_at ?? '',
         };
-    });
+    } catch {
+        return {
+            totalRequestsThisMonth: 0, totalSessions: 0, entitiesAnonymized: 0,
+            quotaRemaining: 0, quotaTotal: 0, avgEntitiesPerRequest: 0,
+            percentageUsed: 0, planName: 'Free', periodEndsAt: '',
+        };
+    }
 }
 
-/** GET /api/v1/dashboard/models */
-export async function getModelUsageBreakdown(): Promise<ModelUsagePoint[]> {
-    await delay(200);
+/** GET /api/v1/analytics/usage/me?days=N */
+export async function getDailyActivity(days = 7): Promise<DailyActivityPoint[]> {
+    try {
+        const { data } = await api.get<BUsageMe>(`/analytics/usage/me?days=${days}`);
+        const quota    = await api.get<BQuota>('/analytics/quota/me').catch(() => null);
+        const limit    = quota?.data.monthly_requests ?? 1;
 
-    const modelCounts = new Map<string, number>();
-    MOCK_SESSIONS.forEach(session => {
-        const messages = MOCK_MESSAGES[session.id] || [];
-        const requestCount = messages.filter((m: ChatMessage) => m.role === 'user').length;
-        const count = modelCounts.get(session.modelName) || 0;
-        modelCounts.set(session.modelName, count + requestCount);
-    });
-
-    const colors = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6'];
-    return Array.from(modelCounts.entries())
-        .filter(([_, value]) => value > 0)
-        .map(([name, value], i) => ({
-            name,
-            value,
-            color: colors[i % colors.length]
-        }))
-        .sort((a, b) => b.value - a.value);
-}
-
-/** GET /api/v1/dashboard/entities */
-export async function getEntityTypeBreakdown(): Promise<EntityTypePoint[]> {
-    await delay(200);
-
-    const entityCounts = new Map<string, number>();
-
-    const allMessages = Object.values(MOCK_MESSAGES) as ChatMessage[][];
-    allMessages.forEach(messages => {
-        messages.forEach(msg => {
-            if (msg.role === 'user' && msg.entities) {
-                msg.entities.forEach(entity => {
-                    const count = entityCounts.get(entity.type) || 0;
-                    entityCounts.set(entity.type, count + 1);
-                });
-            }
+        let cumulative = 0;
+        return data.daily.map((row) => {
+            cumulative += row.request_count;
+            const d = new Date(row.stat_date);
+            return {
+                date:               d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                requests:           row.request_count,
+                entitiesAnonymized: row.entities_detected,
+                quotaUtilizedPct:   Math.round(Math.min((cumulative / limit) * 100, 100)),
+            };
         });
-    });
+    } catch {
+        return [];
+    }
+}
 
-    return Array.from(entityCounts.entries())
-        .map(([name, count]) => ({ name, count }))
-        .sort((a, b) => b.count - a.count);
+/** GET /api/v1/analytics/usage/me?days=30 → model breakdown */
+export async function getModelUsageBreakdown(): Promise<ModelUsagePoint[]> {
+    try {
+        const { data } = await api.get<BUsageMe>('/analytics/usage/me?days=30');
+        return data.summary.top_models.map((m, i) => ({
+            name:  m.model,
+            value: m.count,
+            color: MODEL_COLORS[m.model] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+        }));
+    } catch {
+        return [];
+    }
+}
+
+/** GET /api/v1/analytics/usage/me?days=30 → entity type breakdown */
+export async function getEntityTypeBreakdown(): Promise<EntityTypePoint[]> {
+    try {
+        const { data } = await api.get<BUsageMe>('/analytics/usage/me?days=30');
+        return data.summary.top_entity_types.map((e) => ({
+            name:  e.type,
+            count: e.count,
+        }));
+    } catch {
+        return [];
+    }
 }
