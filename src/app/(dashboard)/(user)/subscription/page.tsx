@@ -112,7 +112,13 @@ export default function SubscriptionPage() {
             setQuotaStats(stats);
             // Sync current plan from real subscription
             if (sub) {
-                const matchedPlan = plans.find((p) => p.planId === sub.plan_id);
+                let matchedPlan = plans.find((p) => p.planId && sub.plan_id && p.planId.toLowerCase() === sub.plan_id.toLowerCase());
+                
+                // Fallback: If planId is missing (e.g., fallback plans) or didn't match, use the planName from stats
+                if (!matchedPlan && stats?.planName) {
+                    matchedPlan = plans.find((p) => p.name.toLowerCase() === stats.planName.toLowerCase() || p.key.toLowerCase() === stats.planName.toLowerCase());
+                }
+
                 if (matchedPlan) {
                     setCurrentPlanKey(matchedPlan.key);
                 }
