@@ -185,61 +185,65 @@ export async function getEntityTypeBreakdown(): Promise<EntityTypePoint[]> {
 /** GET /api/v1/analytics/dashboard/summary → Unified endpoint */
 export async function getDashboardSummary(): Promise<DashboardSummaryResponse | null> {
     try {
-        const { data } = await api.get<{ usage_30d: unknown; quota: unknown; total_sessions: number }>('/analytics/dashboard/summary');
+        const [summaryRes, sessionsRes, dailyRes] = await Promise.allSettled([
+            api.get<{ usage_30d: BUsageMe['summary']; quota: any; total_sessions: number }>('/analytics/dashboard/summary'),
+            api.get<any[]>('/chat/sessions'),
+            api.get<BUsageMe>('/analytics/usage/me?days=7'),
+        ]);
         
-        const usage = data.usage_30d as BUsageMe['summary'] | undefined;
-        const quota = data.quota as Record<string, unknown> | undefined;
+        if (summaryRes.status !== 'fulfilled') return null;
+        const { usage_30d: rawUsage, quota, total_sessions } = summaryRes.value.data;
         
-        const totalRequests       = usage?.total_requests ?? 0;
-        const entitiesAnonymized  = usage?.total_entities_detected ?? 0;
+        const totalRequests       = rawUsage?.total_requests ?? 0;
+        const entitiesAnonymized  = rawUsage?.total_entities_detected ?? 0;
         
         const stats: DashboardStats = {
             totalRequestsThisMonth: totalRequests,
-            totalSessions:          data.total_sessions ?? 0,
-            entitiesAnonymized:     entitiesAnonymized,
+            totalSessions:          total_sessions ?? (sessionsRes.status === 'fulfilled' ? sessionsRes.value.data.length : 0),
+            entitiesAnonymized,
             quotaRemaining:         (quota?.remaining as number) ?? 0,
             quotaTotal:             (quota?.limit as number) ?? 0,
             avgEntitiesPerRequest:  totalRequests > 0
                 ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10
                 : 0,
-            percentageUsed:         (quota?.percentage as number) ?? 0,
-            planName:               (quota?.plan as string) ?? 'Free',
-            periodEndsAt:           (quota?.period_ends as string) ?? '',
+            percentageUsed:  (quota?.percentage as number) ?? 0,
+            planName:        (quota?.plan as string) ?? 'Free',
+            periodEndsAt:    (quota?.period_ends as string) ?? '',
         };
-        
-        const models = (usage?.top_models ?? []).map((m: { model: string; count: number }, i: number) => ({
+
+        const models = (rawUsage?.top_models ?? []).map((m, i) => ({
             name:  m.model,
             value: m.count,
             color: MODEL_COLORS[m.model] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length],
         }));
-        
-        const entities = (usage?.top_entity_types ?? []).map((e: { type: string; count: number }) => ({
+
+        const entities = (rawUsage?.top_entity_types ?? []).map((e) => ({
             name:  e.type,
             count: e.count,
         }));
-        
-        // We still need to get daily activity points properly mapped, and recent chat sessions.
-        // The backend /dashboard/summary doesn't return the full daily array and sessions list yet.
-        // Wait, the backend /dashboard/summary DOES return total_sessions, but not the recent sessions list!
-        // Let's do a fast Promise.all just for the remaining pieces that we must fetch.
-        
-        // Actually, the best way to speed this up is just returning the unified data we have,
-        // and fetching the rest concurrently.
-        
-        const [dailyRes, sessionsRes] = await Promise.allSettled([
-            getDailyActivity(7),
-            api.get('/chat/sessions')
-        ]);
-        
-        const dailyActivity = dailyRes.status === 'fulfilled' ? dailyRes.value : [];
-        const recentSessions = sessionsRes.status === 'fulfilled' ? 
-            (sessionsRes.value.data as Array<{
+
+        const limit = (quota?.limit as number) ?? 1;
+        let cumulative = 0;
+        const dailyActivity: DailyActivityPoint[] = dailyRes.status === 'fulfilled'
+            ? dailyRes.value.data.daily.map((row) => {
+                cumulative += row.request_count;
+                return {
+                    date:               new Date(row.stat_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                    requests:           row.request_count,
+                    entitiesAnonymized: row.entities_detected,
+                    quotaUtilizedPct:   Math.round(Math.min((cumulative / limit) * 100, 100)),
+                };
+            })
+            : [];
+
+        const recentSessions = sessionsRes.status === 'fulfilled'
+            ? (sessionsRes.value.data as Array<{
                 session_id: string; title: string | null; llm_model: string; message_count: number; last_message_at: string
-            }>).map(s => ({
-                id: s.session_id,
-                title: s.title || "New Chat",
-                modelName: s.llm_model,
-                messageCount: s.message_count,
+              }>).map((s) => ({
+                id:            s.session_id,
+                title:         s.title || 'New Chat',
+                modelName:     s.llm_model,
+                messageCount:  s.message_count,
                 lastMessageAt: new Date(s.last_message_at).toLocaleDateString(),
             })).slice(0, 5) : [];
             

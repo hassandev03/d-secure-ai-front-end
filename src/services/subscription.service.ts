@@ -53,6 +53,7 @@ interface BPlan {
 export interface BSub {
     subscription_id: string;
     plan_id: string;
+    plan_key: string | null;   // resolved from plan relationship (backend v2)
     status: string;
     current_period_start: string;
     current_period_end: string;
@@ -102,6 +103,10 @@ export async function getSubscriptionPlans(): Promise<SubscriptionPlanDisplay[]>
 export async function getCurrentSubscription(): Promise<BSub | null> {
     try {
         const { data } = await api.get<BSub | null>('/subscriptions/me');
+        // Normalise plan_key to lowercase for consistent frontend matching
+        if (data && data.plan_key) {
+            data.plan_key = data.plan_key.toLowerCase();
+        }
         return data;
     } catch {
         return null;

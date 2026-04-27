@@ -78,7 +78,8 @@ const PLAN_GRADIENT: Record<string, string> = {
 export default function SubscriptionPage() {
     const { user, updateUser } = useAuthStore();
     const [plansData,               setPlansData]               = useState<SubscriptionPlanDisplay[]>([]);
-    const [currentPlanKey,          setCurrentPlanKey]          = useState<string>((user?.subscriptionTier || "free").toLowerCase());
+    // Always start from 'free' — we'll sync with the real DB value once loaded
+    const [currentPlanKey,          setCurrentPlanKey]          = useState<string>('free');
     const [isPaymentModalOpen,      setIsPaymentModalOpen]      = useState(false);
     const [isAddCardModalOpen,      setIsAddCardModalOpen]      = useState(false);
     const [selectedPlanForUpgrade,  setSelectedPlanForUpgrade]  = useState<SubscriptionPlanDisplay | null>(null);
@@ -110,18 +111,40 @@ export default function SubscriptionPage() {
             setSavedCards(cards);
             setActiveSub(sub);
             setQuotaStats(stats);
-            // Sync current plan from real subscription
+
+            // ── Resolve the current plan key with a 3-step fallback ────────
             if (sub) {
-                let matchedPlan = plans.find((p) => p.planId && sub.plan_id && p.planId.toLowerCase() === sub.plan_id.toLowerCase());
-                
-                // Fallback: If planId is missing (e.g., fallback plans) or didn't match, use the planName from stats
+                // 1. Match by plan_key string (direct, most reliable)
+                let matchedPlan = sub.plan_key
+                    ? plans.find((p) => p.key === sub.plan_key)
+                    : null;
+                // 2. Match by plan UUID
+                if (!matchedPlan) {
+                    matchedPlan = plans.find(
+                        (p) => p.planId && sub.plan_id && p.planId.toLowerCase() === sub.plan_id.toLowerCase()
+                    ) ?? null;
+                }
+                // 3. Match by plan name from quota stats (case-insensitive)
                 if (!matchedPlan && stats?.planName) {
-                    matchedPlan = plans.find((p) => p.name.toLowerCase() === stats.planName.toLowerCase() || p.key.toLowerCase() === stats.planName.toLowerCase());
+                    const normalizedStatName = stats.planName.toLowerCase().replace(/\s*\(default\)/i, '').trim();
+                    matchedPlan = plans.find(
+                        (p) =>
+                            p.name.toLowerCase() === normalizedStatName ||
+                            p.key.toLowerCase() === normalizedStatName
+                    ) ?? null;
                 }
 
                 if (matchedPlan) {
                     setCurrentPlanKey(matchedPlan.key);
+                    updateUser({ subscriptionTier: matchedPlan.key.toUpperCase() as any });
+                } else {
+                    // Sub exists but plan not found in list — keep 'free' as safe default
+                    setCurrentPlanKey('free');
                 }
+            } else {
+                // No active subscription → Free plan
+                setCurrentPlanKey('free');
+                updateUser({ subscriptionTier: 'FREE' });
             }
             setIsLoadingPlans(false);
         });

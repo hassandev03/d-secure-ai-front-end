@@ -14,7 +14,6 @@ import Topbar from "@/components/layout/Topbar";
 import { useAuthStore } from "@/store/auth.store";
 import { getCurrentUser } from "@/services/auth.service";
 import { getCurrentSubscription, getSubscriptionPlans } from "@/services/subscription.service";
-import { getUserDashboardStats } from "@/services/dashboard.service";
 import { cn } from "@/lib/utils";
 
 export default function UserLayout({
@@ -22,69 +21,77 @@ export default function UserLayout({
 }: {
     children: React.ReactNode;
 }) {
-    const { user, token, setUser, updateUser, isAuthenticated } = useAuthStore();
+    const { user, setUser, updateUser, isAuthenticated } = useAuthStore();
     const [mounted, setMounted] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+    // Track whether we've finished the async subscription sync so the
+    // sidebar doesn't flicker or permanently hide the Context tab.
+    const [subscriptionReady, setSubscriptionReady] = useState(false);
+
+    /**
+     * Fetch subscription and resolve the user's plan key.
+     * Returns the resolved plan key (lowercase) or null.
+     */
+    const syncSubscription = async (role: string | undefined) => {
+        if (role !== 'PROFESSIONAL') {
+            setSubscriptionReady(true);
+            return;
+        }
+        try {
+            const [sub, plans] = await Promise.all([
+                getCurrentSubscription(),
+                getSubscriptionPlans(),
+            ]);
+            if (sub) {
+                // Primary match: plan_key string (most reliable)
+                let matchedPlan = sub.plan_key
+                    ? plans.find((p) => p.key === sub.plan_key)
+                    : null;
+                // Secondary match: plan UUID
+                if (!matchedPlan) {
+                    matchedPlan = plans.find(
+                        (p) => p.planId && sub.plan_id && p.planId.toLowerCase() === sub.plan_id.toLowerCase()
+                    ) ?? null;
+                }
+                if (matchedPlan) {
+                    updateUser({ subscriptionTier: matchedPlan.key.toUpperCase() as any });
+                }
+            } else {
+                updateUser({ subscriptionTier: 'FREE' });
+            }
+        } catch (e) {
+            console.error('Failed to sync subscription tier', e);
+        } finally {
+            setSubscriptionReady(true);
+        }
+    };
 
     useEffect(() => {
         setMounted(true);
-        // Blocker 1 Fix: Rehydrate user session from backend on page refresh.
-        // getCurrentUser() reads the stored token and calls GET /api/v1/users/me.
-        // In mock mode it returns null (no-op). When the backend is live, it
-        // returns the full User object which gets stored in Zustand.
-        const fetchSubscription = async () => {
-            if (user?.role === 'PROFESSIONAL') {
-                try {
-                    const [sub, plans, stats] = await Promise.all([
-                        getCurrentSubscription(),
-                        getSubscriptionPlans(),
-                        getUserDashboardStats()
-                    ]);
-                    if (sub) {
-                        let matchedPlan = plans.find(p => p.planId && sub.plan_id && p.planId.toLowerCase() === sub.plan_id.toLowerCase());
-                        if (!matchedPlan && stats?.planName) {
-                            matchedPlan = plans.find(p => p.name.toLowerCase() === stats.planName.toLowerCase() || p.key.toLowerCase() === stats.planName.toLowerCase());
-                        }
-                        if (matchedPlan) {
-                            updateUser({ subscriptionTier: matchedPlan.key.toUpperCase() as any });
-                        }
-                    } else {
-                        updateUser({ subscriptionTier: 'FREE' });
-                    }
-                } catch (e) {
-                    console.error("Failed to sync subscription tier", e);
-                }
-            }
-        };
 
         if (!isAuthenticated) {
-            getCurrentUser().then((fetchedUser) => {
+            getCurrentUser().then(async (fetchedUser) => {
                 const storedToken = localStorage.getItem('auth_token');
                 if (fetchedUser && storedToken) {
                     setUser(fetchedUser, storedToken);
-                    // Only fetch sub after user is set so we have the token available
-                    if (fetchedUser.role === 'PROFESSIONAL') {
-                        Promise.all([getCurrentSubscription(), getSubscriptionPlans(), getUserDashboardStats()]).then(([sub, plans, stats]) => {
-                            if (sub) {
-                                let matchedPlan = plans.find(p => p.planId && sub.plan_id && p.planId.toLowerCase() === sub.plan_id.toLowerCase());
-                                if (!matchedPlan && stats?.planName) {
-                                    matchedPlan = plans.find(p => p.name.toLowerCase() === stats.planName.toLowerCase() || p.key.toLowerCase() === stats.planName.toLowerCase());
-                                }
-                                if (matchedPlan) {
-                                    updateUser({ subscriptionTier: matchedPlan.key.toUpperCase() as any });
-                                }
-                            }
-                        });
-                    }
+                    await syncSubscription(fetchedUser.role);
+                } else {
+                    setSubscriptionReady(true);
                 }
             });
         } else {
-            fetchSubscription();
+            syncSubscription(user?.role);
         }
-    }, [isAuthenticated, user?.role, setUser, updateUser]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [isAuthenticated, user?.role]);
 
     const isProfessional = user?.role === 'PROFESSIONAL';
-    const showContextTab = isProfessional && (user?.subscriptionTier === 'PRO' || user?.subscriptionTier === 'MAX');
+    // Only evaluate the context tab AFTER subscription data has been loaded
+    // to prevent the tab from being permanently hidden due to a race condition.
+    const showContextTab =
+        subscriptionReady &&
+        isProfessional &&
+        (user?.subscriptionTier === 'PRO' || user?.subscriptionTier === 'MAX');
 
     const userNav: NavGroup[] = [
         {
