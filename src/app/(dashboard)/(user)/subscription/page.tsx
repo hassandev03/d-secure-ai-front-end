@@ -229,7 +229,7 @@ export default function SubscriptionPage() {
         try {
             await downgradePlan(planKey);
             setCurrentPlanKey(planKey);
-            updateUser({ subscriptionTier: planKey as any });
+            updateUser({ subscriptionTier: planKey.toUpperCase() as any });
             toast.success(`Successfully downgraded to the ${plansData.find((p) => p.key === planKey)?.name} plan.`);
         } catch (err: any) {
             const msg = err?.response?.data?.detail ?? "Failed to process downgrade. Please try again.";
@@ -268,7 +268,7 @@ export default function SubscriptionPage() {
                 resetCardForm();
             }
             setCurrentPlanKey(selectedPlanForUpgrade!.key);
-            updateUser({ subscriptionTier: selectedPlanForUpgrade!.key as any });
+            updateUser({ subscriptionTier: selectedPlanForUpgrade!.key.toUpperCase() as any });
             toast.success(`Successfully upgraded to the ${selectedPlanForUpgrade!.name} Plan!`);
         } catch (err: any) {
             const msg = err?.response?.data?.detail ?? "Payment failed. Please try again.";

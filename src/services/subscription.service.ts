@@ -113,8 +113,16 @@ export async function getCurrentSubscription(): Promise<BSub | null> {
     }
 }
 
-/** POST /api/v1/subscriptions/subscribe */
+/** POST /api/v1/subscriptions/subscribe — cancel any existing sub first, then subscribe */
 export async function upgradePlan(planKey: string): Promise<{ success: boolean }> {
+    // Cancel any existing active subscription before subscribing to the new plan.
+    // The backend returns 400 if you try to subscribe while one is already active.
+    const existingSub = await getCurrentSubscription();
+    if (existingSub) {
+        await api.post(`/subscriptions/${existingSub.subscription_id}/cancel`, {
+            reason: `Upgrading to ${planKey}`,
+        });
+    }
     await api.post('/subscriptions/subscribe', {
         plan_key:      planKey.toLowerCase(),
         billing_cycle: 'MONTHLY',
