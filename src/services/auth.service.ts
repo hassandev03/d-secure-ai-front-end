@@ -156,7 +156,12 @@ export async function getCurrentUser(): Promise<User | null> {
     if (!token) return null;
 
     try {
-        const { data } = await api.get<BackendUserRead>('/users/me');
+        const { data } = await api.get<BackendUserRead>('/users/me', {
+            // Prevent the global 401 interceptor from redirecting to login
+            // during this silent rehydration call. If the token is expired,
+            // we simply return null and let the UI stay on the current page.
+            headers: { 'X-Skip-Auth-Redirect': 'true' },
+        });
         return mapUser(data);
     } catch {
         return null;

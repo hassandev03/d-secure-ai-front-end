@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
     Send, Plus, Paperclip, Mic, Bot, User, Shield, Sparkles,
-    ChevronDown, Eye, ExternalLink, X, FileText, AlertTriangle, CreditCard, Lock
+    ChevronDown, Eye, ExternalLink, X, FileText, AlertTriangle, CreditCard, Lock, Loader2
 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -53,7 +53,7 @@ const welcomeExamples = [
 /* ══════════════════════════════════════════════════════
    Chat Page
    ══════════════════════════════════════════════════════ */
-export default function ChatPage() {
+function ChatInterface() {
     const { user } = useAuthStore();
     const router = useRouter();
     const searchParams = useSearchParams();
@@ -504,5 +504,17 @@ export default function ChatPage() {
                 </p>
             </div>
         </div>
+    );
+}
+
+export default function ChatPage() {
+    return (
+        <Suspense fallback={
+            <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-brand-600" />
+            </div>
+        }>
+            <ChatInterface />
+        </Suspense>
     );
 }

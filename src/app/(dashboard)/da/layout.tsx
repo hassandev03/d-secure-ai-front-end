@@ -27,7 +27,10 @@ export default function DeptAdminLayout({
     useEffect(() => {
         getDeptPendingQuotaCount().then(setPendingCount).catch(() => {});
         if (!isAuthenticated) {
-            getCurrentUser().then((u) => { if (u && token) setUser(u, token); });
+            getCurrentUser().then((u) => {
+                const storedToken = localStorage.getItem('auth_token');
+                if (u && storedToken) setUser(u, storedToken);
+            });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
     }, []);

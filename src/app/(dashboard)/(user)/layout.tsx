@@ -32,8 +32,9 @@ export default function UserLayout({
         // returns the full User object which gets stored in Zustand.
         if (!isAuthenticated) {
             getCurrentUser().then((fetchedUser) => {
-                if (fetchedUser && token) {
-                    setUser(fetchedUser, token);
+                const storedToken = localStorage.getItem('auth_token');
+                if (fetchedUser && storedToken) {
+                    setUser(fetchedUser, storedToken);
                 }
             });
         }

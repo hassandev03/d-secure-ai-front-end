@@ -32,7 +32,12 @@ api.interceptors.response.use(
     (error) => {
         const status = error.response?.status as number | undefined;
 
-        if (status === 401) {
+        // Skip redirect for silent rehydration calls (e.g. GET /users/me on page refresh).
+        // Those callers set X-Skip-Auth-Redirect so a stale/missing token doesn't
+        // boot the user before the store has a chance to rehydrate.
+        const skipRedirect = error.config?.headers?.['X-Skip-Auth-Redirect'] === 'true';
+
+        if (status === 401 && !skipRedirect) {
             // Token expired or invalid — clear local auth state and redirect to login
             if (typeof window !== 'undefined') {
                 localStorage.removeItem('auth_token');

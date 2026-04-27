@@ -71,13 +71,19 @@ export default function ProfessionalRegisterPage() {
         try {
             const result = await register({ name, email, password, jobTitle, industry, country });
             setUser(result.user, result.token);
-            toast.success("Account created! Welcome to D-SecureAI.");
-            router.push("/dashboard");
+            toast.success("Account created! Please verify your email.");
+            setStep(3);
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Registration failed");
         } finally {
             setIsLoading(false);
         }
+    };
+
+    const handlePlanSelection = async (planKey: string) => {
+        // Here you would typically link to a Stripe checkout or create a subscription
+        toast.success("Welcome to D-SecureAI!");
+        router.push("/dashboard");
     };
 
     return (
@@ -164,7 +170,10 @@ export default function ProfessionalRegisterPage() {
                         </div>
                         <div className="flex gap-3">
                             <Button variant="outline" onClick={() => setStep(1)} className="flex-1"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>
-                            <Button className="flex-1 bg-brand-600 hover:bg-brand-700" onClick={() => setStep(3)}>Continue <ArrowRight className="ml-2 h-4 w-4" /></Button>
+                            <Button className="flex-1 bg-brand-600 hover:bg-brand-700" onClick={handleRegister} disabled={isLoading}>
+                                {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+                                Continue <ArrowRight className="ml-2 h-4 w-4" />
+                            </Button>
                         </div>
                     </div>
                 )}
@@ -247,10 +256,9 @@ export default function ProfessionalRegisterPage() {
                                     <Button
                                         className={`mt-3 w-full ${key === "FREE" ? "" : "bg-brand-600 hover:bg-brand-700"}`}
                                         variant={key === "FREE" ? "outline" : "default"}
-                                        onClick={handleRegister}
+                                        onClick={() => handlePlanSelection(key)}
                                         disabled={isLoading}
                                     >
-                                        {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
                                         {key === "FREE" ? "Continue with Free" : `Start ${plan.name}`}
                                     </Button>
                                 </div>

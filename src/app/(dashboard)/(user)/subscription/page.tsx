@@ -15,8 +15,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/store/auth.store";
 import {
-    getSubscriptionPlans, getPaymentMethods,
-    type SubscriptionPlanDisplay, type PaymentMethod,
+    getSubscriptionPlans, getPaymentMethods, upgradePlan, getCurrentSubscription, downgradePlan,
+    type SubscriptionPlanDisplay, type PaymentMethod, type BSub,
 } from "@/services/subscription.service";
 
 function formatCardNumber(value: string): string {
@@ -38,28 +38,38 @@ const MONTHS = Array.from({ length: 12 }, (_, i) => String(i + 1).padStart(2, "0
 const YEARS  = Array.from({ length: 11 }, (_, i) => String(currentYear + i));
 
 const PLAN_ICON: Record<string, React.ElementType> = {
-    FREE: Zap,
-    PRO:  Shield,
-    MAX:  Crown,
+    free:       Zap,
+    FREE:       Zap,
+    pro:        Shield,
+    PRO:        Shield,
+    enterprise: Crown,
+    max:        Crown,
+    MAX:        Crown,
 };
 
 const PLAN_GRADIENT: Record<string, string> = {
-    FREE: "from-slate-500 to-slate-600",
-    PRO:  "from-brand-500 to-brand-700",
-    MAX:  "from-brand-600 to-indigo-700",
+    free:       "from-slate-500 to-slate-600",
+    FREE:       "from-slate-500 to-slate-600",
+    pro:        "from-brand-500 to-brand-700",
+    PRO:        "from-brand-500 to-brand-700",
+    enterprise: "from-brand-600 to-indigo-700",
+    max:        "from-brand-600 to-indigo-700",
+    MAX:        "from-brand-600 to-indigo-700",
 };
 
 export default function SubscriptionPage() {
     const { user, updateUser } = useAuthStore();
     const [plansData,               setPlansData]               = useState<SubscriptionPlanDisplay[]>([]);
-    const [currentPlanKey,          setCurrentPlanKey]          = useState<string>(user?.subscriptionTier || "FREE");
+    const [currentPlanKey,          setCurrentPlanKey]          = useState<string>((user?.subscriptionTier || "free").toLowerCase());
     const [isPaymentModalOpen,      setIsPaymentModalOpen]      = useState(false);
     const [isAddCardModalOpen,      setIsAddCardModalOpen]      = useState(false);
     const [selectedPlanForUpgrade,  setSelectedPlanForUpgrade]  = useState<SubscriptionPlanDisplay | null>(null);
     const [isProcessing,            setIsProcessing]            = useState(false);
 
+    const [isLoadingPlans, setIsLoadingPlans] = useState(true);
     const [savedCards, setSavedCards] = useState<PaymentMethod[]>([]);
     const [useNewCard, setUseNewCard] = useState(false);
+    const [activeSub, setActiveSub] = useState<BSub | null>(null);
 
     const [cardName,      setCardName]      = useState(user?.name || "");
     const [newCardNumber, setNewCardNumber] = useState("");
@@ -70,15 +80,53 @@ export default function SubscriptionPage() {
     const [cardErrors,    setCardErrors]    = useState<Record<string, string | null>>({});
 
     useEffect(() => {
-        getSubscriptionPlans().then(setPlansData);
-        getPaymentMethods().then(setSavedCards);
+        setIsLoadingPlans(true);
+        Promise.all([
+            getSubscriptionPlans(),
+            getPaymentMethods(),
+            getCurrentSubscription(),
+        ]).then(([plans, cards, sub]) => {
+            setPlansData(plans);
+            setSavedCards(cards);
+            setActiveSub(sub);
+            // Sync current plan from real subscription
+            if (sub) {
+                // Find the matching plan from the list by plan_id is not available here,
+                // so we match by checking which plan's price matches; simplest is to
+                // just leave currentPlanKey as initialized from user.subscriptionTier.
+            }
+            setIsLoadingPlans(false);
+        });
     }, []);
 
-    const activePlan = plansData.find((p) => p.key === currentPlanKey);
+    // Format next billing date from real subscription
+    const nextBillingDate = activeSub?.current_period_end
+        ? new Date(activeSub.current_period_end).toLocaleDateString('en-GB', { year: 'numeric', month: 'short', day: 'numeric' })
+        : null;
 
-    if (!activePlan || plansData.length === 0) return null;
+    const activePlan = plansData.find((p) => p.key === currentPlanKey) ?? plansData[0];
 
-    if (user?.role !== "PROFESSIONAL") {
+    // Show a loading skeleton while plans are being fetched
+    if (isLoadingPlans) {
+        return (
+            <div className="mx-auto max-w-5xl space-y-6">
+                <PageHeader
+                    title="Subscription"
+                    subtitle="Manage your plan and usage."
+                    breadcrumbs={[{ label: "User", href: "/dashboard" }, { label: "Subscription" }]}
+                />
+                <div className="h-40 rounded-xl bg-muted animate-pulse" />
+                <div className="grid gap-6 lg:grid-cols-3">
+                    {[1, 2, 3].map((i) => <div key={i} className="h-72 rounded-xl bg-muted animate-pulse" />)}
+                </div>
+            </div>
+        );
+    }
+
+    // Only individual (PROFESSIONAL) users and Super Admins manage their own subscriptions.
+    // Org employees / dept admins are billed through their organization.
+    const INDIVIDUAL_ROLES = ["PROFESSIONAL", "SUPER_ADMIN"];
+    if (user?.role && !INDIVIDUAL_ROLES.includes(user.role)) {
         return (
             <div className="mx-auto max-w-5xl">
                 <PageHeader
@@ -95,6 +143,8 @@ export default function SubscriptionPage() {
             </div>
         );
     }
+
+    if (!activePlan) return null;
 
     const resetCardForm = () => {
         setCardName(user?.name || "");
@@ -124,10 +174,15 @@ export default function SubscriptionPage() {
 
     const handleDowngradeClick = async (planKey: string) => {
         toast.info("Downgrade scheduled for end of billing cycle.");
-        setTimeout(() => {
+        try {
+            await downgradePlan(planKey);
             setCurrentPlanKey(planKey);
+            updateUser({ subscriptionTier: planKey as any });
             toast.success(`Successfully downgraded to the ${plansData.find((p) => p.key === planKey)?.name} plan.`);
-        }, 800);
+        } catch (err: any) {
+            const msg = err?.response?.data?.detail ?? "Failed to process downgrade. Please try again.";
+            toast.error(msg);
+        }
     };
 
     const handleDeleteCard = (id: string) => {
@@ -153,16 +208,22 @@ export default function SubscriptionPage() {
         e.preventDefault();
         if ((useNewCard || savedCards.length === 0) && !validateCardForm()) return;
         setIsProcessing(true);
-        await new Promise((r) => setTimeout(r, 1500));
-        setIsProcessing(false);
-        setIsPaymentModalOpen(false);
-        if (useNewCard || savedCards.length === 0) {
-            setSavedCards((prev) => [...prev.map((c) => ({ ...c, isDefault: false })), createCardFromForm()]);
-            resetCardForm();
+        try {
+            await upgradePlan(selectedPlanForUpgrade!.key);
+            setIsPaymentModalOpen(false);
+            if (useNewCard || savedCards.length === 0) {
+                setSavedCards((prev) => [...prev.map((c) => ({ ...c, isDefault: false })), createCardFromForm()]);
+                resetCardForm();
+            }
+            setCurrentPlanKey(selectedPlanForUpgrade!.key);
+            updateUser({ subscriptionTier: selectedPlanForUpgrade!.key as any });
+            toast.success(`Successfully upgraded to the ${selectedPlanForUpgrade!.name} Plan!`);
+        } catch (err: any) {
+            const msg = err?.response?.data?.detail ?? "Payment failed. Please try again.";
+            toast.error(msg);
+        } finally {
+            setIsProcessing(false);
         }
-        setCurrentPlanKey(selectedPlanForUpgrade!.key);
-        updateUser({ subscriptionTier: selectedPlanForUpgrade!.key as any });
-        toast.success(`Successfully upgraded to the ${selectedPlanForUpgrade!.name} Plan!`);
     };
 
     const renderCardFormFields = () => (
@@ -198,8 +259,22 @@ export default function SubscriptionPage() {
                     <FieldError error={cardErrors.expiryYear ?? null} />
                 </div>
                 <div className="space-y-2">
-                    <Label>CVV <span className="text-danger">*</span></Label>
-                    <Input placeholder="123" type="password" value={cvv} onChange={(e) => { const val = e.target.value.replace(/\D/g, "").slice(0, 4); setCvv(val); setCardErrors((p) => ({ ...p, cvv: null })); }} maxLength={4} inputMode="numeric" className={cardErrors.cvv ? "border-danger" : ""} />
+                    <Label htmlFor="cvv-input">CVV <span className="text-danger">*</span></Label>
+                    <Input
+                        id="cvv-input"
+                        placeholder="123"
+                        type="text"
+                        inputMode="numeric"
+                        value={cvv}
+                        onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, "").slice(0, 4);
+                            setCvv(val);
+                            setCardErrors((p) => ({ ...p, cvv: null }));
+                        }}
+                        maxLength={4}
+                        autoComplete="cc-csc"
+                        className={cardErrors.cvv ? "border-danger" : ""}
+                    />
                     <FieldError error={cardErrors.cvv ?? null} />
                 </div>
             </div>
@@ -340,7 +415,9 @@ export default function SubscriptionPage() {
                         <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3">
                             <div className="flex items-center justify-between text-sm">
                                 <span className="flex items-center gap-2 text-muted-foreground"><Calendar className="h-4 w-4" /> Next Billing Date</span>
-                                <Badge variant="outline" className="font-semibold">2026-04-01</Badge>
+                                <Badge variant="outline" className="font-semibold">
+                                    {nextBillingDate ?? "—"}
+                                </Badge>
                             </div>
                             <div className="flex items-center justify-between text-sm">
                                 <span className="text-muted-foreground">Billing Email</span>

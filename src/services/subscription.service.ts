@@ -43,12 +43,13 @@ interface BPlan {
     plan_id: string;
     plan_key: string;
     name: string;
+    plan_type: string;
     monthly_price: number;
     features: string[] | null;
     excluded_features: string[] | null;
 }
 
-interface BSub {
+export interface BSub {
     subscription_id: string;
     plan_id: string;
     status: string;
@@ -65,15 +66,26 @@ export async function getSubscriptionPlans(): Promise<SubscriptionPlanDisplay[]>
     try {
         const { data } = await api.get<BPlan[]>('/subscriptions/plans');
         if (data.length === 0) return _fallbackPlans();
-        return data.map((p) => {
-            const key  = p.plan_key.toUpperCase() as 'FREE' | 'PRO' | 'MAX';
-            const cons = SUBSCRIPTION_PLANS[key] ?? SUBSCRIPTION_PLANS.FREE;
+
+        // Build a lookup of curated plans so we can override DB feature text
+        const curated = Object.fromEntries(_fallbackPlans().map((p) => [p.key, p]));
+
+        // Filter out enterprise plans — they shouldn't be shown to professional/individual users
+        const individualPlans = data.filter((p) => p.plan_type === 'INDIVIDUAL');
+
+        // If for some reason there are no individual plans seeded, use fallback
+        if (individualPlans.length === 0) return _fallbackPlans();
+
+        return individualPlans.map((p) => {
+            const key = p.plan_key.toLowerCase();
+            const cur = curated[key];
             return {
-                key:          p.plan_key,
+                key,
                 name:         p.name,
                 price:        p.monthly_price,
-                creditBudget: cons.creditBudget ?? `$${p.monthly_price}/mo`,
-                features: [
+                creditBudget: cur?.creditBudget ?? `$${p.monthly_price}/mo`,
+                // Prefer our curated feature list; fall back to raw DB values
+                features: cur?.features ?? [
                     ...(p.features ?? []).map((t) => ({ text: t, included: true })),
                     ...(p.excluded_features ?? []).map((t) => ({ text: t, included: false })),
                 ],
@@ -103,13 +115,18 @@ export async function upgradePlan(planKey: string): Promise<{ success: boolean }
     return { success: true };
 }
 
-/** POST /api/v1/subscriptions/{id}/cancel */
+/** POST /api/v1/subscriptions/{id}/cancel, then POST /subscribe to target plan */
 export async function downgradePlan(planKey: string): Promise<{ success: boolean }> {
-    // Get current subscription first
+    // Cancel current subscription first
     const sub = await getCurrentSubscription();
     if (!sub) throw new Error('No active subscription to cancel');
     await api.post(`/subscriptions/${sub.subscription_id}/cancel`, {
         reason: `Downgrading to ${planKey}`,
+    });
+    // Re-subscribe to the target (lower) plan
+    await api.post('/subscriptions/subscribe', {
+        plan_key:      planKey.toLowerCase(),
+        billing_cycle: 'MONTHLY',
     });
     return { success: true };
 }
@@ -148,47 +165,45 @@ export async function deletePaymentMethod(
 function _fallbackPlans(): SubscriptionPlanDisplay[] {
     return [
         {
-            key: 'FREE', name: SUBSCRIPTION_PLANS.FREE.name,
+            key: 'free', name: SUBSCRIPTION_PLANS.FREE.name,
             price: SUBSCRIPTION_PLANS.FREE.price,
             creditBudget: SUBSCRIPTION_PLANS.FREE.creditBudget,
             features: [
-                { text: '$0.50 monthly credit budget', included: true },
-                { text: 'Basic entity anonymization', included: true },
-                { text: 'GPT-4o-mini & Gemini Flash only', included: true },
+                { text: 'Basic anonymization', included: true },
+                { text: '50 requests/month', included: true },
                 { text: '3 chat sessions/day', included: true },
+                { text: 'GPT-4o-mini & Gemini Flash only', included: true },
                 { text: 'File uploads', included: false },
                 { text: 'Context-aware anonymization', included: false },
-                { text: 'KB/RAG context', included: false },
+                { text: 'Personal Context', included: false },
                 { text: 'Speech-to-text', included: false },
                 { text: 'Chat history (7 days)', included: true },
             ],
         },
         {
-            key: 'PRO', name: SUBSCRIPTION_PLANS.PRO.name,
+            key: 'pro', name: SUBSCRIPTION_PLANS.PRO.name,
             price: SUBSCRIPTION_PLANS.PRO.price,
             creditBudget: SUBSCRIPTION_PLANS.PRO.creditBudget,
             features: [
-                { text: '$25.00 monthly credit budget', included: true },
-                { text: 'Per-word billing — pay for what you use', included: true },
-                { text: 'Full context-aware anonymization', included: true },
+                { text: 'Context-aware anonymization', included: true },
+                { text: 'Higher usage limits', included: true },
+                { text: 'More chats per day', included: true },
                 { text: 'All AI models', included: true },
-                { text: 'File uploads & KB/RAG context', included: true },
+                { text: 'File uploads & Personal Context', included: true },
                 { text: 'Speech-to-text input', included: true },
                 { text: '90-day chat history', included: true },
             ],
         },
         {
-            key: 'MAX', name: SUBSCRIPTION_PLANS.MAX.name,
-            price: SUBSCRIPTION_PLANS.MAX.price,
-            creditBudget: SUBSCRIPTION_PLANS.MAX.creditBudget,
+            key: 'max', name: 'Max',
+            price: 79,
+            creditBudget: '$80.00/mo',
             features: [
-                { text: '$80.00 monthly credit budget', included: true },
-                { text: 'Everything in Pro', included: true },
-                { text: 'Extended context window', included: true },
-                { text: 'API access', included: true },
-                { text: 'Higher chat history limit', included: true },
-                { text: 'Early access to new features', included: true },
                 { text: 'Dedicated support', included: true },
+                { text: 'Higher usage limits than Pro', included: true },
+                { text: 'More chats than Pro', included: true },
+                { text: 'API access', included: true },
+                { text: 'Early access to new features', included: true },
             ],
         },
     ];
