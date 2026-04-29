@@ -98,7 +98,7 @@ const PROVIDER_DISPLAY: Record<string, string> = {
     openai: 'OpenAI',
     anthropic: 'Anthropic',
     google: 'Google',
-    azure: 'Azure OpenAI',
+    azure: 'OpenAI',   // Azure OpenAI serves the same GPT models — show as OpenAI to users
 };
 
 // Model display names map (extend as needed)
@@ -117,11 +117,12 @@ const MODEL_DISPLAY: Record<string, string> = {
     'claude-3-5-haiku-20241022':  'Claude 3.5 Haiku',
     'claude-3-opus-20240229':     'Claude 3 Opus',
     'claude-3-haiku-20240307':    'Claude 3 Haiku',
-    // Google Gemini
-    'gemini-2.0-flash':               'Gemini 2.0 Flash',
-    'gemini-1.5-pro':                 'Gemini 1.5 Pro',
-    'gemini-1.5-flash':               'Gemini 1.5 Flash',
-    'gemini-2.5-pro-preview-05-06':   'Gemini 2.5 Pro',
+    // Gemini
+    'gemini-3-flash-preview': 'Gemini 3 Flash',
+    'gemini-3.1-flash-lite-preview': 'Gemini 3.1 Flash Lite',
+    'gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
+    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
+    'gemini-2.5-flash': 'Gemini 2.5 Flash',
 };
 
 function mapSession(b: BackendSession): ChatSession {

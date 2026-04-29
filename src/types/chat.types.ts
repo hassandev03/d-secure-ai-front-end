@@ -1,3 +1,4 @@
+// 'azure' is an internal backend routing key — the frontend shows all GPT models as 'openai'.
 export type LLMProvider = 'openai' | 'anthropic' | 'google' | 'azure';
 
 export type LLMModel =
@@ -14,11 +15,12 @@ export type LLMModel =
     | 'claude-3-5-haiku-20241022'
     | 'claude-3-opus-20240229'
     | 'claude-3-haiku-20240307'
-    // Google Gemini
-    | 'gemini-2.0-flash'
-    | 'gemini-1.5-pro'
-    | 'gemini-1.5-flash'
-    | 'gemini-2.5-pro-preview-05-06';
+    // Google Gemini Models
+    | 'gemini-3-flash-preview'
+    | 'gemini-3.1-flash-lite-preview'
+    | 'gemini-3.1-pro-preview'
+    | 'gemini-2.5-flash-lite'
+    | 'gemini-2.5-flash';
 
 /**
  * Canonical Chat Session shape — mirrors backend GET /api/v1/chat/sessions/:id

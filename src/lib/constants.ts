@@ -6,25 +6,24 @@ export const APP_TAGLINE = 'Secure AI. Seamlessly.';
 /**
  * MODELS catalogue — only models with working API keys are listed.
  *
- * Provider → Backend key mapping:
- *   azure     → Azure OpenAI Service (gpt-4.1 deployment via Azure API)
- *   anthropic → Anthropic Claude     (Free tier: 5 req/min, 4K out tokens/min)
- *   google    → Google Gemini        (google-genai SDK, Gemini API key)
+ * Note: GPT models are served through Azure OpenAI internally, but
+ * from the user's perspective they are just "OpenAI" models.
+ * The backend `_infer_provider()` handles routing transparently.
  */
 export const MODELS: ModelOption[] = [
-    // ── Azure OpenAI (primary GPT endpoint) ─────────────────────────────────
+    // ── OpenAI / GPT models (routed through Azure internally) ────────────────
     {
         id: 'gpt-4.1',
         name: 'GPT-4.1',
-        provider: 'azure',
-        providerName: 'Azure OpenAI',
+        provider: 'openai',
+        providerName: 'OpenAI',
         isAvailable: true,
     },
     {
         id: 'gpt-4o',
         name: 'GPT-4o',
-        provider: 'azure',
-        providerName: 'Azure OpenAI',
+        provider: 'openai',
+        providerName: 'OpenAI',
         isAvailable: true,
     },
     // ── Anthropic Claude (free tier) ─────────────────────────────────────────
@@ -51,15 +50,36 @@ export const MODELS: ModelOption[] = [
     },
     // ── Google Gemini ────────────────────────────────────────────────────────
     {
-        id: 'gemini-2.0-flash',
-        name: 'Gemini 2.0 Flash',
+        id: 'gemini-3-flash-preview',
+        name: 'Gemini 3 Flash',
         provider: 'google',
         providerName: 'Google',
         isAvailable: true,
     },
     {
-        id: 'gemini-1.5-pro',
-        name: 'Gemini 1.5 Pro',
+        id: 'gemini-3.1-flash-lite-preview',
+        name: 'Gemini 3.1 Flash Lite',
+        provider: 'google',
+        providerName: 'Google',
+        isAvailable: true,
+    },
+    {
+        id: 'gemini-3.1-pro-preview',
+        name: 'Gemini 3.1 Pro',
+        provider: 'google',
+        providerName: 'Google',
+        isAvailable: true,
+    },
+    {
+        id: 'gemini-2.5-flash-lite',
+        name: 'Gemini 2.5 Flash Lite',
+        provider: 'google',
+        providerName: 'Google',
+        isAvailable: true,
+    },
+    {
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
         provider: 'google',
         providerName: 'Google',
         isAvailable: true,
@@ -147,3 +167,4 @@ export const PORTAL_ROUTES = {
 } as const;
 
 export const DEFAULT_MODEL: LLMModel = 'gpt-4.1';
+
