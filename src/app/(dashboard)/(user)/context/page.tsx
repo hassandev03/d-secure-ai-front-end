@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
+import { useSubscriptionStore } from "@/store/subscription.store";
 import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen, Edit, FileMusic, Loader2, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
@@ -92,17 +93,27 @@ export default function MyContextPage() {
 
     const router = useRouter();
     const { user } = useAuthStore();
+    const subscriptionStore = useSubscriptionStore();
     const [authorized, setAuthorized] = useState<boolean | null>(null);
 
+    // Wait for both user (from persisted auth store) and subscription data.
+    // subscriptionTier is persisted in auth store so it may be available immediately.
+    // If it's missing, we wait for the subscription store to populate it.
     useEffect(() => {
         if (!user) return;
-        const canAccess = user.role === 'PROFESSIONAL' && (user.subscriptionTier === 'PRO' || user.subscriptionTier === 'MAX');
+
+        // If subscriptionTier is already set (from persisted store), check immediately.
+        // Otherwise wait for the subscription store to load (indicated by isLoaded=true).
+        const tier = user.subscriptionTier;
+        if (!tier && !subscriptionStore.isLoaded) return; // still loading — wait
+
+        const canAccess = user.role === 'PROFESSIONAL'
+            && (tier === 'PRO' || tier === 'MAX');
+        setAuthorized(canAccess);
         if (!canAccess) {
             router.replace("/dashboard");
-        } else {
-            setAuthorized(true);
         }
-    }, [user, router]);
+    }, [user, router, subscriptionStore.isLoaded]);
 
     const handleAddTerm = async () => {
         if (!newTerm || !newDef) return;

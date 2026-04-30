@@ -12,8 +12,8 @@ import {
 import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { useAuthStore } from "@/store/auth.store";
-import { getCurrentUser } from "@/services/auth.service";
-import { getCurrentSubscription, getSubscriptionPlans } from "@/services/subscription.service";
+import { useSubscriptionStore } from "@/store/subscription.store";
+import { getCurrentUserSummary, type UserSummary } from "@/services/auth.service";
 import { cn } from "@/lib/utils";
 
 export default function UserLayout({
@@ -22,38 +22,113 @@ export default function UserLayout({
     children: React.ReactNode;
 }) {
     const { user, setUser, updateUser, isAuthenticated } = useAuthStore();
+    const subscriptionStore = useSubscriptionStore();
     const [mounted, setMounted] = useState(false);
-    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [subscriptionReady, setSubscriptionReady] = useState(false);
+    const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     // Prevents subscription sync from running more than once per mount.
     const hasSynced = useRef(false);
 
     /**
-     * Fetch subscription and resolve the user's plan key.
-     * Only relevant for PROFESSIONAL users.
+     * Hydrate auth store + subscription in ONE network call using
+     * GET /users/me/summary.  Subsequent navigations within the same
+     * session are served from the subscription store cache.
+     */
+    useEffect(() => {
+        setMounted(true);
+
+        if (hasSynced.current) return;
+        hasSynced.current = true;
+
+        if (!isAuthenticated) {
+            // Single call: user + subscription + quota
+            getCurrentUserSummary().then((summary: UserSummary | null) => {
+                const storedToken = localStorage.getItem('auth_token');
+                if (summary?.user && storedToken) {
+                    // Hydrate auth store with the user from the summary endpoint
+                    const { setUser: storeSetUser } = useAuthStore.getState();
+                    storeSetUser(
+                        {
+                            id:            summary.user.user_id,
+                            name:          summary.user.name,
+                            email:         summary.user.email,
+                            role:          summary.user.role as any,
+                            status:        summary.user.status as any,
+                            orgId:         summary.user.org_id ?? undefined,
+                            subscriptionTier: summary.quota?.plan_key?.toUpperCase() as any,
+                            isFirstLogin:  summary.user.is_first_login,
+                        },
+                        storedToken
+                    );
+
+                    // Cache subscription data so pages skip their own fetches
+                    if (summary.subscription && summary.quota) {
+                        subscriptionStore.setSubscription(
+                            {
+                                subscription_id: summary.subscription.subscription_id,
+                                plan_id:         summary.subscription.plan_id,
+                                plan_key:        summary.subscription.plan_key,
+                                status:          summary.subscription.status,
+                                current_period_start: summary.subscription.current_period_start,
+                                current_period_end:   summary.subscription.current_period_end,
+                                billing_cycle:   summary.subscription.billing_cycle,
+                                cancelled_at:     null,
+                            },
+                            [] // plans are empty here; pages that need them will fetch
+                        );
+                    }
+                }
+                setSubscriptionReady(true);
+            });
+        } else {
+            // Already authenticated — use cached subscription store
+            syncSubscription(user?.role);
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
+
+    /**
+     * R12: Fetch subscription + plans with a 5-minute in-memory TTL.
+     * Uses the module-level `useSubscriptionStore` so subsequent page
+     * navigations within the same session skip the fetch entirely.
      */
     const syncSubscription = async (role: string | undefined) => {
         if (role !== 'PROFESSIONAL') {
             setSubscriptionReady(true);
             return;
         }
-        try {
-            const [sub, plans] = await Promise.all([
-                getCurrentSubscription(),
-                getSubscriptionPlans(),
-            ]);
+
+        if (subscriptionStore.isLoaded && !subscriptionStore.isStale()) {
+            const { subscription: sub, plans } = subscriptionStore;
             if (sub) {
-                let matchedPlan = sub.plan_key
-                    ? plans.find((p) => p.key === sub.plan_key)
-                    : null;
-                if (!matchedPlan) {
-                    matchedPlan = plans.find(
-                        (p) => p.planId && sub.plan_id && p.planId.toLowerCase() === sub.plan_id.toLowerCase()
-                    ) ?? null;
-                }
+                const matchedPlan =
+                    plans.find((p) => p.key === sub.plan_key) ??
+                    plans.find(
+                        (p) =>
+                            p.planId &&
+                            sub.plan_id &&
+                            p.planId.toLowerCase() === sub.plan_id.toLowerCase()
+                    ) ??
+                    null;
                 if (matchedPlan) {
                     updateUser({ subscriptionTier: matchedPlan.key.toUpperCase() as any });
                 }
+            } else {
+                updateUser({ subscriptionTier: 'FREE' });
+            }
+            setSubscriptionReady(true);
+            return;
+        }
+
+        try {
+            const { getSubscriptionSummary } = await import("@/services/subscription.service");
+            const summary = await getSubscriptionSummary();
+            if (summary?.subscription && summary?.quota) {
+                subscriptionStore.setSubscription(summary.subscription, []);
+            }
+
+            if (summary?.subscription_plan_key) {
+                updateUser({ subscriptionTier: summary.subscription_plan_key.toUpperCase() as any });
             } else {
                 updateUser({ subscriptionTier: 'FREE' });
             }
@@ -63,30 +138,6 @@ export default function UserLayout({
             setSubscriptionReady(true);
         }
     };
-
-    useEffect(() => {
-        setMounted(true);
-
-        // Guard: only run once per mount to avoid feedback loops caused by
-        // setUser() triggering isAuthenticated changes → re-running this effect.
-        if (hasSynced.current) return;
-        hasSynced.current = true;
-
-        if (!isAuthenticated) {
-            getCurrentUser().then(async (fetchedUser) => {
-                const storedToken = localStorage.getItem('auth_token');
-                if (fetchedUser && storedToken) {
-                    setUser(fetchedUser, storedToken);
-                    await syncSubscription(fetchedUser.role);
-                } else {
-                    setSubscriptionReady(true);
-                }
-            });
-        } else {
-            syncSubscription(user?.role);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, []);
 
     const isProfessional = user?.role === 'PROFESSIONAL';
     // Only evaluate the context tab AFTER subscription data has been loaded

@@ -234,10 +234,40 @@ export async function getQuotaStatus(): Promise<QuotaStatus | null> {
     }
 }
 
-/** GET /api/v1/chat/sessions */
-export async function getChatSessions(): Promise<ChatSessionSummary[]> {
+// In-flight deduplication map for getChatSessions.
+// Key format: `${limit}:${offset}` — concurrent callers with the same
+// pagination params share one HTTP request.
+const _sessionsInFlight = new Map<string, Promise<ChatSessionSummary[]>>();
+
+/**
+ * GET /api/v1/chat/sessions
+ *
+ * @param limit  Max sessions to fetch (default 30).
+ * @param offset Pagination offset.
+ *
+ * In-flight deduplication: if the history page and the sidebar both call
+ * this function before the first response arrives, only ONE HTTP request is
+ * issued.  This eliminates the duplicate ``GET /api/v1/chat/sessions`` calls
+ * visible in the DB logs when navigating to the history page.
+ */
+export async function getChatSessions(limit = 30, offset = 0): Promise<ChatSessionSummary[]> {
+    const cacheKey = `${limit}:${offset}`;
+    const existing = _sessionsInFlight.get(cacheKey);
+    if (existing) return existing;
+
+    const promise = _fetchChatSessions(limit, offset).finally(() => {
+        _sessionsInFlight.delete(cacheKey);
+    });
+
+    _sessionsInFlight.set(cacheKey, promise);
+    return promise;
+}
+
+async function _fetchChatSessions(limit: number, offset: number): Promise<ChatSessionSummary[]> {
     try {
-        const { data } = await api.get<BackendSession[]>('/chat/sessions');
+        const { data } = await api.get<BackendSession[]>(
+            `/chat/sessions?limit=${limit}&offset=${offset}`,
+        );
         return data.map(mapSession);
     } catch {
         return [];

@@ -1,15 +1,5 @@
-/**
- * dashboard.service.ts — User dashboard: real backend integration
- *
- * Backend routes:
- *   GET /api/v1/analytics/usage/me?days=30    → daily usage + summary
- *   GET /api/v1/analytics/quota/me            → quota / plan status
- *   GET /api/v1/chat/sessions                 → session count
- */
 import api from './api';
 import type { UserStats } from '@/types/analytics.types';
-import { getChatSessions } from './chat.service';
-import type { ChatSessionSummary } from './chat.service';
 
 /* ══════════════════════════════════════════════════════
    Dashboard-specific types (mirror backend response)
@@ -79,6 +69,18 @@ interface BQuota {
     requests_remaining_pct?: number;
 }
 
+// Backend shape for a chat session embedded in dashboard summary
+interface BRecentSession {
+    session_id: string;
+    title: string | null;
+    llm_provider: string;
+    llm_model: string;
+    message_count: number;
+    has_file_uploads: boolean;
+    created_at: string | null;
+    last_message_at: string | null;
+}
+
 // ─── Colour palette for model breakdown ──────────────────────────────────────
 
 const MODEL_COLORS: Record<string, string> = {
@@ -90,126 +92,87 @@ const MODEL_COLORS: Record<string, string> = {
 };
 const FALLBACK_COLORS = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
 
+// ─── Model / provider display name maps (mirrored from chat.service) ──────────
+
+const PROVIDER_DISPLAY: Record<string, string> = {
+    openai: 'OpenAI', anthropic: 'Anthropic', google: 'Google', azure: 'OpenAI',
+};
+const MODEL_DISPLAY: Record<string, string> = {
+    'gpt-4.1': 'GPT-4.1',
+    'claude-opus-4-5': 'Claude Opus',
+    'claude-sonnet-4-5': 'Claude Sonnet',
+    'gemini-3.1-flash-preview': 'Gemini 3.1 Flash',
+    'gemini-2.5-flash': 'Gemini 2.5 Flash',
+};
+
+// ─── ChatSessionSummary (inline to avoid cycle with chat.service) ────────────
+
+export interface ChatSessionSummary {
+    id: string;
+    userId: string;
+    title: string;
+    model: string;
+    modelName: string;
+    provider: string;
+    providerName: string;
+    messageCount: number;
+    createdAt: string;
+    lastMessageAt: string;
+    hasFileUploads: boolean;
+}
+
+function mapSession(b: BRecentSession): ChatSessionSummary {
+    const model = b.llm_model;
+    const provider = b.llm_provider;
+    return {
+        id: b.session_id,
+        userId: '',
+        title: b.title ?? 'Untitled Chat',
+        model,
+        modelName: MODEL_DISPLAY[model] ?? model,
+        provider,
+        providerName: PROVIDER_DISPLAY[provider] ?? provider,
+        messageCount: b.message_count,
+        createdAt: b.created_at ? b.created_at.split('T')[0] : '',
+        lastMessageAt: b.last_message_at
+            ? new Date(b.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+            : '',
+        hasFileUploads: b.has_file_uploads,
+    };
+}
+
 // ─── Service functions ────────────────────────────────────────────────────────
 
-/** GET /api/v1/analytics/usage/me?days=30 + /analytics/quota/me */
-export async function getUserDashboardStats(): Promise<DashboardStats> {
-    try {
-        const [usageRes, quotaRes] = await Promise.allSettled([
-            api.get<BUsageMe>('/analytics/usage/me?days=30'),
-            api.get<BQuota>('/analytics/quota/me'),
-        ]);
-
-        const usage   = usageRes.status   === 'fulfilled' ? usageRes.value.data   : null;
-        const quota   = quotaRes.status   === 'fulfilled' ? quotaRes.value.data   : null;
-
-        const totalRequests       = usage?.summary.total_requests       ?? 0;
-        const entitiesAnonymized  = usage?.summary.total_entities_detected ?? 0;
-        const requestsUsed        = quota?.requests_used   ?? 0;
-        const monthlyLimit        = quota?.monthly_requests ?? 0;
-        const percentageUsed      = monthlyLimit > 0
-            ? Math.round((requestsUsed / monthlyLimit) * 100)
-            : 0;
-
-        return {
-            totalRequestsThisMonth: totalRequests,
-            totalSessions:          0,      // derived separately if needed
-            entitiesAnonymized,
-            quotaRemaining:         quota?.requests_remaining ?? 0,
-            quotaTotal:             monthlyLimit,
-            avgEntitiesPerRequest:  totalRequests > 0
-                ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10
-                : 0,
-            percentageUsed,
-            planName:    quota?.plan_name    ?? 'Free',
-            periodEndsAt: quota?.period_ends_at ?? '',
-        };
-    } catch {
-        return {
-            totalRequestsThisMonth: 0, totalSessions: 0, entitiesAnonymized: 0,
-            quotaRemaining: 0, quotaTotal: 0, avgEntitiesPerRequest: 0,
-            percentageUsed: 0, planName: 'Free', periodEndsAt: '',
-        };
-    }
-}
-
-/** GET /api/v1/analytics/usage/me?days=N */
-export async function getDailyActivity(days = 7): Promise<DailyActivityPoint[]> {
-    try {
-        const { data } = await api.get<BUsageMe>(`/analytics/usage/me?days=${days}`);
-        const quota    = await api.get<BQuota>('/analytics/quota/me').catch(() => null);
-        const limit    = quota?.data.monthly_requests ?? 1;
-
-        let cumulative = 0;
-        return data.daily.map((row) => {
-            cumulative += row.request_count;
-            const d = new Date(row.stat_date);
-            return {
-                date:               d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                requests:           row.request_count,
-                entitiesAnonymized: row.entities_detected,
-                quotaUtilizedPct:   Math.round(Math.min((cumulative / limit) * 100, 100)),
-            };
-        });
-    } catch {
-        return [];
-    }
-}
-
-/** GET /api/v1/analytics/usage/me?days=30 → model breakdown */
-export async function getModelUsageBreakdown(): Promise<ModelUsagePoint[]> {
-    try {
-        const { data } = await api.get<BUsageMe>('/analytics/usage/me?days=30');
-        return data.summary.top_models.map((m, i) => ({
-            name:  m.model,
-            value: m.count,
-            color: MODEL_COLORS[m.model] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length],
-        }));
-    } catch {
-        return [];
-    }
-}
-
-/** GET /api/v1/analytics/usage/me?days=30 → entity type breakdown */
-export async function getEntityTypeBreakdown(): Promise<EntityTypePoint[]> {
-    try {
-        const { data } = await api.get<BUsageMe>('/analytics/usage/me?days=30');
-        return data.summary.top_entity_types.map((e) => ({
-            name:  e.type,
-            count: e.count,
-        }));
-    } catch {
-        return [];
-    }
-}
-
-/** GET /api/v1/analytics/dashboard/summary → Unified endpoint */
+/** GET /api/v1/analytics/dashboard/summary → single-call dashboard data */
 export async function getDashboardSummary(): Promise<DashboardSummaryResponse | null> {
     try {
-        const [summaryRes, sessionsRes, dailyRes] = await Promise.allSettled([
-            api.get<{ usage_30d: BUsageMe['summary']; quota: any; total_sessions: number }>('/analytics/dashboard/summary'),
-            getChatSessions(),
-            api.get<BUsageMe>('/analytics/usage/me?days=7'),
-        ]);
-        
-        if (summaryRes.status !== 'fulfilled') return null;
-        const { usage_30d: rawUsage, quota, total_sessions } = summaryRes.value.data;
-        
-        const totalRequests       = rawUsage?.total_requests ?? 0;
-        const entitiesAnonymized  = rawUsage?.total_entities_detected ?? 0;
-        
+        const { data } = await api.get<{
+            usage_30d: BUsageMe['summary'];
+            quota: BQuota;
+            total_sessions: number;
+            daily: BUsageMe['daily'];
+            recent_sessions: BRecentSession[];
+        }>('/analytics/dashboard/summary');
+
+        const rawUsage = data.usage_30d;
+        const quota = data.quota;
+        const totalRequests = rawUsage?.total_requests ?? 0;
+        const entitiesAnonymized = rawUsage?.total_entities_detected ?? 0;
+
         const stats: DashboardStats = {
             totalRequestsThisMonth: totalRequests,
-            totalSessions:          total_sessions ?? (sessionsRes.status === 'fulfilled' ? sessionsRes.value.length : 0),
+            totalSessions: data.total_sessions ?? 0,
             entitiesAnonymized,
-            quotaRemaining:         (quota?.remaining as number) ?? 0,
-            quotaTotal:             (quota?.limit as number) ?? 0,
-            avgEntitiesPerRequest:  totalRequests > 0
+            quotaRemaining: quota?.requests_remaining ?? 0,
+            quotaTotal: quota?.monthly_requests ?? 0,
+            avgEntitiesPerRequest: totalRequests > 0
                 ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10
                 : 0,
-            percentageUsed:  (quota?.percentage as number) ?? 0,
-            planName:        (quota?.plan as string) ?? 'Free',
-            periodEndsAt:    (quota?.period_ends as string) ?? '',
+            percentageUsed: quota?.requests_remaining_pct
+                ? 100 - quota.requests_remaining_pct
+                : 0,
+            planName: quota?.plan_name ?? 'Free',
+            periodEndsAt: quota?.period_ends_at ?? '',
         };
 
         const models = (rawUsage?.top_models ?? []).map((m, i) => ({
@@ -223,26 +186,92 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse | 
             count: e.count,
         }));
 
-        const limit = (quota?.limit as number) ?? 1;
+        // Derive last 7 days from the 30-day daily array already returned
+        const limit = quota?.monthly_requests ?? 1;
         let cumulative = 0;
-        const dailyActivity: DailyActivityPoint[] = dailyRes.status === 'fulfilled'
-            ? dailyRes.value.data.daily.map((row) => {
-                cumulative += row.request_count;
-                return {
-                    date:               new Date(row.stat_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                    requests:           row.request_count,
-                    entitiesAnonymized: row.entities_detected,
-                    quotaUtilizedPct:   Math.round(Math.min((cumulative / limit) * 100, 100)),
-                };
-            })
-            : [];
+        const last7 = (data.daily ?? []).slice(-7);
+        const dailyActivity: DailyActivityPoint[] = last7.map((row) => {
+            cumulative += row.request_count;
+            return {
+                date: new Date(row.stat_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                requests: row.request_count,
+                entitiesAnonymized: row.entities_detected,
+                quotaUtilizedPct: Math.round(Math.min((cumulative / limit) * 100, 100)),
+            };
+        });
 
-        const recentSessions = sessionsRes.status === 'fulfilled'
-            ? sessionsRes.value.slice(0, 5)
-            : [];
-            
+        const recentSessions = (data.recent_sessions ?? []).map(mapSession);
+
         return { stats, dailyActivity, models, entities, recentSessions };
     } catch {
         return null;
     }
 }
+
+/** GET /api/v1/analytics/usage/me?days=30 + /analytics/quota/me
+ *
+ * @deprecated Use ``getDashboardSummary()`` which returns all of this in one
+ *   call.  This function is kept for backward-compat with page components
+ *   that have not yet been migrated to the consolidated endpoint.
+ */
+export async function getUserDashboardStats(): Promise<DashboardStats> {
+    const summary = await getDashboardSummary();
+    if (summary) return summary.stats;
+
+    // Last-resort fallback (offline / backend error)
+    return {
+        totalRequestsThisMonth: 0, totalSessions: 0, entitiesAnonymized: 0,
+        quotaRemaining: 0, quotaTotal: 0, avgEntitiesPerRequest: 0,
+        percentageUsed: 0, planName: 'Free', periodEndsAt: '',
+    };
+}
+
+/**
+ * Derive the last N days of activity from the already-fetched dashboard
+ * summary instead of making a second call to /analytics/usage/me.
+ *
+ * @deprecated Consume ``getDashboardSummary().dailyActivity`` directly.
+ */
+export async function getDailyActivity(days = 7): Promise<DailyActivityPoint[]> {
+    const summary = await getDashboardSummary();
+    if (!summary) return [];
+    // getDashboardSummary already slices the last 7 days — return as-is when
+    // the caller requests ≤7, otherwise fall back to a direct API call.
+    if (days <= 7) return summary.dailyActivity;
+
+    // Extended range: fetch from the full 30-day array embedded in the summary
+    try {
+        const { data } = await api.get<BUsageMe>(`/analytics/usage/me?days=${days}`);
+        const quota = await api.get<BQuota>('/analytics/quota/me').catch(() => null);
+        const limit = quota?.data.monthly_requests ?? 1;
+        let cumulative = 0;
+        return data.daily.map((row) => {
+            cumulative += row.request_count;
+            return {
+                date: new Date(row.stat_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+                requests: row.request_count,
+                entitiesAnonymized: row.entities_detected,
+                quotaUtilizedPct: Math.round(Math.min((cumulative / limit) * 100, 100)),
+            };
+        });
+    } catch {
+        return summary.dailyActivity;
+    }
+}
+
+/**
+ * @deprecated Consume ``getDashboardSummary().models`` directly.
+ */
+export async function getModelUsageBreakdown(): Promise<ModelUsagePoint[]> {
+    const summary = await getDashboardSummary();
+    return summary?.models ?? [];
+}
+
+/**
+ * @deprecated Consume ``getDashboardSummary().entities`` directly.
+ */
+export async function getEntityTypeBreakdown(): Promise<EntityTypePoint[]> {
+    const summary = await getDashboardSummary();
+    return summary?.entities ?? [];
+}
+

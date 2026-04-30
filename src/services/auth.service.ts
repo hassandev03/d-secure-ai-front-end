@@ -147,22 +147,112 @@ export async function setup2FA(): Promise<{ secret: string; provisioningUri: str
 }
 
 /**
- * GET /api/v1/users/me
- * Called on page refresh to rehydrate the Zustand store.
+ * GET /api/v1/users/me — lightweight fallback for the auth guard.
+ *
+ * Prefer ``getCurrentUserSummary()`` for layout hydration.  This function
+ * is kept for narrow use-cases (e.g. post-login token validation) where the
+ * full summary is not needed or the summary endpoint is unavailable.
+ *
+ * In-flight deduplication: concurrent callers share one network round-trip.
  */
+let _mePromise: Promise<User | null> | null = null;
+
 export async function getCurrentUser(): Promise<User | null> {
     const token =
         typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
     if (!token) return null;
 
+    // Prefer the summary endpoint — it returns user + subscription + quota
+    // in one call and is no slower than the plain /users/me endpoint.
+    const summary = await getCurrentUserSummary();
+    if (summary) {
+        // Map the nested user object to the frontend User type
+        const u = summary.user;
+        return {
+            id:             u.user_id,
+            name:           u.name,
+            email:          u.email,
+            role:           (u.role as User['role']) ?? 'PROFESSIONAL',
+            status:         (u.status as User['status']) ?? 'ACTIVE',
+            orgId:          u.org_id ?? undefined,
+            isFirstLogin:   u.is_first_login,
+            isTwoFAEnabled: false,
+        } as User;
+    }
+
+    // Fallback: plain /users/me — deduplicated via module-level promise
+    if (_mePromise) return _mePromise;
+    _mePromise = _fetchMe(token).finally(() => { _mePromise = null; });
+    return _mePromise;
+}
+
+async function _fetchMe(token: string): Promise<User | null> {
     try {
         const { data } = await api.get<BackendUserRead>('/users/me', {
             // Prevent the global 401 interceptor from redirecting to login
-            // during this silent rehydration call. If the token is expired,
-            // we simply return null and let the UI stay on the current page.
+            // during this silent rehydration call.
             headers: { 'X-Skip-Auth-Redirect': 'true' },
         });
         return mapUser(data);
+    } catch {
+        return null;
+    }
+}
+
+
+// ── User summary (layout hydration) ────────────────────────────────────────
+
+export interface UserSummary {
+    user: {
+        user_id: string;
+        name: string;
+        email: string;
+        role: string;
+        status: string;
+        org_id: string | null;
+        is_first_login: boolean;
+        subscriptionTier?: string;
+    };
+    subscription: {
+        subscription_id: string;
+        plan_id: string;
+        plan_key: string;
+        status: string;
+        current_period_start: string;
+        current_period_end: string;
+        billing_cycle: string;
+    } | null;
+    quota: {
+        plan_name: string;
+        plan_key: string;
+        monthly_requests: number;
+        requests_used: number;
+        requests_remaining: number;
+        percentage_used: number;
+        period_ends_at: string;
+    } | null;
+}
+
+let _summaryPromise: Promise<UserSummary | null> | null = null;
+
+/** GET /api/v1/users/me/summary — single-call user + sub + quota for layout hydration */
+export async function getCurrentUserSummary(): Promise<UserSummary | null> {
+    const token =
+        typeof window !== 'undefined' ? localStorage.getItem('auth_token') : null;
+    if (!token) return null;
+
+    if (_summaryPromise) return _summaryPromise;
+
+    _summaryPromise = _fetchSummary(token).finally(() => { _summaryPromise = null; });
+    return _summaryPromise;
+}
+
+async function _fetchSummary(token: string): Promise<UserSummary | null> {
+    try {
+        const { data } = await api.get<UserSummary>('/users/me/summary', {
+            headers: { 'X-Skip-Auth-Redirect': 'true' },
+        });
+        return data;
     } catch {
         return null;
     }

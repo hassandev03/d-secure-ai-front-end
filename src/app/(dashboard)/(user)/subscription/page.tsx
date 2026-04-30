@@ -16,9 +16,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { useAuthStore } from "@/store/auth.store";
 import {
     getSubscriptionPlans, getPaymentMethods, upgradePlan, getCurrentSubscription, downgradePlan,
+    getSubscriptionSummary,
     type SubscriptionPlanDisplay, type PaymentMethod, type BSub,
 } from "@/services/subscription.service";
-import { getUserDashboardStats, type DashboardStats } from "@/services/dashboard.service";
 
 function formatCardNumber(value: string): string {
     const digits = value.replace(/\D/g, "").slice(0, 16);
@@ -89,7 +89,7 @@ export default function SubscriptionPage() {
     const [savedCards, setSavedCards] = useState<PaymentMethod[]>([]);
     const [useNewCard, setUseNewCard] = useState(false);
     const [activeSub, setActiveSub] = useState<BSub | null>(null);
-    const [quotaStats, setQuotaStats] = useState<DashboardStats | null>(null);
+    const [quotaStats, setQuotaStats] = useState<{ percentageUsed: number; planName: string; periodEndsAt: string } | null>(null);
 
     const [cardName,      setCardName]      = useState(user?.name || "");
     const [newCardNumber, setNewCardNumber] = useState("");
@@ -102,50 +102,70 @@ export default function SubscriptionPage() {
     useEffect(() => {
         setIsLoadingPlans(true);
         Promise.all([
-            getSubscriptionPlans(),
+            getSubscriptionSummary(),
             getPaymentMethods(),
-            getCurrentSubscription(),
-            getUserDashboardStats(),
-        ]).then(([plans, cards, sub, stats]) => {
-            setPlansData(plans);
-            setSavedCards(cards);
-            setActiveSub(sub);
-            setQuotaStats(stats);
+        ]).then(([summary, cards]) => {
+            if (summary) {
+                // Derive SubscriptionPlanDisplay[] from the plans in the summary
+                const curated = Object.fromEntries(_fallbackPlans().map((p) => [p.key, p]));
+                const individualPlans = summary.plans.filter((p) => p.plan_type === 'INDIVIDUAL');
+                const displayPlans: SubscriptionPlanDisplay[] = (individualPlans.length === 0 ? _fallbackPlans() : individualPlans.map((p) => {
+                    const key = p.plan_key.toLowerCase();
+                    const cur = curated[key];
+                    return {
+                        key,
+                        name:         p.name,
+                        price:        p.monthly_price,
+                        creditBudget: cur?.creditBudget ?? `$${p.monthly_price}/mo`,
+                        features: cur?.features ?? [
+                            ...(p.features ?? []).map((t) => ({ text: t, included: true })),
+                            ...(p.excluded_features ?? []).map((t) => ({ text: t, included: false })),
+                        ],
+                        planId: p.plan_id,
+                    };
+                }));
 
-            // ── Resolve the current plan key with a 3-step fallback ────────
-            if (sub) {
-                // 1. Match by plan_key string (direct, most reliable)
-                let matchedPlan = sub.plan_key
-                    ? plans.find((p) => p.key === sub.plan_key)
-                    : null;
-                // 2. Match by plan UUID
-                if (!matchedPlan) {
-                    matchedPlan = plans.find(
-                        (p) => p.planId && sub.plan_id && p.planId.toLowerCase() === sub.plan_id.toLowerCase()
-                    ) ?? null;
-                }
-                // 3. Match by plan name from quota stats (case-insensitive)
-                if (!matchedPlan && stats?.planName) {
-                    const normalizedStatName = stats.planName.toLowerCase().replace(/\s*\(default\)/i, '').trim();
-                    matchedPlan = plans.find(
-                        (p) =>
-                            p.name.toLowerCase() === normalizedStatName ||
-                            p.key.toLowerCase() === normalizedStatName
-                    ) ?? null;
-                }
+                setPlansData(displayPlans);
+                setActiveSub(summary.subscription);
 
-                if (matchedPlan) {
-                    setCurrentPlanKey(matchedPlan.key);
-                    updateUser({ subscriptionTier: matchedPlan.key.toUpperCase() as any });
+                // Derive plan key from subscription
+                if (summary.subscription) {
+                    let matchedPlan = summary.subscription.plan_key
+                        ? displayPlans.find((p) => p.key === summary.subscription!.plan_key)
+                        : null;
+                    if (!matchedPlan && summary.subscription.plan_id) {
+                        matchedPlan = displayPlans.find(
+                            (p) => p.planId && p.planId.toLowerCase() === summary.subscription!.plan_id.toLowerCase()
+                        ) ?? null;
+                    }
+                    if (!matchedPlan && summary.quota?.plan_name) {
+                        const normalizedStatName = summary.quota.plan_name.toLowerCase().replace(/\s*\(default\)/i, '').trim();
+                        matchedPlan = displayPlans.find(
+                            (p) => p.name.toLowerCase() === normalizedStatName || p.key.toLowerCase() === normalizedStatName
+                        ) ?? null;
+                    }
+                    if (matchedPlan) {
+                        setCurrentPlanKey(matchedPlan.key);
+                        updateUser({ subscriptionTier: matchedPlan.key.toUpperCase() as any });
+                    }
                 } else {
-                    // Sub exists but plan not found in list — keep 'free' as safe default
                     setCurrentPlanKey('free');
+                    updateUser({ subscriptionTier: 'FREE' });
+                }
+
+                // Feed quota info for the QuotaGauge
+                if (summary.quota) {
+                    setQuotaStats({
+                        percentageUsed: summary.quota.percentage_used,
+                        planName: summary.quota.plan_name,
+                        periodEndsAt: summary.quota.period_ends_at,
+                    });
                 }
             } else {
-                // No active subscription → Free plan
-                setCurrentPlanKey('free');
-                updateUser({ subscriptionTier: 'FREE' });
+                // Fallback: load plans the old way
+                getSubscriptionPlans().then(setPlansData);
             }
+            setSavedCards(cards);
             setIsLoadingPlans(false);
         });
     }, []);

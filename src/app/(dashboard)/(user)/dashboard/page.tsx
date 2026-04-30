@@ -15,10 +15,9 @@ import {
 import { useAuthStore } from "@/store/auth.store";
 
 import {
-    getDashboardSummary,
+    getDashboardSummary, type ChatSessionSummary,
     type DashboardStats, type DailyActivityPoint, type ModelUsagePoint, type EntityTypePoint, type DashboardSummaryResponse
 } from "@/services/dashboard.service";
-import { type ChatSessionSummary } from "@/services/chat.service";
 
 export default function UserDashboard() {
     const { user } = useAuthStore();

@@ -61,6 +61,36 @@ export interface BSub {
     cancelled_at: string | null;
 }
 
+// ── Single-call subscription summary ────────────────────────────────────────
+
+export interface SubscriptionSummary {
+    plans: BPlan[];
+    subscription: BSub | null;
+    subscription_plan_key: string | null;
+    quota: {
+        plan_name: string;
+        monthly_requests: number;
+        requests_used: number;
+        requests_remaining: number;
+        percentage_used: number;
+        period_ends_at: string;
+    };
+    usage: {
+        total_requests: number;
+        total_entities_detected: number;
+    };
+}
+
+/** GET /api/v1/subscriptions/summary — all subscription data in ONE call */
+export async function getSubscriptionSummary(): Promise<SubscriptionSummary | null> {
+    try {
+        const { data } = await api.get<SubscriptionSummary>('/subscriptions/summary');
+        return data;
+    } catch {
+        return null;
+    }
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** GET /api/v1/subscriptions/plans */
@@ -113,13 +143,23 @@ export async function getCurrentSubscription(): Promise<BSub | null> {
     }
 }
 
-/** POST /api/v1/subscriptions/subscribe — cancel any existing sub first, then subscribe */
-export async function upgradePlan(planKey: string): Promise<{ success: boolean }> {
-    // Cancel any existing active subscription before subscribing to the new plan.
-    // The backend returns 400 if you try to subscribe while one is already active.
-    const existingSub = await getCurrentSubscription();
-    if (existingSub) {
-        await api.post(`/subscriptions/${existingSub.subscription_id}/cancel`, {
+/** POST /api/v1/subscriptions/subscribe — cancel any existing sub first, then subscribe
+ * @param planKey       Target plan key (e.g. "pro").
+ * @param existingSubId If the caller already has the current subscription ID, pass it
+ *                      here to skip the redundant GET /subscriptions/me call.
+ */
+export async function upgradePlan(
+    planKey: string,
+    existingSubId?: string,
+): Promise<{ success: boolean }> {
+    // Cancel the current sub before subscribing to the new plan.
+    // If existingSubId is provided, use it directly to avoid a redundant GET.
+    const subIdToCancel =
+        existingSubId ??
+        (await getCurrentSubscription())?.subscription_id;
+
+    if (subIdToCancel) {
+        await api.post(`/subscriptions/${subIdToCancel}/cancel`, {
             reason: `Upgrading to ${planKey}`,
         });
     }
@@ -130,12 +170,17 @@ export async function upgradePlan(planKey: string): Promise<{ success: boolean }
     return { success: true };
 }
 
-/** POST /api/v1/subscriptions/{id}/cancel, then POST /subscribe to target plan */
-export async function downgradePlan(planKey: string): Promise<{ success: boolean }> {
-    // Cancel current subscription first
-    const sub = await getCurrentSubscription();
-    if (!sub) throw new Error('No active subscription to cancel');
-    await api.post(`/subscriptions/${sub.subscription_id}/cancel`, {
+/** POST /api/v1/subscriptions/{id}/cancel, then POST /subscribe to target plan
+ * @param planKey       Target (lower) plan key.
+ * @param existingSubId If the caller already has the subscription ID, pass it here.
+ */
+export async function downgradePlan(
+    planKey: string,
+    existingSubId?: string,
+): Promise<{ success: boolean }> {
+    const subId = existingSubId ?? (await getCurrentSubscription())?.subscription_id;
+    if (!subId) throw new Error('No active subscription to cancel');
+    await api.post(`/subscriptions/${subId}/cancel`, {
         reason: `Downgrading to ${planKey}`,
     });
     // Re-subscribe to the target (lower) plan
@@ -177,7 +222,7 @@ export async function deletePaymentMethod(
 
 // ── Fallback plans (when no plans seeded in DB) ───────────────────────────────
 
-function _fallbackPlans(): SubscriptionPlanDisplay[] {
+export function _fallbackPlans(): SubscriptionPlanDisplay[] {
     return [
         {
             key: 'free', name: SUBSCRIPTION_PLANS.FREE.name,
