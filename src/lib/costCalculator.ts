@@ -46,19 +46,17 @@ export const PLATFORM_CONFIG = {
 
 /** Per-1M-token pricing for each model (input, output). USD. */
 export const MODEL_PRICING: Record<string, { input: number; output: number; displayName: string }> = {
-    // OpenAI
-    'gpt-5-1':        { input: 2.50,  output: 10.00, displayName: 'GPT-5.1'          },
-    'gpt-4o':         { input: 2.50,  output: 10.00, displayName: 'GPT-4o'           },
-    'gpt-4o-mini':    { input: 0.15,  output:  0.60, displayName: 'GPT-4o-mini'      },
+    // OpenAI (Azure)
+    'gpt-4.1':          { input: 2.00,  output:  8.00, displayName: 'GPT-4.1'           },
 
-    // Anthropic
-    'claude-4-6-sonnet': { input: 3.00, output: 15.00, displayName: 'Claude 4.6 Sonnet' },
-    'claude-4-6-opus':   { input: 15.00, output: 75.00, displayName: 'Claude 4.6 Opus'  },
-    'claude-4-5-haiku':  { input: 0.80, output:  4.00, displayName: 'Claude 4.5 Haiku' },
+    // Anthropic (Claude 4.x family)
+    'claude-opus-4-5':   { input: 15.00, output: 75.00, displayName: 'Claude Opus'  },
+    'claude-sonnet-4-5': { input: 3.00,  output: 15.00, displayName: 'Claude Sonnet' },
+    'claude-haiku-4-5':  { input: 0.25,  output:  1.25, displayName: 'Claude Haiku'  },
 
-    // Google
-    'gemini-3-1-pro':   { input: 1.25, output: 5.00, displayName: 'Gemini 3.1 Pro'   },
-    'gemini-3-1-flash':  { input: 0.075, output: 0.30, displayName: 'Gemini 3.1 Flash' },
+    // Google (Gemini)
+    'gemini-3.1-flash-preview': { input: 0.1,   output: 0.40, displayName: 'Gemini 3.1 Flash' },
+    'gemini-2.5-flash':         { input: 0.075, output: 0.30, displayName: 'Gemini 2.5 Flash' },
 };
 
 // ─── Subscription plan budgets ────────────────────────────────────────────────
@@ -100,7 +98,7 @@ export function calculateLLMCost(
     inputWords: number,
     outputWords: number,
 ): LLMCostResult {
-    const pricing = MODEL_PRICING[modelKey] ?? MODEL_PRICING['gpt-4o'];
+    const pricing = MODEL_PRICING[modelKey] ?? MODEL_PRICING['gpt-4.1'];
 
     const inputTokens  = wordsToTokens(inputWords);
     const outputTokens = wordsToTokens(outputWords);
@@ -143,9 +141,8 @@ export interface InteractionParams {
  * Mirrors CostCalculator.calculate_interaction_cost().
  *
  * @example
- * // 200-word input, 500-word output on GPT-4o:
  * // → $0.000665 + $0.006650 + $0.000400 + $0.001000 = $0.008715
- * calculateInteractionCost({ modelKey:'gpt-4o', inputWords:200, outputWords:500 })
+ * calculateInteractionCost({ modelKey:'gpt-4.1', inputWords:200, outputWords:500 })
  */
 export function calculateInteractionCost(params: InteractionParams): CostBreakdown {
     const {

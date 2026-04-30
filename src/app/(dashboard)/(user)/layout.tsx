@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import {
     LayoutDashboard,
     MessageSquare,
@@ -24,13 +24,13 @@ export default function UserLayout({
     const { user, setUser, updateUser, isAuthenticated } = useAuthStore();
     const [mounted, setMounted] = useState(false);
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-    // Track whether we've finished the async subscription sync so the
-    // sidebar doesn't flicker or permanently hide the Context tab.
     const [subscriptionReady, setSubscriptionReady] = useState(false);
+    // Prevents subscription sync from running more than once per mount.
+    const hasSynced = useRef(false);
 
     /**
      * Fetch subscription and resolve the user's plan key.
-     * Returns the resolved plan key (lowercase) or null.
+     * Only relevant for PROFESSIONAL users.
      */
     const syncSubscription = async (role: string | undefined) => {
         if (role !== 'PROFESSIONAL') {
@@ -43,11 +43,9 @@ export default function UserLayout({
                 getSubscriptionPlans(),
             ]);
             if (sub) {
-                // Primary match: plan_key string (most reliable)
                 let matchedPlan = sub.plan_key
                     ? plans.find((p) => p.key === sub.plan_key)
                     : null;
-                // Secondary match: plan UUID
                 if (!matchedPlan) {
                     matchedPlan = plans.find(
                         (p) => p.planId && sub.plan_id && p.planId.toLowerCase() === sub.plan_id.toLowerCase()
@@ -69,6 +67,11 @@ export default function UserLayout({
     useEffect(() => {
         setMounted(true);
 
+        // Guard: only run once per mount to avoid feedback loops caused by
+        // setUser() triggering isAuthenticated changes → re-running this effect.
+        if (hasSynced.current) return;
+        hasSynced.current = true;
+
         if (!isAuthenticated) {
             getCurrentUser().then(async (fetchedUser) => {
                 const storedToken = localStorage.getItem('auth_token');
@@ -83,7 +86,7 @@ export default function UserLayout({
             syncSubscription(user?.role);
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [isAuthenticated, user?.role]);
+    }, []);
 
     const isProfessional = user?.role === 'PROFESSIONAL';
     // Only evaluate the context tab AFTER subscription data has been loaded

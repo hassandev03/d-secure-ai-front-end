@@ -4,8 +4,6 @@ export type LLMProvider = 'openai' | 'anthropic' | 'google' | 'azure';
 export type LLMModel =
     // Azure OpenAI deployments
     | 'gpt-4.1'
-    | 'gpt-4o'
-    | 'gpt-4o-mini'
     // Anthropic Claude (4.x family)
     | 'claude-opus-4-5'
     | 'claude-sonnet-4-5'
@@ -18,7 +16,7 @@ export type LLMModel =
     // Google Gemini Models
     | 'gemini-3-flash-preview'
     | 'gemini-3.1-flash-lite-preview'
-    | 'gemini-3.1-pro-preview'
+    | 'gemini-3.1-flash-preview'
     | 'gemini-2.5-flash-lite'
     | 'gemini-2.5-flash';
 

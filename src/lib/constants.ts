@@ -4,6 +4,17 @@ export const APP_NAME = 'D-SecureAI';
 export const APP_TAGLINE = 'Secure AI. Seamlessly.';
 
 /**
+ * Free-tier model IDs — only Gemini Flash variants.
+ * Must stay in sync with backend _FREE_TIER_MODELS in policies/service.py.
+ */
+export const FREE_MODELS: Set<string> = new Set([
+    'gemini-2.5-flash',
+    'gemini-2.5-flash-lite',
+    'gemini-3-flash-preview',
+    'gemini-3.1-flash-lite-preview',
+]);
+
+/**
  * MODELS catalogue — only models with working API keys are listed.
  *
  * Note: GPT models are served through Azure OpenAI internally, but
@@ -11,61 +22,17 @@ export const APP_TAGLINE = 'Secure AI. Seamlessly.';
  * The backend `_infer_provider()` handles routing transparently.
  */
 export const MODELS: ModelOption[] = [
-    // ── OpenAI / GPT models (routed through Azure internally) ────────────────
+    // ── Google Gemini (free-tier available) ──────────────────────────────────
     {
-        id: 'gpt-4.1',
-        name: 'GPT-4.1',
-        provider: 'openai',
-        providerName: 'OpenAI',
+        id: 'gemini-2.5-flash',
+        name: 'Gemini 2.5 Flash',
+        provider: 'google',
+        providerName: 'Google',
         isAvailable: true,
     },
-    {
-        id: 'gpt-4o',
-        name: 'GPT-4o',
-        provider: 'openai',
-        providerName: 'OpenAI',
-        isAvailable: true,
-    },
-    // ── Anthropic Claude (free tier) ─────────────────────────────────────────
-    {
-        id: 'claude-haiku-4-5',
-        name: 'Claude Haiku',
-        provider: 'anthropic',
-        providerName: 'Anthropic',
-        isAvailable: true,
-    },
-    {
-        id: 'claude-sonnet-4-5',
-        name: 'Claude Sonnet',
-        provider: 'anthropic',
-        providerName: 'Anthropic',
-        isAvailable: true,
-    },
-    {
-        id: 'claude-opus-4-5',
-        name: 'Claude Opus',
-        provider: 'anthropic',
-        providerName: 'Anthropic',
-        isAvailable: true,
-    },
-    // ── Google Gemini ────────────────────────────────────────────────────────
     {
         id: 'gemini-3-flash-preview',
         name: 'Gemini 3 Flash',
-        provider: 'google',
-        providerName: 'Google',
-        isAvailable: true,
-    },
-    {
-        id: 'gemini-3.1-flash-lite-preview',
-        name: 'Gemini 3.1 Flash Lite',
-        provider: 'google',
-        providerName: 'Google',
-        isAvailable: true,
-    },
-    {
-        id: 'gemini-3.1-pro-preview',
-        name: 'Gemini 3.1 Pro',
         provider: 'google',
         providerName: 'Google',
         isAvailable: true,
@@ -78,11 +45,59 @@ export const MODELS: ModelOption[] = [
         isAvailable: true,
     },
     {
-        id: 'gemini-2.5-flash',
-        name: 'Gemini 2.5 Flash',
+        id: 'gemini-3.1-flash-lite-preview',
+        name: 'Gemini 3.1 Flash Lite',
         provider: 'google',
         providerName: 'Google',
         isAvailable: true,
+    },
+    // ── Google Gemini (Pro+ only) ────────────────────────────────────────────
+    {
+        id: 'gemini-3.1-flash-preview',
+        name: 'Gemini 3.1 Flash',
+        provider: 'google',
+        providerName: 'Google',
+        isAvailable: true,
+        isLocked: true,
+        lockReason: 'Requires Pro plan',
+    },
+    // ── OpenAI / GPT models (Pro+ only, routed through Azure internally) ────
+    {
+        id: 'gpt-4.1',
+        name: 'GPT-4.1',
+        provider: 'openai',
+        providerName: 'OpenAI',
+        isAvailable: true,
+        isLocked: true,
+        lockReason: 'Requires Pro plan',
+    },
+    // ── Anthropic Claude (Pro+ only) ─────────────────────────────────────────
+    {
+        id: 'claude-haiku-4-5',
+        name: 'Claude Haiku',
+        provider: 'anthropic',
+        providerName: 'Anthropic',
+        isAvailable: true,
+        isLocked: true,
+        lockReason: 'Requires Pro plan',
+    },
+    {
+        id: 'claude-sonnet-4-5',
+        name: 'Claude Sonnet',
+        provider: 'anthropic',
+        providerName: 'Anthropic',
+        isAvailable: true,
+        isLocked: true,
+        lockReason: 'Requires Pro plan',
+    },
+    {
+        id: 'claude-opus-4-5',
+        name: 'Claude Opus',
+        provider: 'anthropic',
+        providerName: 'Anthropic',
+        isAvailable: true,
+        isLocked: true,
+        lockReason: 'Requires Pro plan',
     },
 ];
 
@@ -111,7 +126,7 @@ export const SUBSCRIPTION_PLANS = {
             '3 chat sessions/day',
             'Standard support',
             '7-day chat history',
-            'GPT-4o-mini & Gemini Flash only',
+            'Gemini Flash models only',
         ],
         excluded: [
             'No file uploads',
@@ -166,5 +181,5 @@ export const PORTAL_ROUTES = {
     USER: { prefix: '', label: 'User' },
 } as const;
 
-export const DEFAULT_MODEL: LLMModel = 'gpt-4.1';
+export const DEFAULT_MODEL: LLMModel = 'gemini-2.5-flash';
 

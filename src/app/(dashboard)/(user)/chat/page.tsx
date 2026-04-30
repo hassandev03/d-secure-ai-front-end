@@ -10,7 +10,7 @@ import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { MODELS, DEFAULT_MODEL } from "@/lib/constants";
+import { MODELS, DEFAULT_MODEL, FREE_MODELS } from "@/lib/constants";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
 import type { LLMModel } from "@/types/chat.types";
@@ -75,6 +75,7 @@ function ChatInterface() {
 
     // Error banner state — cleared on each new send attempt
     type ChatError =
+        | { kind: 'unauthorized';  message: string }
         | { kind: 'quota';        message: string }
         | { kind: 'subscription'; message: string }
         | { kind: 'policy';       message: string }
@@ -174,6 +175,8 @@ function ChatInterface() {
                 setChatError({ kind: 'subscription', message: err.detail });
             } else if (err instanceof PolicyViolationError) {
                 setChatError({ kind: 'policy', message: err.detail });
+            } else if (err instanceof Error && err.message.includes('session has expired')) {
+                setChatError({ kind: 'unauthorized', message: err.message });
             } else {
                 const msg = err instanceof Error ? err.message : 'Something went wrong. Please try again.';
                 setChatError({ kind: 'generic', message: msg });
@@ -263,14 +266,19 @@ function ChatInterface() {
                             <SelectValue>{selectedModel?.name || model}</SelectValue>
                         </SelectTrigger>
                         <SelectContent>
-                            {MODELS.map((m) => (
-                                <SelectItem key={m.id} value={m.id}>
-                                    <div className="flex items-center gap-2">
-                                        <span>{m.name}</span>
-                                        <span className="text-[10px] text-muted-foreground">{m.providerName}</span>
-                                    </div>
-                                </SelectItem>
-                            ))}
+                            {MODELS.map((m) => {
+                                // Pro/Max users can use all models; free users restricted to FREE_MODELS
+                                const isModelLocked = !isPaidTier && m.isLocked && !FREE_MODELS.has(m.id);
+                                return (
+                                    <SelectItem key={m.id} value={m.id} disabled={isModelLocked}>
+                                        <div className="flex items-center gap-2">
+                                            <span className={isModelLocked ? 'opacity-50' : ''}>{m.name}</span>
+                                            <span className="text-[10px] text-muted-foreground">{m.providerName}</span>
+                                            {isModelLocked && <Lock className="h-3 w-3 text-muted-foreground" />}
+                                        </div>
+                                    </SelectItem>
+                                );
+                            })}
                         </SelectContent>
                     </Select>
 
@@ -412,23 +420,34 @@ function ChatInterface() {
             {chatError && (
                 <div className={cn(
                     "mt-3 mb-1 rounded-xl border px-4 py-3 flex items-start gap-3 text-sm shrink-0",
+                    chatError.kind === 'unauthorized' && "border-red-200 bg-red-50 text-red-900",
                     chatError.kind === 'quota'        && "border-amber-200 bg-amber-50 text-amber-900",
                     chatError.kind === 'subscription' && "border-red-200 bg-red-50 text-red-900",
                     chatError.kind === 'policy'       && "border-purple-200 bg-purple-50 text-purple-900",
                     chatError.kind === 'generic'      && "border-red-200 bg-red-50 text-red-900",
                 )}>
+                    {chatError.kind === 'unauthorized' && <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-red-600" />}
                     {chatError.kind === 'quota' && <CreditCard className="h-4 w-4 mt-0.5 shrink-0 text-amber-600" />}
                     {chatError.kind === 'subscription' && <CreditCard className="h-4 w-4 mt-0.5 shrink-0 text-red-600" />}
                     {chatError.kind === 'policy' && <Lock className="h-4 w-4 mt-0.5 shrink-0 text-purple-600" />}
                     {chatError.kind === 'generic' && <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0 text-red-600" />}
                     <div className="flex-1 min-w-0">
                         <p className="font-semibold">
+                            {chatError.kind === 'unauthorized' && 'Session Expired'}
                             {chatError.kind === 'quota'        && 'Credit Budget Exhausted'}
                             {chatError.kind === 'subscription' && 'Subscription Required'}
                             {chatError.kind === 'policy'       && 'Action Blocked by Policy'}
                             {chatError.kind === 'generic'      && 'Request Failed'}
                         </p>
                         <p className="text-[12px] mt-0.5 opacity-80">{chatError.message}</p>
+                        {chatError.kind === 'unauthorized' && (
+                            <Link
+                                href="/"
+                                className="mt-2 inline-flex items-center gap-1.5 text-[12px] font-semibold underline underline-offset-2"
+                            >
+                                Log in again <ExternalLink className="h-3 w-3" />
+                            </Link>
+                        )}
                         {(chatError.kind === 'quota' || chatError.kind === 'subscription') && (
                             <Link
                                 href="/subscription"

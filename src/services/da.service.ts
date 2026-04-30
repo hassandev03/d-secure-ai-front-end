@@ -175,22 +175,22 @@ function getDeptId(): string | undefined {
     return useAuthStore.getState().user?.deptId ?? undefined;
 }
 
-// Local fallbacks for non-existent endpoints
-const _localEmpQuotaRequests: EmpQuotaRequest[] = [];
-const _localOrgQuotaHistory: OrgQuotaRequest[] = [];
-const _localSystemPrompts: DASystemPrompt[] = [];
+// PHASE2_PLACEHOLDER — Local fallbacks for backend endpoints not yet implemented
+const _localEmpQuotaRequests: EmpQuotaRequest[] = [];   // TODO: GET /dept/{dept_id}/quota-requests
+const _localOrgQuotaHistory: OrgQuotaRequest[] = [];    // TODO: GET /dept/{dept_id}/org-quota-history
+const _localSystemPrompts: DASystemPrompt[] = [];       // TODO: GET /chat/system-prompts/dept
 
 // ─── Org Roles (no backend endpoint yet — use static list) ─────────────────────
 
 const ROLE_BUDGETS: Record<string, number> = {
-    'role-1': estimateMonthlyCreditsFixed({ queriesPerDay: 8, avgInputWords: 300, avgOutputWords: 500, modelKey: 'gpt-4o',            fileQueryPct: 0.30, avgFileWords: 800, ragPct: 0.10 }),
-    'role-2': estimateMonthlyCreditsFixed({ queriesPerDay: 6, avgInputWords: 250, avgOutputWords: 400, modelKey: 'gpt-4o',            fileQueryPct: 0.20, avgFileWords: 600, ragPct: 0.10 }),
-    'role-3': estimateMonthlyCreditsFixed({ queriesPerDay: 5, avgInputWords: 200, avgOutputWords: 350, modelKey: 'claude-4-5-haiku',  fileQueryPct: 0.15, avgFileWords: 400, ragPct: 0.05 }),
-    'role-4': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'gemini-3-1-pro',   fileQueryPct: 0.10, avgFileWords: 300, ragPct: 0.05 }),
-    'role-5': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 150, avgOutputWords: 250, modelKey: 'gpt-4o-mini',      fileQueryPct: 0.05, avgFileWords: 200, ragPct: 0.00 }),
-    'role-6': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'claude-4-6-sonnet', fileQueryPct: 0.20, avgFileWords: 500, ragPct: 0.20 }),
-    'role-7': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 150, avgOutputWords: 200, modelKey: 'gpt-4o-mini',      fileQueryPct: 0.10, avgFileWords: 300, ragPct: 0.10 }),
-    'role-8': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 100, avgOutputWords: 200, modelKey: 'gemini-3-1-flash', fileQueryPct: 0.05, avgFileWords: 200, ragPct: 0.00 }),
+    'role-1': estimateMonthlyCreditsFixed({ queriesPerDay: 8, avgInputWords: 300, avgOutputWords: 500, modelKey: 'gpt-4.1',          fileQueryPct: 0.30, avgFileWords: 800, ragPct: 0.10 }),
+    'role-2': estimateMonthlyCreditsFixed({ queriesPerDay: 6, avgInputWords: 250, avgOutputWords: 400, modelKey: 'gpt-4.1',          fileQueryPct: 0.20, avgFileWords: 600, ragPct: 0.10 }),
+    'role-3': estimateMonthlyCreditsFixed({ queriesPerDay: 5, avgInputWords: 200, avgOutputWords: 350, modelKey: 'claude-haiku-4-5',  fileQueryPct: 0.15, avgFileWords: 400, ragPct: 0.05 }),
+    'role-4': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'gemini-3.1-flash-preview', fileQueryPct: 0.10, avgFileWords: 300, ragPct: 0.05 }),
+    'role-5': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 150, avgOutputWords: 250, modelKey: 'gemini-2.5-flash',   fileQueryPct: 0.05, avgFileWords: 200, ragPct: 0.00 }),
+    'role-6': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'claude-sonnet-4-5', fileQueryPct: 0.20, avgFileWords: 500, ragPct: 0.20 }),
+    'role-7': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 150, avgOutputWords: 200, modelKey: 'gemini-2.5-flash',   fileQueryPct: 0.10, avgFileWords: 300, ragPct: 0.10 }),
+    'role-8': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 100, avgOutputWords: 200, modelKey: 'gemini-2.5-flash',   fileQueryPct: 0.05, avgFileWords: 200, ragPct: 0.00 }),
 };
 
 const STATIC_ROLES: OrgRole[] = [

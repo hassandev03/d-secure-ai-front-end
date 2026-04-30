@@ -1,15 +1,13 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Save, Loader2, Eye, EyeOff, Key, Database, ShieldCheck, Mail, Globe, CheckCircle2, XCircle, Zap } from "lucide-react";
+import { Loader2, Key, Database, ShieldCheck, Mail, Globe, CheckCircle2, XCircle, Zap, AlertTriangle } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Switch } from "@/components/ui/switch";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,7 +20,7 @@ type ProviderConfig = {
     base_url: string | null;
     is_enabled: boolean;
     enabled_models: string[] | null;
-    updated_at: string;
+    updated_at: string | null;
 };
 
 type TestResult = "idle" | "loading" | "success" | "error";
@@ -30,9 +28,6 @@ type TestResult = "idle" | "loading" | "success" | "error";
 function LLMGatewayTab() {
     const [providers, setProviders] = useState<ProviderConfig[]>([]);
     const [loading, setLoading] = useState(true);
-    const [keys, setKeys] = useState<Record<string, string>>({});
-    const [showKey, setShowKey] = useState<Record<string, boolean>>({});
-    const [saving, setSaving] = useState<Record<string, boolean>>({});
     const [testResults, setTestResults] = useState<Record<string, TestResult>>({});
 
     const API = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000/api/v1";
@@ -42,30 +37,10 @@ function LLMGatewayTab() {
             .then((r) => r.json())
             .then((data: ProviderConfig[]) => {
                 setProviders(data);
-                const initial: Record<string, string> = {};
-                data.forEach((p) => { initial[p.provider_key] = ""; });
-                setKeys(initial);
             })
             .catch(() => toast.error("Failed to load provider configs"))
             .finally(() => setLoading(false));
     }, []);
-
-    const saveKey = async (providerKey: string) => {
-        setSaving((s) => ({ ...s, [providerKey]: true }));
-        try {
-            const res = await fetch(`${API}/llm-gateway/providers/${providerKey}`, {
-                method: "PUT", credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ api_key: keys[providerKey] || undefined }),
-            });
-            if (!res.ok) throw new Error(await res.text());
-            const updated: ProviderConfig = await res.json();
-            setProviders((ps) => ps.map((p) => p.provider_key === providerKey ? updated : p));
-            setKeys((k) => ({ ...k, [providerKey]: "" }));
-            toast.success(`${updated.display_name} API key saved.`);
-        } catch { toast.error("Failed to save key."); }
-        finally { setSaving((s) => ({ ...s, [providerKey]: false })); }
-    };
 
     const testProvider = async (providerKey: string) => {
         setTestResults((r) => ({ ...r, [providerKey]: "loading" }));
@@ -82,24 +57,10 @@ function LLMGatewayTab() {
         setTimeout(() => setTestResults((r) => ({ ...r, [providerKey]: "idle" })), 5000);
     };
 
-    const toggleEnabled = async (providerKey: string, enabled: boolean) => {
-        try {
-            const res = await fetch(`${API}/llm-gateway/providers/${providerKey}`, {
-                method: "PUT", credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ is_enabled: enabled }),
-            });
-            if (!res.ok) throw new Error();
-            const updated: ProviderConfig = await res.json();
-            setProviders((ps) => ps.map((p) => p.provider_key === providerKey ? updated : p));
-            toast.success(`${updated.display_name} ${enabled ? "enabled" : "disabled"}.`);
-        } catch { toast.error("Failed to update status."); }
-    };
-
-    const PROVIDER_META: Record<string, { placeholder: string; color: string }> = {
-        openai:    { placeholder: "sk-proj-...",  color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
-        anthropic: { placeholder: "sk-ant-...",   color: "text-orange-600 bg-orange-50 border-orange-200" },
-        google:    { placeholder: "AIzaSy...",    color: "text-blue-600 bg-blue-50 border-blue-200" },
+    const PROVIDER_META: Record<string, { color: string }> = {
+        openai:    { color: "text-emerald-600 bg-emerald-50 border-emerald-200" },
+        anthropic: { color: "text-orange-600 bg-orange-50 border-orange-200" },
+        google:    { color: "text-blue-600 bg-blue-50 border-blue-200" },
     };
 
     if (loading) return (
@@ -115,13 +76,21 @@ function LLMGatewayTab() {
                     <Key className="w-5 h-5 text-brand-600" />
                     <CardTitle className="text-lg">LLM API Credentials</CardTitle>
                 </div>
-                <CardDescription>
-                    Securely manage API keys for commercial AI providers. Keys are resolved at request time — changing a key takes effect immediately without a server restart.
+                <CardDescription className="space-y-2">
+                    <p>
+                        API keys are configured exclusively via the <code className="px-1.5 py-0.5 bg-muted rounded text-xs font-mono">.env</code> file on the backend server.
+                    </p>
+                    <div className="flex items-start gap-2 mt-2 p-3 bg-amber-50 border border-amber-200 rounded-md">
+                        <AlertTriangle className="w-4 h-4 text-amber-600 mt-0.5" />
+                        <p className="text-xs text-amber-800">
+                            To add or change API keys, edit the <code className="font-mono">.env</code> file and restart the backend server. Changes cannot be made through this UI.
+                        </p>
+                    </div>
                 </CardDescription>
             </CardHeader>
-            <CardContent className="space-y-5 pt-6">
+            <CardContent className="space-y-4 pt-6">
                 {providers.map((provider) => {
-                    const meta = PROVIDER_META[provider.provider_key] ?? { placeholder: "API key…", color: "" };
+                    const meta = PROVIDER_META[provider.provider_key] ?? { color: "" };
                     const testResult = testResults[provider.provider_key] ?? "idle";
                     return (
                         <div key={provider.provider_key} className={cn(
@@ -134,51 +103,21 @@ function LLMGatewayTab() {
                                         {provider.display_name}
                                     </span>
                                     {provider.has_key
-                                        ? <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium"><CheckCircle2 className="h-3.5 w-3.5" /> Key stored</span>
+                                        ? <span className="flex items-center gap-1 text-xs text-emerald-600 font-medium"><CheckCircle2 className="h-3.5 w-3.5" /> Key configured</span>
                                         : <span className="text-xs text-muted-foreground">No key configured</span>
                                     }
                                 </div>
-                                <div className="flex items-center gap-3">
-                                    <Switch checked={provider.is_enabled} onCheckedChange={(v) => toggleEnabled(provider.provider_key, v)} />
-                                    <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs"
-                                        disabled={!provider.has_key || testResult === "loading"}
-                                        onClick={() => testProvider(provider.provider_key)}
-                                    >
-                                        {testResult === "loading" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
-                                         testResult === "success" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> :
-                                         testResult === "error"   ? <XCircle className="h-3.5 w-3.5 text-red-500" /> :
-                                         <Zap className="h-3.5 w-3.5" />}
-                                        Test Connection
-                                    </Button>
-                                </div>
-                            </div>
-                            <div className="flex gap-2">
-                                <div className="relative flex-1">
-                                    <Input
-                                        type={showKey[provider.provider_key] ? "text" : "password"}
-                                        placeholder={provider.has_key ? "Enter new key to replace…" : meta.placeholder}
-                                        value={keys[provider.provider_key] ?? ""}
-                                        onChange={(e) => setKeys((k) => ({ ...k, [provider.provider_key]: e.target.value }))}
-                                        className="h-10 pr-10 font-mono text-sm"
-                                    />
-                                    <button type="button"
-                                        onClick={() => setShowKey((s) => ({ ...s, [provider.provider_key]: !s[provider.provider_key] }))}
-                                        className="absolute right-2 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
-                                    >
-                                        {showKey[provider.provider_key] ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
-                                    </button>
-                                </div>
-                                <Button size="sm" className="h-10 px-4 bg-brand-600 hover:bg-brand-700 text-white"
-                                    disabled={!keys[provider.provider_key]?.trim() || saving[provider.provider_key]}
-                                    onClick={() => saveKey(provider.provider_key)}
+                                <Button size="sm" variant="outline" className="h-8 gap-1.5 text-xs"
+                                    disabled={!provider.has_key || testResult === "loading"}
+                                    onClick={() => testProvider(provider.provider_key)}
                                 >
-                                    {saving[provider.provider_key] ? <Loader2 className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
-                                    <span className="ml-1.5">Save</span>
+                                    {testResult === "loading" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> :
+                                     testResult === "success" ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-500" /> :
+                                     testResult === "error"   ? <XCircle className="h-3.5 w-3.5 text-red-500" /> :
+                                     <Zap className="h-3.5 w-3.5" />}
+                                    Test Connection
                                 </Button>
                             </div>
-                            {provider.updated_at && (
-                                <p className="text-[11px] text-muted-foreground">Last updated: {new Date(provider.updated_at).toLocaleString()}</p>
-                            )}
                         </div>
                     );
                 })}

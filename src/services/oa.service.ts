@@ -561,6 +561,7 @@ export async function getOACustomPatterns(): Promise<OACustomPattern[]>    { ret
 // Settings stubs (Module I — not yet on backend)
 // ─────────────────────────────────────────────────────────────────────────────
 
+// PHASE2_PLACEHOLDER — Settings stubs (Module I — not yet on backend)
 const _DEFAULTS = {
     empDefaults: { defaultDepartment: 'none', defaultRole: 'employee', monthlyLimit: 100, autoApprove: false } as OAEmployeeDefaults,
     notifications: { emailNotifications: true, weeklyDigest: true, quotaAlerts: true, quotaAlertThreshold: 80 } as OANotificationSettings,

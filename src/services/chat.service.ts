@@ -17,11 +17,10 @@ import api from './api';
 import type { LLMModel, LLMProvider, ChatSession, Message, AnonymizedEntity } from '@/types/chat.types';
 
 /* ══════════════════════════════════════════════════════
-   Backwards-compatible aliases
+   Re-export canonical types for backwards compatibility.
+   Prefer importing directly from @/types/chat.types.
    ══════════════════════════════════════════════════════ */
-export type ChatSessionSummary = ChatSession;
-export type ChatMessage = Message;
-export type { AnonymizedEntity };
+export type { ChatSession as ChatSessionSummary, Message as ChatMessage, AnonymizedEntity } from '@/types/chat.types';
 
 // ---------------------------------------------------------------------------
 // Backend → Frontend mappers
@@ -105,9 +104,6 @@ const PROVIDER_DISPLAY: Record<string, string> = {
 const MODEL_DISPLAY: Record<string, string> = {
     // Azure OpenAI
     'gpt-4.1':           'GPT-4.1',
-    'gpt-4o':            'GPT-4o',
-    'gpt-4o-mini':       'GPT-4o mini',
-    'gpt-4-turbo':       'GPT-4 Turbo',
     // Anthropic Claude 4.x
     'claude-opus-4-5':   'Claude Opus',
     'claude-sonnet-4-5': 'Claude Sonnet',
@@ -120,7 +116,7 @@ const MODEL_DISPLAY: Record<string, string> = {
     // Gemini
     'gemini-3-flash-preview': 'Gemini 3 Flash',
     'gemini-3.1-flash-lite-preview': 'Gemini 3.1 Flash Lite',
-    'gemini-3.1-pro-preview': 'Gemini 3.1 Pro',
+    'gemini-3.1-flash-preview': 'Gemini 3.1 Flash',
     'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
     'gemini-2.5-flash': 'Gemini 2.5 Flash',
 };
@@ -205,12 +201,19 @@ function extractApiError(err: unknown): never {
     const detail: string =
         e?.response?.data?.detail ?? e?.message ?? 'An unexpected error occurred.';
 
+    if (status === 401) {
+        throw new Error('Your session has expired. Please log in again.');
+    }
     if (status === 429) throw new QuotaExceededError(detail);
     if (status === 403) {
         if (detail.toLowerCase().includes('subscription')) {
             throw new SubscriptionRequiredError(detail);
         }
         throw new PolicyViolationError(detail);
+    }
+    // Network / connection failure (no response) — surface a clear message
+    if (!status && (e?.message === 'Network Error' || e?.code === 'ECONNREFUSED' || e?.code === 'ERR_NETWORK')) {
+        throw new Error('Cannot connect to the server. Please check your connection or try again later.');
     }
     throw new Error(detail);
 }

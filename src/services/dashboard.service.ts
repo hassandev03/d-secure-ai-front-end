@@ -8,6 +8,8 @@
  */
 import api from './api';
 import type { UserStats } from '@/types/analytics.types';
+import { getChatSessions } from './chat.service';
+import type { ChatSessionSummary } from './chat.service';
 
 /* ══════════════════════════════════════════════════════
    Dashboard-specific types (mirror backend response)
@@ -25,7 +27,7 @@ export interface DashboardSummaryResponse {
     dailyActivity: DailyActivityPoint[];
     models: ModelUsagePoint[];
     entities: EntityTypePoint[];
-    recentSessions: import('@/services/chat.service').ChatSessionSummary[];
+    recentSessions: ChatSessionSummary[];
 }
 
 export interface DailyActivityPoint {
@@ -80,12 +82,11 @@ interface BQuota {
 // ─── Colour palette for model breakdown ──────────────────────────────────────
 
 const MODEL_COLORS: Record<string, string> = {
-    'gpt-4o':             '#F59E0B',
-    'gpt-4o-mini':        '#10B981',
-    'claude-3-5-sonnet':  '#3B82F6',
-    'claude-3-haiku':     '#8B5CF6',
-    'gemini-1-5-pro':     '#06B6D4',
-    'gemini-1-5-flash':   '#F97316',
+    'gpt-4.1':           '#F59E0B',
+    'claude-opus-4-5':   '#3B82F6',
+    'claude-sonnet-4-5': '#8B5CF6',
+    'gemini-3.1-flash-preview': '#06B6D4',
+    'gemini-2.5-flash':  '#F97316',
 };
 const FALLBACK_COLORS = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
 
@@ -187,7 +188,7 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse | 
     try {
         const [summaryRes, sessionsRes, dailyRes] = await Promise.allSettled([
             api.get<{ usage_30d: BUsageMe['summary']; quota: any; total_sessions: number }>('/analytics/dashboard/summary'),
-            api.get<any[]>('/chat/sessions'),
+            getChatSessions(),
             api.get<BUsageMe>('/analytics/usage/me?days=7'),
         ]);
         
@@ -199,7 +200,7 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse | 
         
         const stats: DashboardStats = {
             totalRequestsThisMonth: totalRequests,
-            totalSessions:          total_sessions ?? (sessionsRes.status === 'fulfilled' ? sessionsRes.value.data.length : 0),
+            totalSessions:          total_sessions ?? (sessionsRes.status === 'fulfilled' ? sessionsRes.value.length : 0),
             entitiesAnonymized,
             quotaRemaining:         (quota?.remaining as number) ?? 0,
             quotaTotal:             (quota?.limit as number) ?? 0,
@@ -237,15 +238,8 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse | 
             : [];
 
         const recentSessions = sessionsRes.status === 'fulfilled'
-            ? (sessionsRes.value.data as Array<{
-                session_id: string; title: string | null; llm_model: string; message_count: number; last_message_at: string
-              }>).map((s) => ({
-                id:            s.session_id,
-                title:         s.title || 'New Chat',
-                modelName:     s.llm_model,
-                messageCount:  s.message_count,
-                lastMessageAt: new Date(s.last_message_at).toLocaleDateString(),
-            })).slice(0, 5) : [];
+            ? sessionsRes.value.slice(0, 5)
+            : [];
             
         return { stats, dailyActivity, models, entities, recentSessions };
     } catch {

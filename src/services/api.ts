@@ -1,5 +1,5 @@
 /**
- * api.ts — Axios instance with auth + error interceptors
+ * api.ts — Axios instance with auth + error + retry interceptors
  */
 import axios from 'axios';
 
@@ -10,6 +10,7 @@ const api = axios.create({
     timeout: 60_000, // 60s — LLM calls can take a while
     headers: {
         'Content-Type': 'application/json',
+        'Accept-Encoding': 'gzip, deflate',
     },
 });
 
@@ -53,9 +54,35 @@ api.interceptors.response.use(
     }
 );
 
+// ── Retry interceptor: transient 5xx failures ─────────────────────────────
+const RETRYABLE_STATUS = new Set([502, 503, 504]);
+const MAX_RETRIES = 3;
+
+api.interceptors.response.use(undefined, async (error) => {
+    const config = error.config;
+    const status = error.response?.status as number | undefined;
+
+    // Only retry GET/HEAD requests with transient server errors
+    if (
+        config &&
+        status &&
+        RETRYABLE_STATUS.has(status) &&
+        ['get', 'head'].includes((config.method ?? '').toLowerCase()) &&
+        (config.__retryCount ?? 0) < MAX_RETRIES
+    ) {
+        config.__retryCount = (config.__retryCount ?? 0) + 1;
+        const delay = Math.pow(2, config.__retryCount - 1) * 1000; // 1s, 2s, 4s
+        await new Promise((r) => setTimeout(r, delay));
+        return api.request(config);
+    }
+
+    return Promise.reject(error);
+});
+
 /** Simulate network delay (used only in tests / storybook, never in production) */
 export function delay(ms: number = 400): Promise<void> {
     return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export default api;
+

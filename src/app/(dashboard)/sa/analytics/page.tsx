@@ -16,7 +16,7 @@ import {
 const modelUsage = [
     { name: "Claude 4.6 Sonnet", value: 35, color: "#3B82F6" },
     { name: "GPT-5.1", value: 28, color: "#10B981" },
-    { name: "Gemini 3.1 Pro", value: 20, color: "#F59E0B" },
+    { name: "Gemini 3.1 Flash", value: 20, color: "#F59E0B" },
     { name: "Claude 4.5 Haiku", value: 12, color: "#8B5CF6" },
     { name: "Others", value: 5, color: "#94A3B8" },
 ];
