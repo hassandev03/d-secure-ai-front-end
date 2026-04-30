@@ -17,10 +17,12 @@ import api from './api';
 import type { LLMModel, LLMProvider, ChatSession, Message, AnonymizedEntity } from '@/types/chat.types';
 
 /* ══════════════════════════════════════════════════════
-   Re-export canonical types for backwards compatibility.
-   Prefer importing directly from @/types/chat.types.
+   Backwards-compatible aliases (used both locally and by
+   external consumers). Prefer @/types/chat.types for new code.
    ══════════════════════════════════════════════════════ */
-export type { ChatSession as ChatSessionSummary, Message as ChatMessage, AnonymizedEntity } from '@/types/chat.types';
+export type ChatSessionSummary = ChatSession;
+export type ChatMessage = Message;
+export type { AnonymizedEntity };
 
 // ---------------------------------------------------------------------------
 // Backend → Frontend mappers
