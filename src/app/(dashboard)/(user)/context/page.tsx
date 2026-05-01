@@ -72,7 +72,7 @@ export default function MyContextPage() {
         setEditingEntityId(null);
     };
 
-    const deleteEntity = (id: number) => {
+    const deleteEntity = (id: string | number) => {
         setExtractedEntities(prev => prev.filter(e => e.id !== id));
     };
 
@@ -232,7 +232,7 @@ export default function MyContextPage() {
         setIsExtracting(false);
     };
 
-    const toggleEntityCheck = (id: number) => {
+    const toggleEntityCheck = (id: string | number) => {
         setExtractedEntities(prev => prev.map(e => e.id === id ? { ...e, checked: !e.checked } : e));
     };
 

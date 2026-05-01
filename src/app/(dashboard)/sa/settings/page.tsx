@@ -1,15 +1,17 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Loader2, Key, Database, ShieldCheck, Mail, Globe, CheckCircle2, XCircle, Zap, AlertTriangle } from "lucide-react";
+import { Loader2, Key, Database, ShieldCheck, Mail, Globe, CheckCircle2, XCircle, Zap, AlertTriangle, Save } from "lucide-react";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Separator } from "@/components/ui/separator";
+import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
