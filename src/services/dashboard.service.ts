@@ -85,15 +85,14 @@ interface BRecentSession {
 // ─── Colour palette for model breakdown ──────────────────────────────────────
 
 const MODEL_COLORS: Record<string, string> = {
-    'gpt-4.1':           '#F59E0B',
-    'claude-opus-4-5':   '#3B82F6',
-    'claude-sonnet-4-5': '#8B5CF6',
+    'gpt-4.1':                  '#F59E0B',
+    'claude-opus-4-5':          '#3B82F6',
+    'claude-sonnet-4-5':        '#8B5CF6',
     'gemini-3.1-flash-preview': '#06B6D4',
-    'gemini-2.5-flash':  '#F97316',
+    'gemini-2.5-flash':         '#F97316',
 };
 const FALLBACK_COLORS = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
 
-// ─── PROVIDER_DISPLAY, MODEL_DISPLAY imported from @/lib/chat.helpers ────────
 // ─── ChatSessionSummary interface (dashboard-local shape) ─────────────────────
 
 export interface ChatSessionSummary {
@@ -114,15 +113,15 @@ function mapSession(b: BRecentSession): ChatSessionSummary {
     const model = b.llm_model;
     const provider = b.llm_provider;
     return {
-        id: b.session_id,
-        userId: '',
-        title: b.title ?? 'Untitled Chat',
+        id:           b.session_id,
+        userId:       '',
+        title:        b.title ?? 'Untitled Chat',
         model,
-        modelName: MODEL_DISPLAY[model] ?? model,
+        modelName:    MODEL_DISPLAY[model]    ?? model,
         provider,
         providerName: PROVIDER_DISPLAY[provider] ?? provider,
         messageCount: b.message_count,
-        createdAt: b.created_at ? b.created_at.split('T')[0] : '',
+        createdAt:    b.created_at ? b.created_at.split('T')[0] : '',
         lastMessageAt: b.last_message_at
             ? new Date(b.last_message_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
             : '',
@@ -130,10 +129,76 @@ function mapSession(b: BRecentSession): ChatSessionSummary {
     };
 }
 
-// ─── Service functions ────────────────────────────────────────────────────────
+// ─── Request deduplication + TTL result cache ─────────────────────────────────
+//
+// WHY THIS EXISTS
+//   React 18 StrictMode mounts → unmounts → remounts every component in dev,
+//   so useEffect fires twice per page load.  Combined with the four deprecated
+//   wrappers (getUserDashboardStats, getDailyActivity, getModelUsageBreakdown,
+//   getEntityTypeBreakdown) each independently calling getDashboardSummary(),
+//   the endpoint was being hit 4–8 times per navigation.
+//
+// HOW IT WORKS
+//   Layer 1 — In-flight deduplication:
+//     While a fetch is in-progress every concurrent caller shares the same
+//     Promise.  No matter how many callers fire simultaneously, exactly ONE
+//     HTTP request leaves the browser.
+//
+//   Layer 2 — TTL result cache (CACHE_TTL_MS):
+//     After a successful fetch the result is held in module-level memory.
+//     Callers within the TTL window get the cached value synchronously
+//     (wrapped in Promise.resolve).  Navigating away and back is free.
+//
+//   Invalidation:
+//     Call invalidateDashboardCache() after any mutation that would change
+//     the dashboard data — sending a chat message, deleting a session,
+//     buying or cancelling a subscription.  The next getDashboardSummary()
+//     call will then perform a fresh fetch.
 
-/** GET /api/v1/analytics/dashboard/summary → single-call dashboard data */
-export async function getDashboardSummary(): Promise<DashboardSummaryResponse | null> {
+/** How long (ms) a cached dashboard result is considered fresh. */
+const CACHE_TTL_MS = 30_000; // 30 seconds
+
+interface DashboardCache {
+    data: DashboardSummaryResponse;
+    /** Unix timestamp (ms) when this entry was stored. */
+    storedAt: number;
+}
+
+/** Cached result from the last successful fetch. */
+let _cache: DashboardCache | null = null;
+
+/**
+ * In-flight promise — shared across all concurrent callers while a fetch is
+ * in progress.  Cleared to null once the fetch settles.
+ */
+let _inflight: Promise<DashboardSummaryResponse | null> | null = null;
+
+/**
+ * Bust the in-memory dashboard cache.
+ *
+ * Call this after any mutation that affects what the dashboard shows:
+ *
+ * @example — after sending a chat message
+ *   import { invalidateDashboardCache } from '@/services/dashboard.service';
+ *   await sendMessage(...);
+ *   invalidateDashboardCache();
+ *
+ * @example — after deleting a session (history page)
+ *   await deleteChatSession(id);
+ *   invalidateDashboardCache();
+ */
+export function invalidateDashboardCache(): void {
+    if (_cache) {
+        console.log('[DASHBOARD_CACHE] Invalidating dashboard cache due to mutation');
+    }
+    _cache = null;
+    // Do NOT touch _inflight — if a fetch is already running we let it
+    // complete and re-warm the cache rather than abandoning it mid-flight.
+}
+
+// ─── Internal HTTP fetch + transform ─────────────────────────────────────────
+
+async function _fetchDashboard(): Promise<DashboardSummaryResponse | null> {
     try {
         const { data } = await api.get<{
             usage_30d: BUsageMe['summary'];
@@ -144,23 +209,23 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse | 
         }>('/analytics/dashboard/summary');
 
         const rawUsage = data.usage_30d;
-        const quota = data.quota;
-        const totalRequests = rawUsage?.total_requests ?? 0;
+        const quota    = data.quota;
+        const totalRequests      = rawUsage?.total_requests        ?? 0;
         const entitiesAnonymized = rawUsage?.total_entities_detected ?? 0;
 
         const stats: DashboardStats = {
             totalRequestsThisMonth: totalRequests,
-            totalSessions: data.total_sessions ?? 0,
+            totalSessions:          data.total_sessions ?? 0,
             entitiesAnonymized,
-            quotaRemaining: quota?.requests_remaining ?? 0,
-            quotaTotal: quota?.monthly_requests ?? 0,
-            avgEntitiesPerRequest: totalRequests > 0
+            quotaRemaining:         quota?.requests_remaining ?? 0,
+            quotaTotal:             quota?.monthly_requests   ?? 0,
+            avgEntitiesPerRequest:  totalRequests > 0
                 ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10
                 : 0,
             percentageUsed: quota?.requests_remaining_pct
                 ? 100 - quota.requests_remaining_pct
                 : 0,
-            planName: quota?.plan_name ?? 'Free',
+            planName:    quota?.plan_name    ?? 'Free',
             periodEndsAt: quota?.period_ends_at ?? '',
         };
 
@@ -175,7 +240,7 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse | 
             count: e.count,
         }));
 
-        // Derive last 7 days from the 30-day daily array already returned
+        // Derive last 7 days from the 30-day daily array already returned.
         const limit = quota?.monthly_requests ?? 1;
         let cumulative = 0;
         const last7 = (data.daily ?? []).slice(-7);
@@ -183,9 +248,9 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse | 
             cumulative += row.request_count;
             return {
                 date: new Date(row.stat_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                requests: row.request_count,
+                requests:           row.request_count,
                 entitiesAnonymized: row.entities_detected,
-                quotaUtilizedPct: Math.round(Math.min((cumulative / limit) * 100, 100)),
+                quotaUtilizedPct:   Math.round(Math.min((cumulative / limit) * 100, 100)),
             };
         });
 
@@ -197,70 +262,47 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse | 
     }
 }
 
-/** GET /api/v1/analytics/usage/me?days=30 + /analytics/quota/me
- *
- * @deprecated Use ``getDashboardSummary()`` which returns all of this in one
- *   call.  This function is kept for backward-compat with page components
- *   that have not yet been migrated to the consolidated endpoint.
- */
-export async function getUserDashboardStats(): Promise<DashboardStats> {
-    const summary = await getDashboardSummary();
-    if (summary) return summary.stats;
-
-    // Last-resort fallback (offline / backend error)
-    return {
-        totalRequestsThisMonth: 0, totalSessions: 0, entitiesAnonymized: 0,
-        quotaRemaining: 0, quotaTotal: 0, avgEntitiesPerRequest: 0,
-        percentageUsed: 0, planName: 'Free', periodEndsAt: '',
-    };
-}
+// ─── Public API ───────────────────────────────────────────────────────────────
 
 /**
- * Derive the last N days of activity from the already-fetched dashboard
- * summary instead of making a second call to /analytics/usage/me.
+ * GET /api/v1/analytics/dashboard/summary — single-call dashboard data.
  *
- * @deprecated Consume ``getDashboardSummary().dailyActivity`` directly.
+ * Guarantees at most ONE in-flight HTTP request at any time, and returns
+ * the cached result for CACHE_TTL_MS after a successful fetch.
+ *
+ * All deprecated wrapper functions (getUserDashboardStats, getDailyActivity,
+ * getModelUsageBreakdown, getEntityTypeBreakdown) delegate here so they all
+ * benefit from the cache and deduplication automatically.
  */
-export async function getDailyActivity(days = 7): Promise<DailyActivityPoint[]> {
-    const summary = await getDashboardSummary();
-    if (!summary) return [];
-    // getDashboardSummary already slices the last 7 days — return as-is when
-    // the caller requests ≤7, otherwise fall back to a direct API call.
-    if (days <= 7) return summary.dailyActivity;
-
-    // Extended range: fetch from the full 30-day array embedded in the summary
-    try {
-        const { data } = await api.get<BUsageMe>(`/analytics/usage/me?days=${days}`);
-        const quota = await api.get<BQuota>('/analytics/quota/me').catch(() => null);
-        const limit = quota?.data.monthly_requests ?? 1;
-        let cumulative = 0;
-        return data.daily.map((row) => {
-            cumulative += row.request_count;
-            return {
-                date: new Date(row.stat_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                requests: row.request_count,
-                entitiesAnonymized: row.entities_detected,
-                quotaUtilizedPct: Math.round(Math.min((cumulative / limit) * 100, 100)),
-            };
-        });
-    } catch {
-        return summary.dailyActivity;
+export async function getDashboardSummary(): Promise<DashboardSummaryResponse | null> {
+    // Layer 2 — serve from cache if still fresh.
+    if (_cache && Date.now() - _cache.storedAt < CACHE_TTL_MS) {
+        const cacheAgeMs = Date.now() - _cache.storedAt;
+        console.log(`[DASHBOARD_CACHE_HIT] Serving cached result (age: ${cacheAgeMs}ms)`);
+        return _cache.data;
     }
-}
 
-/**
- * @deprecated Consume ``getDashboardSummary().models`` directly.
- */
-export async function getModelUsageBreakdown(): Promise<ModelUsagePoint[]> {
-    const summary = await getDashboardSummary();
-    return summary?.models ?? [];
-}
+    // Layer 1 — join an already in-flight request instead of launching another.
+    if (_inflight) {
+        console.log('[DASHBOARD_DEDUP] Joining existing in-flight request');
+        return _inflight;
+    }
 
-/**
- * @deprecated Consume ``getDashboardSummary().entities`` directly.
- */
-export async function getEntityTypeBreakdown(): Promise<EntityTypePoint[]> {
-    const summary = await getDashboardSummary();
-    return summary?.entities ?? [];
-}
+    // No cache and no in-flight request — start a fresh fetch and share the
+    // promise so every concurrent caller gets the same result.
+    console.log('[DASHBOARD_API_CALL] Starting fresh fetch to GET /analytics/dashboard/summary');
+    _inflight = _fetchDashboard().then((result) => {
+        if (result !== null) {
+            // Warm the cache on success.
+            console.log('[DASHBOARD_CACHE_WARM] Populated cache with fresh result');
+            _cache = { data: result, storedAt: Date.now() };
+        } else {
+            console.log('[DASHBOARD_API_ERROR] Dashboard fetch returned null');
+        }
+        // Release the in-flight slot so future callers (after TTL) start fresh.
+        _inflight = null;
+        return result;
+    });
 
+    return _inflight;
+}

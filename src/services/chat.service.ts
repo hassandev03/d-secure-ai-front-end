@@ -227,9 +227,14 @@ const _sessionsInFlight = new Map<string, Promise<ChatSessionSummary[]>>();
 export async function getChatSessions(limit = 30, offset = 0): Promise<ChatSessionSummary[]> {
     const cacheKey = `${limit}:${offset}`;
     const existing = _sessionsInFlight.get(cacheKey);
-    if (existing) return existing;
+    if (existing) {
+        console.log(`[CHAT_SESSIONS_DEDUP] Joining existing in-flight request (key: ${cacheKey})`);
+        return existing;
+    }
 
+    console.log(`[CHAT_SESSIONS_API_CALL] Starting fresh fetch to GET /chat/sessions (limit: ${limit}, offset: ${offset})`);
     const promise = _fetchChatSessions(limit, offset).finally(() => {
+        console.log(`[CHAT_SESSIONS_DEDUP_CLEAR] Clearing in-flight slot for key: ${cacheKey}`);
         _sessionsInFlight.delete(cacheKey);
     });
 
@@ -239,11 +244,14 @@ export async function getChatSessions(limit = 30, offset = 0): Promise<ChatSessi
 
 async function _fetchChatSessions(limit: number, offset: number): Promise<ChatSessionSummary[]> {
     try {
+        console.log(`[CHAT_SESSIONS_FETCH] Fetching sessions from backend (limit: ${limit}, offset: ${offset})`);
         const { data } = await api.get<BackendSession[]>(
             `/chat/sessions?limit=${limit}&offset=${offset}`,
         );
+        console.log(`[CHAT_SESSIONS_FETCH_SUCCESS] Retrieved ${data.length} sessions`);
         return data.map(mapSession);
-    } catch {
+    } catch (err) {
+        console.error('[CHAT_SESSIONS_FETCH_ERROR] Failed to fetch sessions:', err);
         return [];
     }
 }
@@ -324,9 +332,20 @@ export async function sendMessage(
             ...(fileIds && fileIds.length > 0 ? { file_ids: fileIds } : {}),
         };
 
+        console.log('[CHAT_MESSAGE_API_CALL] Sending message to POST /chat/message', {
+            sessionId: sessionId === 'new' ? 'new' : sessionId,
+            model: llmModel,
+            hasFiles: fileIds && fileIds.length > 0,
+            messageLength: content.length,
+        });
         const { data } = await api.post<BackendChatResponse>('/chat/message', body);
         response = data;
+        console.log('[CHAT_MESSAGE_SUCCESS] Message sent successfully', {
+            responseSessionId: response.session_id,
+            cost: response.cost_usd,
+        });
     } catch (err) {
+        console.error('[CHAT_MESSAGE_ERROR] Failed to send message:', err);
         extractApiError(err);
     }
 

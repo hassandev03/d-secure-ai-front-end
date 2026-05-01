@@ -34,6 +34,21 @@ export interface CustomPatternCreate {
     is_active?: boolean;
 }
 
+export interface ContextSummary {
+    glossary: GlossaryTerm[];
+    patterns: CustomPattern[];
+}
+
+// ── Combined fetch — replaces separate /glossary + /patterns calls ──────────
+// Uses the backend GET /context/summary endpoint which fires both DB queries
+// concurrently (asyncio.gather) and runs a single auth chain instead of two.
+export const getContextSummary = async (): Promise<ContextSummary> => {
+    const res = await api.get("/context/summary");
+    return res.data as ContextSummary;
+};
+
+// ── Individual endpoints (used for CRUD mutations) ───────────────────────────
+
 export const getGlossary = async (): Promise<GlossaryTerm[]> => {
     const res = await api.get("/context/glossary");
     return res.data;
@@ -72,7 +87,7 @@ export const deletePattern = async (id: string): Promise<void> => {
     await api.delete(`/context/patterns/${id}`);
 };
 
-// --- Document Operations ---
+// ── Document operations ───────────────────────────────────────────────────────
 
 export interface ContextDocument {
     file_id: string;
@@ -93,7 +108,7 @@ export const uploadContextDocument = async (file: File): Promise<ContextDocument
     formData.append("file", file);
     formData.append("purpose", "KNOWLEDGE_CONTEXT");
     const res = await api.post("/files/upload", formData, {
-        headers: { "Content-Type": "multipart/form-data" }
+        headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
 };

@@ -1,10 +1,10 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
 import { useSubscriptionStore } from "@/store/subscription.store";
-import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen, Edit, FileMusic, Loader2, CheckCircle2, Clock } from "lucide-react";
+import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen, Edit, Loader2, CheckCircle2, Clock } from "lucide-react";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
 import * as contextService from "@/services/context.service";
@@ -40,26 +40,62 @@ export default function MyContextPage() {
     const [editingEntityId, setEditingEntityId] = useState<string | number | null>(null);
     const [editEntityForm, setEditEntityForm] = useState<Partial<ExtractedEntity>>({});
 
+    const router = useRouter();
+    const { user } = useAuthStore();
+    const subscriptionStore = useSubscriptionStore();
+    const [authorized, setAuthorized] = useState<boolean | null>(null);
+
+    // Prevents React StrictMode from firing the data fetch twice.
+    // StrictMode mounts → unmounts → remounts components in development,
+    // which triggers useEffect twice even with a stable deps array.
+    // The ref persists across the remount cycle and gates the second fire.
+    const hasFetchedRef = useRef(false);
+
+    // ── Step 1: Resolve authorization ─────────────────────────────────────
     useEffect(() => {
+        if (!user) return;
+
+        const tier = user.subscriptionTier;
+        if (!tier && !subscriptionStore.isLoaded) return; // still resolving — wait
+
+        const canAccess = user.role === 'PROFESSIONAL' && (tier === 'PRO' || tier === 'MAX');
+        setAuthorized(canAccess);
+        if (!canAccess) {
+            router.replace("/dashboard");
+        }
+    }, [user, router, subscriptionStore.isLoaded]);
+
+    // ── Step 2: Load data ONLY after authorized === true ──────────────────
+    // This effect depends on `authorized` so it never fires until the auth
+    // check above has completed.  The hasFetchedRef gate ensures it runs
+    // exactly once — not twice from React StrictMode double-mounting.
+    useEffect(() => {
+        if (authorized !== true) return;
+        if (hasFetchedRef.current) return;
+        hasFetchedRef.current = true;
+
         const loadData = async () => {
             try {
-                const [termsData, patternsData, docsData] = await Promise.all([
-                    contextService.getGlossary(),
-                    contextService.getPatterns(),
+                // Single HTTP call for glossary + patterns (GET /context/summary).
+                // Documents use a separate endpoint (GET /files) — kept separate
+                // because it hits a different router and has different caching needs.
+                const [summary, docsData] = await Promise.all([
+                    contextService.getContextSummary(),
                     contextService.getContextDocuments(),
                 ]);
-                setTerms(termsData);
-                setPatterns(patternsData);
+                setTerms(summary.glossary);
+                setPatterns(summary.patterns);
                 setDocs(docsData);
             } catch (err) {
-                console.error("Failed to load context data:", err);
-                toast.error("Failed to load your context data.");
+                console.error("[CONTEXT] Failed to load context data:", err);
+                toast.error("Failed to load your context data. Please refresh.");
             } finally {
                 setIsLoading(false);
             }
         };
+
         loadData();
-    }, []);
+    }, [authorized]);
 
     const startEditingEntity = (entity: ExtractedEntity) => {
         setEditingEntityId(entity.id);
@@ -91,30 +127,6 @@ export default function MyContextPage() {
     const [newPatRegex, setNewPatRegex] = useState("");
     const [newPatExample, setNewPatExample] = useState("");
 
-    const router = useRouter();
-    const { user } = useAuthStore();
-    const subscriptionStore = useSubscriptionStore();
-    const [authorized, setAuthorized] = useState<boolean | null>(null);
-
-    // Wait for both user (from persisted auth store) and subscription data.
-    // subscriptionTier is persisted in auth store so it may be available immediately.
-    // If it's missing, we wait for the subscription store to populate it.
-    useEffect(() => {
-        if (!user) return;
-
-        // If subscriptionTier is already set (from persisted store), check immediately.
-        // Otherwise wait for the subscription store to load (indicated by isLoaded=true).
-        const tier = user.subscriptionTier;
-        if (!tier && !subscriptionStore.isLoaded) return; // still loading — wait
-
-        const canAccess = user.role === 'PROFESSIONAL'
-            && (tier === 'PRO' || tier === 'MAX');
-        setAuthorized(canAccess);
-        if (!canAccess) {
-            router.replace("/dashboard");
-        }
-    }, [user, router, subscriptionStore.isLoaded]);
-
     const handleAddTerm = async () => {
         if (!newTerm || !newDef) return;
         try {
@@ -122,7 +134,7 @@ export default function MyContextPage() {
             setTerms((prev) => [added, ...prev]);
             setNewTerm(""); setNewDef(""); setNewCat("");
             toast.success(`Term "${newTerm}" added!`);
-        } catch (err) {
+        } catch {
             toast.error("Failed to add term.");
         }
     };
@@ -138,7 +150,7 @@ export default function MyContextPage() {
             setTerms(prev => prev.map(t => t.term_id === editingTerm.term_id ? updated : t));
             setEditingTerm(null);
             toast.success("Term updated successfully.");
-        } catch (err) {
+        } catch {
             toast.error("Failed to update term.");
         }
     };
@@ -148,7 +160,7 @@ export default function MyContextPage() {
             await contextService.deleteGlossaryTerm(id);
             setTerms((prev) => prev.filter((t) => t.term_id !== id));
             toast.success("Term removed.");
-        } catch (err) {
+        } catch {
             toast.error("Failed to remove term.");
         }
     };
@@ -158,7 +170,7 @@ export default function MyContextPage() {
             await contextService.deleteContextDocument(id);
             setDocs((prev) => prev.filter((d) => d.file_id !== id));
             toast.success("Document removed.");
-        } catch (err) {
+        } catch {
             toast.error("Failed to remove document.");
         }
     };
@@ -171,7 +183,7 @@ export default function MyContextPage() {
             setNewPatLabel(""); setNewPatRegex(""); setNewPatExample("");
             setIsPatternAddModalOpen(false);
             toast.success("Pattern added successfully.");
-        } catch (err) {
+        } catch {
             toast.error("Failed to add pattern.");
         }
     };
@@ -188,7 +200,7 @@ export default function MyContextPage() {
             setPatterns(prev => prev.map(p => p.pattern_id === editingPattern.pattern_id ? updated : p));
             setEditingPattern(null);
             toast.success("Pattern updated successfully.");
-        } catch (err) {
+        } catch {
             toast.error("Failed to update pattern.");
         }
     };
@@ -198,7 +210,7 @@ export default function MyContextPage() {
             await contextService.deletePattern(id);
             setPatterns(prev => prev.filter(p => p.pattern_id !== id));
             toast.success("Pattern removed.");
-        } catch (err) {
+        } catch {
             toast.error("Failed to remove pattern.");
         }
     };
@@ -207,7 +219,7 @@ export default function MyContextPage() {
         try {
             const updated = await contextService.updatePattern(id, { is_active: !current });
             setPatterns(prev => prev.map(p => p.pattern_id === id ? updated : p));
-        } catch (err) {
+        } catch {
             toast.error("Failed to toggle pattern status.");
         }
     };
@@ -216,10 +228,7 @@ export default function MyContextPage() {
     const handleProcessDoc = async (doc: StagedDoc) => {
         setProcessingDoc(doc);
         setIsExtracting(true);
-        // Simulate processing time
         await new Promise(r => setTimeout(r, 2000));
-
-        // Mock extracted entities
         const mockEntities: ExtractedEntity[] = doc.name.toLowerCase().includes('nda') ? [
             { id: 1, type: 'ORG', original: 'Acme Corp', description: 'Extracted organizational entity', checked: true },
             { id: 2, type: 'PERSON', original: 'John Doe', description: 'Extracted personal entity', checked: true }
@@ -227,7 +236,6 @@ export default function MyContextPage() {
             { id: 1, type: 'PROJECT', original: 'Project Titan', description: `Extracted PROJECT from ${doc.name}`, checked: true },
             { id: 2, type: 'EMAIL', original: 'contact@acmecorp.com', description: `Extracted EMAIL from ${doc.name}`, checked: true }
         ];
-
         setExtractedEntities(mockEntities);
         setIsExtracting(false);
     };
@@ -238,13 +246,10 @@ export default function MyContextPage() {
 
     const handleSaveEntities = async () => {
         if (!processingDoc) return;
-
-        // Add checked entities to glossary terms
         const entitiesToSave = extractedEntities.filter(e => e.checked);
-        
         try {
             if (entitiesToSave.length > 0) {
-                const results = await Promise.all(entitiesToSave.map(e => 
+                const results = await Promise.all(entitiesToSave.map(e =>
                     contextService.createGlossaryTerm({
                         term: e.original,
                         definition: e.description || `Extracted ${e.type} from ${processingDoc.name}`,
@@ -254,44 +259,34 @@ export default function MyContextPage() {
                 setTerms(prev => [...results, ...prev]);
                 toast.success(`Added ${results.length} terms to Glossary.`);
             }
-
-            // Upload the file to DB
             const uploadedFile = await contextService.uploadContextDocument(processingDoc.file);
             setDocs(prev => [uploadedFile, ...prev]);
-
             setStagedDocs(prev => prev.filter(d => d.id !== processingDoc.id));
             setProcessingDoc(null);
             toast.success(`${processingDoc.name} processed and saved to DB.`);
-        } catch (err) {
+        } catch {
             toast.error("Failed to save context from document.");
         }
     };
 
-    // Dropzone logic
     const onDrop = useCallback((acceptedFiles: File[]) => {
         acceptedFiles.forEach((file) => {
             const sizeInMB = file.size / (1024 * 1024);
             const sizeStr = sizeInMB > 1 ? `${sizeInMB.toFixed(1)} MB` : `${(file.size / 1024).toFixed(0)} KB`;
-            setStagedDocs(prev => [...prev, {
-                id: Date.now() + Math.random(),
-                name: file.name,
-                size: sizeStr,
-                file
-            }]);
+            setStagedDocs(prev => [...prev, { id: Date.now() + Math.random(), name: file.name, size: sizeStr, file }]);
             toast.success(`${file.name} staged for processing.`);
         });
     }, []);
 
     const { getRootProps, getInputProps, isDragActive } = useDropzone({
         onDrop,
-        accept: {
-            'application/pdf': ['.pdf'],
-            'text/plain': ['.txt']
-        },
-        maxSize: 10485760 // 10MB
+        accept: { 'application/pdf': ['.pdf'], 'text/plain': ['.txt'] },
+        maxSize: 10485760
     });
 
-    if (!authorized) return null;
+    // authorized===null means still resolving; false means redirect is in progress.
+    // Both cases: render nothing — avoid a flash of content or a broken API call.
+    if (authorized !== true) return null;
 
     return (
         <div className="mx-auto max-w-5xl">
@@ -301,7 +296,6 @@ export default function MyContextPage() {
                 breadcrumbs={[{ label: "User", href: "/dashboard" }, { label: "My Context" }]}
             />
 
-            {/* Info banner */}
             <Card className="mb-6 border-brand-200 bg-brand-50/50">
                 <CardContent className="flex items-start gap-3 p-4">
                     <Info className="mt-0.5 h-5 w-5 shrink-0 text-brand-600" />
@@ -334,19 +328,14 @@ export default function MyContextPage() {
                             <Button onClick={handleAddTerm} className="bg-brand-700 hover:bg-brand-800"><Plus className="mr-2 h-4 w-4" />Add</Button>
                         </CardContent>
                     </Card>
-
                     <Card>
                         <CardHeader>
                             <CardTitle className="text-base">Your Glossary</CardTitle>
-                        <CardDescription>{terms.length} terms — applied to all chats automatically</CardDescription>
+                            <CardDescription>{terms.length} terms — applied to all chats automatically</CardDescription>
                         </CardHeader>
                         <CardContent>
                             {isLoading ? (
-                                <div className="space-y-3">
-                                    {[1, 2, 3].map(i => (
-                                        <div key={i} className="h-20 w-full rounded-lg bg-muted animate-pulse" />
-                                    ))}
-                                </div>
+                                <div className="space-y-3">{[1,2,3].map(i => <div key={i} className="h-20 w-full rounded-lg bg-muted animate-pulse" />)}</div>
                             ) : (
                                 <div className="space-y-3">
                                     {terms.map((entry) => (
@@ -359,18 +348,12 @@ export default function MyContextPage() {
                                                 <p className="mt-1 text-sm text-muted-foreground">{entry.definition}</p>
                                             </div>
                                             <div className="flex items-center gap-1 opacity-100 sm:opacity-0 group-hover:opacity-100 transition-opacity">
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingTerm(entry)}>
-                                                    <Edit className="h-4 w-4" />
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger shrink-0" onClick={() => handleRemoveTerm(entry.term_id)}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingTerm(entry)}><Edit className="h-4 w-4" /></Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger shrink-0" onClick={() => handleRemoveTerm(entry.term_id)}><Trash2 className="h-4 w-4" /></Button>
                                             </div>
                                         </div>
                                     ))}
-                                    {terms.length === 0 && (
-                                        <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No terms added yet</p></div>
-                                    )}
+                                    {terms.length === 0 && <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No terms added yet</p></div>}
                                 </div>
                             )}
                         </CardContent>
@@ -403,9 +386,7 @@ export default function MyContextPage() {
                     {stagedDocs.length > 0 && (
                         <Card className="border-brand-200 bg-brand-50/20">
                             <CardHeader>
-                                <CardTitle className="text-base text-brand-800 flex items-center gap-2">
-                                    <Clock className="h-4 w-4" /> Staged for Processing
-                                </CardTitle>
+                                <CardTitle className="text-base text-brand-800 flex items-center gap-2"><Clock className="h-4 w-4" />Staged for Processing</CardTitle>
                                 <CardDescription>Review and process these documents to extract domain terms.</CardDescription>
                             </CardHeader>
                             <CardContent>
@@ -414,18 +395,11 @@ export default function MyContextPage() {
                                         <div key={doc.id} className="flex items-center justify-between rounded-lg border border-brand-200 bg-white p-4">
                                             <div className="flex items-center gap-3">
                                                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-orange-50"><FileText className="h-5 w-5 text-orange-600" /></div>
-                                                <div>
-                                                    <p className="text-sm font-medium">{doc.name}</p>
-                                                    <p className="text-xs text-muted-foreground">{doc.size}</p>
-                                                </div>
+                                                <div><p className="text-sm font-medium">{doc.name}</p><p className="text-xs text-muted-foreground">{doc.size}</p></div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <Button variant="outline" size="sm" className="h-8 text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => handleProcessDoc(doc)}>
-                                                    Process
-                                                </Button>
-                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => setStagedDocs(prev => prev.filter(d => d.id !== doc.id))}>
-                                                    <Trash2 className="h-4 w-4" />
-                                                </Button>
+                                                <Button variant="outline" size="sm" className="h-8 text-brand-600 border-brand-200 hover:bg-brand-50" onClick={() => handleProcessDoc(doc)}>Process</Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => setStagedDocs(prev => prev.filter(d => d.id !== doc.id))}><Trash2 className="h-4 w-4" /></Button>
                                             </div>
                                         </div>
                                     ))}
@@ -441,11 +415,7 @@ export default function MyContextPage() {
                         </CardHeader>
                         <CardContent>
                             {isLoading ? (
-                                <div className="space-y-3">
-                                    {[1, 2].map(i => (
-                                        <div key={i} className="h-16 w-full rounded-lg bg-muted animate-pulse" />
-                                    ))}
-                                </div>
+                                <div className="space-y-3">{[1,2].map(i => <div key={i} className="h-16 w-full rounded-lg bg-muted animate-pulse" />)}</div>
                             ) : (
                                 <div className="space-y-3">
                                     {docs.map((doc) => (
@@ -454,19 +424,13 @@ export default function MyContextPage() {
                                                 <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50"><FileText className="h-5 w-5 text-brand-600" /></div>
                                                 <div>
                                                     <p className="text-sm font-medium">{doc.filename}</p>
-                                                    <p className="text-xs text-muted-foreground">
-                                                        {formatSize(doc.file_size_bytes)} · Uploaded {new Date(doc.created_at).toLocaleDateString()}
-                                                    </p>
+                                                    <p className="text-xs text-muted-foreground">{formatSize(doc.file_size_bytes)} · Uploaded {new Date(doc.created_at).toLocaleDateString()}</p>
                                                 </div>
                                             </div>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemoveDoc(doc.file_id)}>
-                                                <Trash2 className="h-4 w-4" />
-                                            </Button>
+                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemoveDoc(doc.file_id)}><Trash2 className="h-4 w-4" /></Button>
                                         </div>
                                     ))}
-                                    {docs.length === 0 && (
-                                        <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No documents uploaded yet</p></div>
-                                    )}
+                                    {docs.length === 0 && <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No documents uploaded yet</p></div>}
                                 </div>
                             )}
                         </CardContent>
@@ -482,18 +446,12 @@ export default function MyContextPage() {
                                     <CardTitle className="text-base">Custom Anonymization Patterns</CardTitle>
                                     <CardDescription>Define regex patterns to detect your domain-specific sensitive data (client IDs, project codes, etc.).</CardDescription>
                                 </div>
-                                <Button className="bg-brand-700 hover:bg-brand-800" onClick={() => setIsPatternAddModalOpen(true)}>
-                                    <Plus className="mr-2 h-4 w-4" />Add Pattern
-                                </Button>
+                                <Button className="bg-brand-700 hover:bg-brand-800" onClick={() => setIsPatternAddModalOpen(true)}><Plus className="mr-2 h-4 w-4" />Add Pattern</Button>
                             </div>
                         </CardHeader>
                         <CardContent>
                             {isLoading ? (
-                                <div className="space-y-4">
-                                    {[1, 2].map(i => (
-                                        <div key={i} className="h-24 w-full rounded-lg bg-muted animate-pulse" />
-                                    ))}
-                                </div>
+                                <div className="space-y-4">{[1,2].map(i => <div key={i} className="h-24 w-full rounded-lg bg-muted animate-pulse" />)}</div>
                             ) : (
                                 <div className="space-y-4">
                                     {patterns.map((p) => (
@@ -509,19 +467,13 @@ export default function MyContextPage() {
                                             <div className="flex items-center gap-2 sm:gap-4">
                                                 <Switch checked={p.is_active} onCheckedChange={() => togglePatternActive(p.pattern_id, p.is_active)} />
                                                 <div className="flex items-center gap-1">
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingPattern(p)}>
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemovePattern(p.pattern_id)}>
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-brand-600" onClick={() => setEditingPattern(p)}><Edit className="h-4 w-4" /></Button>
+                                                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemovePattern(p.pattern_id)}><Trash2 className="h-4 w-4" /></Button>
                                                 </div>
                                             </div>
                                         </div>
                                     ))}
-                                    {patterns.length === 0 && (
-                                        <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No patterns added yet</p></div>
-                                    )}
+                                    {patterns.length === 0 && <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No patterns added yet</p></div>}
                                 </div>
                             )}
                         </CardContent>
@@ -532,9 +484,7 @@ export default function MyContextPage() {
             {/* Editing Term Modal */}
             <Dialog open={!!editingTerm} onOpenChange={(open) => !open && setEditingTerm(null)}>
                 <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Edit Term</DialogTitle>
-                    </DialogHeader>
+                    <DialogHeader><DialogTitle>Edit Term</DialogTitle></DialogHeader>
                     {editingTerm && (
                         <div className="grid gap-4 py-4">
                             <div className="space-y-2"><Label>Term</Label><Input value={editingTerm.term} onChange={e => setEditingTerm({ ...editingTerm, term: e.target.value })} /></div>
@@ -559,54 +509,34 @@ export default function MyContextPage() {
                     <div className="grid gap-4 py-4">
                         <div className="space-y-2">
                             <Label>Label/Name</Label>
-                            <Input
-                                placeholder="e.g. Account Number"
-                                value={editingPattern ? editingPattern.label : newPatLabel}
-                                onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, label: e.target.value }) : setNewPatLabel(e.target.value)}
-                            />
+                            <Input placeholder="e.g. Account Number" value={editingPattern ? editingPattern.label : newPatLabel} onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, label: e.target.value }) : setNewPatLabel(e.target.value)} />
                         </div>
                         <div className="space-y-2">
                             <Label>Regex Pattern</Label>
-                            <Input
-                                placeholder="e.g. ACCT-[0-9]{6}"
-                                value={editingPattern ? editingPattern.pattern : newPatRegex}
-                                onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, pattern: e.target.value }) : setNewPatRegex(e.target.value)}
-                                className="font-mono text-sm"
-                            />
+                            <Input placeholder="e.g. ACCT-[0-9]{6}" value={editingPattern ? editingPattern.pattern : newPatRegex} onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, pattern: e.target.value }) : setNewPatRegex(e.target.value)} className="font-mono text-sm" />
                         </div>
                         <div className="space-y-2">
                             <Label>Example Match <span className="text-muted-foreground font-normal">(Optional)</span></Label>
-                            <Input
-                                placeholder="e.g. ACCT-123456"
-                                value={editingPattern ? (editingPattern.example || "") : newPatExample}
-                                onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, example: e.target.value }) : setNewPatExample(e.target.value)}
-                            />
+                            <Input placeholder="e.g. ACCT-123456" value={editingPattern ? (editingPattern.example || "") : newPatExample} onChange={e => editingPattern ? setEditingPattern({ ...editingPattern, example: e.target.value }) : setNewPatExample(e.target.value)} />
                         </div>
                     </div>
                     <div className="flex items-center justify-between px-1 py-2 mb-2">
                         <Label className="text-sm font-medium">Pattern Status</Label>
-                        <Switch 
-                            checked={editingPattern ? editingPattern.is_active : true} 
-                            onCheckedChange={v => editingPattern && setEditingPattern({...editingPattern, is_active: v})}
-                            disabled={!editingPattern}
-                        />
+                        <Switch checked={editingPattern ? editingPattern.is_active : true} onCheckedChange={v => editingPattern && setEditingPattern({ ...editingPattern, is_active: v })} disabled={!editingPattern} />
                     </div>
                     <DialogFooter>
                         <Button variant="outline" onClick={() => { setEditingPattern(null); setIsPatternAddModalOpen(false); }}>Cancel</Button>
-                        <Button onClick={editingPattern ? handleSaveEditPattern : handleAddPattern} className="bg-brand-600 hover:bg-brand-700">
-                            {editingPattern ? "Save Changes" : "Create Pattern"}
-                        </Button>
+                        <Button onClick={editingPattern ? handleSaveEditPattern : handleAddPattern} className="bg-brand-600 hover:bg-brand-700">{editingPattern ? "Save Changes" : "Create Pattern"}</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
             {/* Process Document Modal */}
             <Dialog open={!!processingDoc} onOpenChange={(open) => !open && !isExtracting && setProcessingDoc(null)}>
                 <DialogContent className="sm:max-w-[500px]">
                     <DialogHeader>
                         <DialogTitle>Processing Document</DialogTitle>
-                        <DialogDescription>
-                            {processingDoc?.name}
-                        </DialogDescription>
+                        <DialogDescription>{processingDoc?.name}</DialogDescription>
                     </DialogHeader>
                     <div className="py-4">
                         {isExtracting ? (
@@ -627,19 +557,10 @@ export default function MyContextPage() {
                                             {editingEntityId === entity.id ? (
                                                 <div className="space-y-3 w-full animate-in fade-in zoom-in duration-200">
                                                     <div className="grid grid-cols-2 gap-2">
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Entity Name</Label>
-                                                            <Input size={1} className="h-8 text-sm" value={editEntityForm.original || ""} onChange={e => setEditEntityForm({ ...editEntityForm, original: e.target.value })} />
-                                                        </div>
-                                                        <div className="space-y-1">
-                                                            <Label className="text-xs text-muted-foreground">Type</Label>
-                                                            <Input size={1} className="h-8 text-sm" value={editEntityForm.type || ""} onChange={e => setEditEntityForm({ ...editEntityForm, type: e.target.value })} />
-                                                        </div>
+                                                        <div className="space-y-1"><Label className="text-xs text-muted-foreground">Entity Name</Label><Input size={1} className="h-8 text-sm" value={editEntityForm.original || ""} onChange={e => setEditEntityForm({ ...editEntityForm, original: e.target.value })} /></div>
+                                                        <div className="space-y-1"><Label className="text-xs text-muted-foreground">Type</Label><Input size={1} className="h-8 text-sm" value={editEntityForm.type || ""} onChange={e => setEditEntityForm({ ...editEntityForm, type: e.target.value })} /></div>
                                                     </div>
-                                                    <div className="space-y-1">
-                                                        <Label className="text-xs text-muted-foreground">Description</Label>
-                                                        <Input size={1} className="h-8 text-sm" value={editEntityForm.description || ""} onChange={e => setEditEntityForm({ ...editEntityForm, description: e.target.value })} />
-                                                    </div>
+                                                    <div className="space-y-1"><Label className="text-xs text-muted-foreground">Description</Label><Input size={1} className="h-8 text-sm" value={editEntityForm.description || ""} onChange={e => setEditEntityForm({ ...editEntityForm, description: e.target.value })} /></div>
                                                     <div className="flex justify-end gap-2 pt-1">
                                                         <Button variant="ghost" size="sm" className="h-7 text-xs" onClick={() => setEditingEntityId(null)}>Cancel</Button>
                                                         <Button size="sm" className="h-7 text-xs bg-brand-600 hover:bg-brand-700 text-white" onClick={saveEditingEntity}>Save</Button>
@@ -650,28 +571,19 @@ export default function MyContextPage() {
                                                     <div className="flex items-start gap-3">
                                                         <Switch checked={entity.checked} onCheckedChange={() => toggleEntityCheck(entity.id)} className="mt-0.5" />
                                                         <div>
-                                                            <p className="font-medium text-sm flex items-center gap-2">
-                                                                {entity.original}
-                                                                {entity.type && <Badge variant="outline" className="text-[10px]">{entity.type}</Badge>}
-                                                            </p>
+                                                            <p className="font-medium text-sm flex items-center gap-2">{entity.original}{entity.type && <Badge variant="outline" className="text-[10px]">{entity.type}</Badge>}</p>
                                                             {entity.description && <p className="text-xs text-muted-foreground mt-0.5">{entity.description}</p>}
                                                         </div>
                                                     </div>
                                                     <div className="opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1 bg-white/50 backdrop-blur-sm rounded-md p-0.5">
-                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-brand-600" onClick={() => startEditingEntity(entity)}>
-                                                            <Edit className="h-3.5 w-3.5" />
-                                                        </Button>
-                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-danger" onClick={() => deleteEntity(entity.id)}>
-                                                            <Trash2 className="h-3.5 w-3.5" />
-                                                        </Button>
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-brand-600" onClick={() => startEditingEntity(entity)}><Edit className="h-3.5 w-3.5" /></Button>
+                                                        <Button variant="ghost" size="icon" className="h-7 w-7 text-muted-foreground hover:text-danger" onClick={() => deleteEntity(entity.id)}><Trash2 className="h-3.5 w-3.5" /></Button>
                                                     </div>
                                                 </div>
                                             )}
                                         </div>
                                     ))}
-                                    {extractedEntities.length === 0 && (
-                                        <div className="p-8 text-center text-sm text-muted-foreground">No entities remaining.</div>
-                                    )}
+                                    {extractedEntities.length === 0 && <div className="p-8 text-center text-sm text-muted-foreground">No entities remaining.</div>}
                                 </div>
                             </div>
                         )}
@@ -679,9 +591,7 @@ export default function MyContextPage() {
                     {!isExtracting && (
                         <DialogFooter>
                             <Button variant="outline" onClick={() => setProcessingDoc(null)}>Discard</Button>
-                            <Button className="bg-brand-600 hover:bg-brand-700" onClick={handleSaveEntities}>
-                                Save to Context
-                            </Button>
+                            <Button className="bg-brand-600 hover:bg-brand-700" onClick={handleSaveEntities}>Save to Context</Button>
                         </DialogFooter>
                     )}
                 </DialogContent>

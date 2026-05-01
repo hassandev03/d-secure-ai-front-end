@@ -84,9 +84,16 @@ export interface SubscriptionSummary {
 /** GET /api/v1/subscriptions/summary — all subscription data in ONE call */
 export async function getSubscriptionSummary(): Promise<SubscriptionSummary | null> {
     try {
+        console.log('[SUBSCRIPTION_API_CALL] Fetching subscription summary from GET /subscriptions/summary');
         const { data } = await api.get<SubscriptionSummary>('/subscriptions/summary');
+        console.log('[SUBSCRIPTION_API_SUCCESS] Subscription summary retrieved', {
+            planKey: data.subscription_plan_key,
+            requestsUsed: data.quota.requests_used,
+            quotaRemaining: data.quota.requests_remaining,
+        });
         return data;
-    } catch {
+    } catch (err) {
+        console.error('[SUBSCRIPTION_API_ERROR] Failed to fetch subscription summary:', err);
         return null;
     }
 }
@@ -96,8 +103,12 @@ export async function getSubscriptionSummary(): Promise<SubscriptionSummary | nu
 /** GET /api/v1/subscriptions/plans */
 export async function getSubscriptionPlans(): Promise<SubscriptionPlanDisplay[]> {
     try {
+        console.log('[SUBSCRIPTION_PLANS_API_CALL] Fetching subscription plans from GET /subscriptions/plans');
         const { data } = await api.get<BPlan[]>('/subscriptions/plans');
-        if (data.length === 0) return _fallbackPlans();
+        if (data.length === 0) {
+            console.log('[SUBSCRIPTION_PLANS_FALLBACK] No plans returned from API, using fallback');
+            return _fallbackPlans();
+        }
 
         // Build a lookup of curated plans so we can override DB feature text
         const curated = Object.fromEntries(_fallbackPlans().map((p) => [p.key, p]));
@@ -106,8 +117,12 @@ export async function getSubscriptionPlans(): Promise<SubscriptionPlanDisplay[]>
         const individualPlans = data.filter((p) => p.plan_type === 'INDIVIDUAL');
 
         // If for some reason there are no individual plans seeded, use fallback
-        if (individualPlans.length === 0) return _fallbackPlans();
+        if (individualPlans.length === 0) {
+            console.log('[SUBSCRIPTION_PLANS_FALLBACK] No individual plans found, using fallback');
+            return _fallbackPlans();
+        }
 
+        console.log(`[SUBSCRIPTION_PLANS_SUCCESS] Retrieved ${individualPlans.length} subscription plans`);
         return individualPlans.map((p) => {
             const key = p.plan_key.toLowerCase();
             const cur = curated[key];
@@ -124,7 +139,8 @@ export async function getSubscriptionPlans(): Promise<SubscriptionPlanDisplay[]>
                 planId: p.plan_id,
             };
         });
-    } catch {
+    } catch (err) {
+        console.error('[SUBSCRIPTION_PLANS_ERROR] Failed to fetch subscription plans, using fallback:', err);
         return _fallbackPlans();
     }
 }
@@ -132,13 +148,19 @@ export async function getSubscriptionPlans(): Promise<SubscriptionPlanDisplay[]>
 /** GET /api/v1/subscriptions/me */
 export async function getCurrentSubscription(): Promise<BSub | null> {
     try {
+        console.log('[SUBSCRIPTION_ME_API_CALL] Fetching current subscription from GET /subscriptions/me');
         const { data } = await api.get<BSub | null>('/subscriptions/me');
         // Normalise plan_key to lowercase for consistent frontend matching
         if (data && data.plan_key) {
             data.plan_key = data.plan_key.toLowerCase();
         }
+        console.log('[SUBSCRIPTION_ME_SUCCESS] Current subscription retrieved', {
+            status: data?.status,
+            planKey: data?.plan_key,
+        });
         return data;
-    } catch {
+    } catch (err) {
+        console.error('[SUBSCRIPTION_ME_ERROR] Failed to fetch current subscription:', err);
         return null;
     }
 }
@@ -152,6 +174,10 @@ export async function upgradePlan(
     planKey: string,
     existingSubId?: string,
 ): Promise<{ success: boolean }> {
+    console.log('[SUBSCRIPTION_UPGRADE] Starting plan upgrade', {
+        targetPlan: planKey,
+        hasExistingSubId: !!existingSubId,
+    });
     // Cancel the current sub before subscribing to the new plan.
     // If existingSubId is provided, use it directly to avoid a redundant GET.
     const subIdToCancel =
@@ -159,14 +185,18 @@ export async function upgradePlan(
         (await getCurrentSubscription())?.subscription_id;
 
     if (subIdToCancel) {
+        console.log(`[SUBSCRIPTION_CANCEL] Cancelling subscription ${subIdToCancel} before upgrade`);
         await api.post(`/subscriptions/${subIdToCancel}/cancel`, {
             reason: `Upgrading to ${planKey}`,
         });
+        console.log(`[SUBSCRIPTION_CANCEL_SUCCESS] Subscription cancelled`);
     }
+    console.log(`[SUBSCRIPTION_SUBSCRIBE] Subscribing to plan: ${planKey}`);
     await api.post('/subscriptions/subscribe', {
         plan_key:      planKey.toLowerCase(),
         billing_cycle: 'MONTHLY',
     });
+    console.log('[SUBSCRIPTION_UPGRADE_SUCCESS] Plan upgrade completed');
     return { success: true };
 }
 
@@ -178,16 +208,27 @@ export async function downgradePlan(
     planKey: string,
     existingSubId?: string,
 ): Promise<{ success: boolean }> {
+    console.log('[SUBSCRIPTION_DOWNGRADE] Starting plan downgrade', {
+        targetPlan: planKey,
+        hasExistingSubId: !!existingSubId,
+    });
     const subId = existingSubId ?? (await getCurrentSubscription())?.subscription_id;
-    if (!subId) throw new Error('No active subscription to cancel');
+    if (!subId) {
+        console.error('[SUBSCRIPTION_DOWNGRADE_ERROR] No active subscription found to cancel');
+        throw new Error('No active subscription to cancel');
+    }
+    console.log(`[SUBSCRIPTION_CANCEL] Cancelling subscription ${subId} before downgrade`);
     await api.post(`/subscriptions/${subId}/cancel`, {
         reason: `Downgrading to ${planKey}`,
     });
+    console.log(`[SUBSCRIPTION_CANCEL_SUCCESS] Subscription cancelled`);
     // Re-subscribe to the target (lower) plan
+    console.log(`[SUBSCRIPTION_SUBSCRIBE] Re-subscribing to lower plan: ${planKey}`);
     await api.post('/subscriptions/subscribe', {
         plan_key:      planKey.toLowerCase(),
         billing_cycle: 'MONTHLY',
     });
+    console.log('[SUBSCRIPTION_DOWNGRADE_SUCCESS] Plan downgrade completed');
     return { success: true };
 }
 
