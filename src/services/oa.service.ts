@@ -170,6 +170,14 @@ export type OrgDashboardStats = {
     avgCreditsPerEmployee: number;
 };
 
+/** Result type returned by getOrgDashboardStats — includes the departments
+ *  array already fetched inside the function so callers can reuse it without
+ *  a second GET /departments/org/{org_id} round-trip. */
+export type OrgDashboardStatsResult = {
+    stats:       OrgDashboardStats;
+    departments: OADepartment[];
+};
+
 export type OrgModelUsageSlice = { name: string; value: number; color: string };
 export type OrgUsageTrendPoint = { date: string; creditsUsed: number };
 export type RecentActivityItem = {
@@ -362,8 +370,13 @@ export async function updateOAOrgPolicy(pol: Partial<OAOrgPolicy>): Promise<void
     });
 }
 
-export async function getOADeptPolicies(): Promise<OADeptPolicyState[]> {
-    const depts = await getOADepartments();
+/**
+ * @param existingDepts  Pre-fetched departments \u2014 when provided the internal
+ *   call to getOADepartments() (GET /departments/org/{org_id}) is skipped,
+ *   saving a round-trip for callers that already have the list.
+ */
+export async function getOADeptPolicies(existingDepts?: OADepartment[]): Promise<OADeptPolicyState[]> {
+    const depts = existingDepts ?? await getOADepartments();
     const results = await Promise.allSettled(
         depts.map((d) =>
             api.get<{
@@ -433,7 +446,12 @@ export async function getOAQuotaRequests(): Promise<OAQuotaRequest[]> {
 // Dashboard
 // ─────────────────────────────────────────────────────────────────────────────
 
-export async function getOrgDashboardStats(): Promise<OrgDashboardStats> {
+/**
+ * Fetch org-level dashboard KPIs and the departments array in one composite
+ * call.  Returns both so the caller can populate the dept-usage chart without
+ * issuing a second GET /departments/org/{org_id} request.
+ */
+export async function getOrgDashboardStats(): Promise<OrgDashboardStatsResult> {
     try {
         const [depts, employees] = await Promise.all([
             getOADepartments(),
@@ -443,7 +461,7 @@ export async function getOrgDashboardStats(): Promise<OrgDashboardStats> {
         const pending = employees.filter((e) => e.status === 'PENDING').length;
         const totalBudget  = depts.reduce((s, d) => s + d.budget, 0);
         const usedCredits  = depts.reduce((s, d) => s + (d.budget * d.percentageUsed / 100), 0);
-        return {
+        const stats: OrgDashboardStats = {
             totalEmployees:        employees.length,
             activeEmployees:       active,
             pendingEmployees:      pending,
@@ -456,11 +474,19 @@ export async function getOrgDashboardStats(): Promise<OrgDashboardStats> {
             adoptionRate:          employees.length > 0 ? Math.round((active / employees.length) * 100) : 0,
             avgCreditsPerEmployee: active > 0 ? Math.round((usedCredits / active) * 10) / 10 : 0,
         };
+        return { stats, departments: depts };
     } catch {
-        return { totalEmployees: 0, activeEmployees: 0, pendingEmployees: 0, departments: 0, monthlyCredits: 0, monthlyBudget: 0, quotaUtilization: 0, unallocatedBudget: 0, pendingQuotaRequests: 0, adoptionRate: 0, avgCreditsPerEmployee: 0 };
+        return {
+            stats: { totalEmployees: 0, activeEmployees: 0, pendingEmployees: 0, departments: 0, monthlyCredits: 0, monthlyBudget: 0, quotaUtilization: 0, unallocatedBudget: 0, pendingQuotaRequests: 0, adoptionRate: 0, avgCreditsPerEmployee: 0 },
+            departments: [],
+        };
     }
 }
 
+/**
+ * @deprecated Use getOrgDashboardStats() which returns `{ stats, departments }`
+ *   and eliminates the redundant GET /departments/org/{org_id} re-fetch.
+ */
 export async function getOrgDeptUsage(): Promise<OADepartment[]> {
     return getOADepartments();
 }

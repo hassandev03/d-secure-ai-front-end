@@ -122,6 +122,14 @@ export type DeptDashboardStats = {
     quotaUtilization:      number;
 };
 
+/** Returned by getDeptDashboardStats — includes the employees array already
+ *  fetched internally so callers can reuse it (e.g. for getDeptTopUsers)
+ *  without issuing a second GET /users?limit=200 request. */
+export type DeptDashboardStatsResult = {
+    stats:     DeptDashboardStats;
+    employees: DeptEmployee[];
+};
+
 export type DailyUsagePoint   = { date: string; credits: number; activeUsers: number };
 export type DailyRequestPoint  = DailyUsagePoint;
 export type ModelUsageSlice    = { name: string; value: number; color: string };
@@ -289,22 +297,37 @@ export async function removeDeptEmployee(empId: string): Promise<void> {
 
 export async function updateEmployeeLimit(empId: string, limit: number): Promise<DeptEmployee> {
     await api.put(`/policies/dept/${getDeptId()}/access/${empId}`, { daily_limit: limit });
-    const employees = await getDeptEmployees();
-    const emp = employees.find((e) => e.id === empId);
-    if (!emp) throw new Error('Employee not found');
-    emp.creditLimit = limit;
-    return emp;
+    // Fetch only the updated user — avoids a full GET /users?limit=200 for a single record.
+    const { data } = await api.get<BUser>(`/users/${empId}`);
+    return {
+        id:          data.user_id,
+        name:        data.name,
+        email:       data.email,
+        roleId:      'role-3',
+        roleName:    data.job_title ?? 'Developer',
+        status:      (data.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
+        creditsUsed: 0,
+        creditLimit: limit,
+        lastActive:  data.last_active_at ? data.last_active_at.split('T')[0] : 'Never',
+    };
 }
 
 export async function setEmployeeRestriction(empId: string, restrict: boolean): Promise<DeptEmployee> {
     const status = restrict ? 'DEACTIVATED' : 'ACTIVE';
     await api.patch(`/users/${empId}/status`, { status });
-    const employees = await getDeptEmployees();
-    const emp = employees.find((e) => e.id === empId);
-    if (!emp) throw new Error('Employee not found');
-    emp.status      = restrict ? 'INACTIVE' : 'ACTIVE';
-    emp.creditLimit = restrict ? 0 : Math.ceil(ROLE_BUDGETS['role-3']);
-    return emp;
+    // Fetch only the updated user — avoids a full GET /users?limit=200 for a single record.
+    const { data } = await api.get<BUser>(`/users/${empId}`);
+    return {
+        id:          data.user_id,
+        name:        data.name,
+        email:       data.email,
+        roleId:      'role-3',
+        roleName:    data.job_title ?? 'Developer',
+        status:      restrict ? 'INACTIVE' : 'ACTIVE',
+        creditsUsed: 0,
+        creditLimit: restrict ? 0 : Math.ceil(ROLE_BUDGETS['role-3']),
+        lastActive:  data.last_active_at ? data.last_active_at.split('T')[0] : 'Never',
+    };
 }
 
 // ─── Access Control ───────────────────────────────────────────────────────────
@@ -425,12 +448,17 @@ export async function submitOrgQuotaRequest(credits: number, reason: string): Pr
 
 // ─── Dashboard Analytics ──────────────────────────────────────────────────────
 
-export async function getDeptDashboardStats(): Promise<DeptDashboardStats> {
+/**
+ * Returns both the computed dashboard stats AND the employees array fetched
+ * internally, so callers can pass it to getDeptTopUsers and avoid a second
+ * GET /users?limit=200 request.
+ */
+export async function getDeptDashboardStats(): Promise<DeptDashboardStatsResult> {
     try {
         const [quota, employees] = await Promise.all([getDeptQuota(), getDeptEmployees()]);
         const active = employees.filter((e) => e.status === 'ACTIVE').length;
         const used   = employees.reduce((s, e) => s + e.creditsUsed, 0);
-        return {
+        const stats: DeptDashboardStats = {
             totalEmployees:        employees.length,
             activeEmployees:       active,
             monthlyCreditsUsed:    used,
@@ -440,8 +468,12 @@ export async function getDeptDashboardStats(): Promise<DeptDashboardStats> {
             avgCreditsPerEmployee: active > 0 ? Math.round((used / active) * 10) / 10 : 0,
             quotaUtilization:      quota.percentageUsed,
         };
+        return { stats, employees };
     } catch {
-        return { totalEmployees: 0, activeEmployees: 0, monthlyCreditsUsed: 0, monthlyCreditBudget: 0, modelsInUse: 0, totalModelsAvailable: 0, avgCreditsPerEmployee: 0, quotaUtilization: 0 };
+        return {
+            stats: { totalEmployees: 0, activeEmployees: 0, monthlyCreditsUsed: 0, monthlyCreditBudget: 0, modelsInUse: 0, totalModelsAvailable: 0, avgCreditsPerEmployee: 0, quotaUtilization: 0 },
+            employees: [],
+        };
     }
 }
 
@@ -449,7 +481,19 @@ export async function getDeptDailyRequests(): Promise<DailyRequestPoint[]>     {
 export async function getDeptModelUsage():    Promise<ModelUsageSlice[]>        { return []; }
 export async function getDeptUsageTrend(_days: 7 | 30 = 7): Promise<UsageTrendPoint[]> { return []; }
 export async function getDeptRoleUsage():     Promise<RoleUsagePoint[]>         { return []; }
-export async function getDeptTopUsers(limit = 5): Promise<DeptEmployee[]>       { const e = await getDeptEmployees(); return e.sort((a, b) => b.creditsUsed - a.creditsUsed).slice(0, limit); }
+
+/**
+ * @param limit     How many top users to return (default 5).
+ * @param employees Pre-fetched employee list — when provided the network call
+ *                  to GET /users?limit=200 is skipped entirely.
+ */
+export async function getDeptTopUsers(
+    limit = 5,
+    employees?: DeptEmployee[],
+): Promise<DeptEmployee[]> {
+    const e = employees ?? await getDeptEmployees();
+    return e.sort((a, b) => b.creditsUsed - a.creditsUsed).slice(0, limit);
+}
 export async function getDeptRequestTypeBreakdown(): Promise<UsageTypePoint[]>  { return []; }
 
 // ─── System Prompts ───────────────────────────────────────────────────────────

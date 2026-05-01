@@ -61,11 +61,16 @@ export default function DeptDashboardView({
     const [usageTypes, setUsageTypes] = useState<UsageTypePoint[]>([]);
 
     useEffect(() => {
-        getDeptDashboardStats().then(setStats);
+        // getDeptDashboardStats now returns { stats, employees }.
+        // We pass the cached employees array to getDeptTopUsers so it skips
+        // its own GET /users?limit=200 — eliminating the duplicate network call.
+        getDeptDashboardStats().then(({ stats, employees }) => {
+            setStats(stats);
+            getDeptTopUsers(5, employees).then(setTopUsers);
+        });
         getDeptDailyRequests().then(setDaily);
         getDeptModelUsage().then(setModels);
         getDeptRoleUsage().then(setRoles);
-        getDeptTopUsers(5).then(setTopUsers);
         getDeptRequestTypeBreakdown().then(setUsageTypes);
     }, []);
 

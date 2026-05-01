@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { useAuthStore } from "@/store/auth.store";
 import {
-    getSubscriptionPlans, getPaymentMethods, upgradePlan, getCurrentSubscription, downgradePlan,
+    getSubscriptionPlans, getPaymentMethods, upgradePlan, downgradePlan,
     getSubscriptionSummary,
     type SubscriptionPlanDisplay, type PaymentMethod, type BSub,
 } from "@/services/subscription.service";
@@ -101,46 +101,31 @@ export default function SubscriptionPage() {
 
     useEffect(() => {
         setIsLoadingPlans(true);
+        // Load plans and summary in parallel. getSubscriptionPlans() handles all
+        // the plan-mapping and fallback logic — no need to duplicate it here.
         Promise.all([
             getSubscriptionSummary(),
+            getSubscriptionPlans(),
             getPaymentMethods(),
-        ]).then(([summary, cards]) => {
+        ]).then(([summary, plans, cards]) => {
             if (summary) {
-                // Derive SubscriptionPlanDisplay[] from the plans in the summary
-                const curated = Object.fromEntries(_fallbackPlans().map((p) => [p.key, p]));
-                const individualPlans = summary.plans.filter((p) => p.plan_type === 'INDIVIDUAL');
-                const displayPlans: SubscriptionPlanDisplay[] = (individualPlans.length === 0 ? _fallbackPlans() : individualPlans.map((p) => {
-                    const key = p.plan_key.toLowerCase();
-                    const cur = curated[key];
-                    return {
-                        key,
-                        name:         p.name,
-                        price:        p.monthly_price,
-                        creditBudget: cur?.creditBudget ?? `$${p.monthly_price}/mo`,
-                        features: cur?.features ?? [
-                            ...(p.features ?? []).map((t) => ({ text: t, included: true })),
-                            ...(p.excluded_features ?? []).map((t) => ({ text: t, included: false })),
-                        ],
-                        planId: p.plan_id,
-                    };
-                }));
-
-                setPlansData(displayPlans);
+                // Plans are already mapped correctly by the service layer.
+                setPlansData(plans);
                 setActiveSub(summary.subscription);
 
                 // Derive plan key from subscription
                 if (summary.subscription) {
                     let matchedPlan = summary.subscription.plan_key
-                        ? displayPlans.find((p) => p.key === summary.subscription!.plan_key)
+                        ? plans.find((p) => p.key === summary.subscription!.plan_key)
                         : null;
                     if (!matchedPlan && summary.subscription.plan_id) {
-                        matchedPlan = displayPlans.find(
+                        matchedPlan = plans.find(
                             (p) => p.planId && p.planId.toLowerCase() === summary.subscription!.plan_id.toLowerCase()
                         ) ?? null;
                     }
                     if (!matchedPlan && summary.quota?.plan_name) {
                         const normalizedStatName = summary.quota.plan_name.toLowerCase().replace(/\s*\(default\)/i, '').trim();
-                        matchedPlan = displayPlans.find(
+                        matchedPlan = plans.find(
                             (p) => p.name.toLowerCase() === normalizedStatName || p.key.toLowerCase() === normalizedStatName
                         ) ?? null;
                     }
@@ -162,8 +147,8 @@ export default function SubscriptionPage() {
                     });
                 }
             } else {
-                // Fallback: load plans the old way
-                getSubscriptionPlans().then(setPlansData);
+                // summary failed — still show the plans
+                setPlansData(plans);
             }
             setSavedCards(cards);
             setIsLoadingPlans(false);
@@ -247,7 +232,9 @@ export default function SubscriptionPage() {
     const handleDowngradeClick = async (planKey: string) => {
         toast.info("Downgrade scheduled for end of billing cycle.");
         try {
-            await downgradePlan(planKey);
+            // Pass activeSub?.subscription_id to skip the redundant GET /subscriptions/me
+            // inside downgradePlan — the page already holds it in state.
+            await downgradePlan(planKey, activeSub?.subscription_id);
             setCurrentPlanKey(planKey);
             updateUser({ subscriptionTier: planKey.toUpperCase() as any });
             toast.success(`Successfully downgraded to the ${plansData.find((p) => p.key === planKey)?.name} plan.`);
@@ -281,7 +268,8 @@ export default function SubscriptionPage() {
         if ((useNewCard || savedCards.length === 0) && !validateCardForm()) return;
         setIsProcessing(true);
         try {
-            await upgradePlan(selectedPlanForUpgrade!.key);
+            // Pass activeSub?.subscription_id to avoid a redundant GET /subscriptions/me
+            await upgradePlan(selectedPlanForUpgrade!.key, activeSub?.subscription_id);
             setIsPaymentModalOpen(false);
             if (useNewCard || savedCards.length === 0) {
                 setSavedCards((prev) => [...prev.map((c) => ({ ...c, isDefault: false })), createCardFromForm()]);

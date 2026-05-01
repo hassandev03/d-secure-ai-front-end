@@ -13,7 +13,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Badge } from "@/components/ui/badge";
 
 interface TopbarProps {
     showProfile?: boolean;
@@ -40,11 +39,9 @@ export default function Topbar({ showProfile = true }: TopbarProps) {
             {/* Right side */}
             <div className="ml-auto flex items-center gap-3">
                 {/* Notifications */}
+                {/* Notifications — badge hidden until real API is wired */}
                 <Button variant="ghost" size="icon" className="relative h-9 w-9">
                     <Bell className="h-4 w-4" />
-                    <Badge className="absolute -right-0.5 -top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-danger p-0 text-[10px] text-white">
-                        3
-                    </Badge>
                 </Button>
 
                 {/* Profile dropdown */}

@@ -15,6 +15,7 @@
 
 import api from './api';
 import type { LLMModel, LLMProvider, ChatSession, Message, AnonymizedEntity } from '@/types/chat.types';
+import { PROVIDER_DISPLAY, MODEL_DISPLAY } from '@/lib/chat.helpers';
 
 /* ══════════════════════════════════════════════════════
    Backwards-compatible aliases (used both locally and by
@@ -94,34 +95,7 @@ export interface QuotaStatus {
     cost_this_period: number;
 }
 
-// Provider display names map
-const PROVIDER_DISPLAY: Record<string, string> = {
-    openai: 'OpenAI',
-    anthropic: 'Anthropic',
-    google: 'Google',
-    azure: 'OpenAI',   // Azure OpenAI serves the same GPT models — show as OpenAI to users
-};
-
-// Model display names map (extend as needed)
-const MODEL_DISPLAY: Record<string, string> = {
-    // Azure OpenAI
-    'gpt-4.1':           'GPT-4.1',
-    // Anthropic Claude 4.x
-    'claude-opus-4-5':   'Claude Opus',
-    'claude-sonnet-4-5': 'Claude Sonnet',
-    'claude-haiku-4-5':  'Claude Haiku',
-    // Anthropic Claude 3.x (legacy stored sessions)
-    'claude-3-5-sonnet-20241022': 'Claude 3.5 Sonnet',
-    'claude-3-5-haiku-20241022':  'Claude 3.5 Haiku',
-    'claude-3-opus-20240229':     'Claude 3 Opus',
-    'claude-3-haiku-20240307':    'Claude 3 Haiku',
-    // Gemini
-    'gemini-3-flash-preview': 'Gemini 3 Flash',
-    'gemini-3.1-flash-lite-preview': 'Gemini 3.1 Flash Lite',
-    'gemini-3.1-flash-preview': 'Gemini 3.1 Flash',
-    'gemini-2.5-flash-lite': 'Gemini 2.5 Flash Lite',
-    'gemini-2.5-flash': 'Gemini 2.5 Flash',
-};
+// PROVIDER_DISPLAY and MODEL_DISPLAY are now in @/lib/chat.helpers — single source of truth.
 
 function mapSession(b: BackendSession): ChatSession {
     const model = b.llm_model as LLMModel;

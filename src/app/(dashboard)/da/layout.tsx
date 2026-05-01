@@ -13,7 +13,7 @@ import Topbar from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
 import { getDeptPendingQuotaCount } from "@/services/da.service";
 import { useAuthStore } from "@/store/auth.store";
-import { getCurrentUser } from "@/services/auth.service";
+import { getCurrentUserSummary } from "@/services/auth.service";
 
 export default function DeptAdminLayout({
     children,
@@ -27,9 +27,26 @@ export default function DeptAdminLayout({
     useEffect(() => {
         getDeptPendingQuotaCount().then(setPendingCount).catch(() => {});
         if (!isAuthenticated) {
-            getCurrentUser().then((u) => {
+            // Use getCurrentUserSummary instead of getCurrentUser so we call
+            // /users/me/summary directly (not via getCurrentUser which proxies it).
+            getCurrentUserSummary().then((summary) => {
                 const storedToken = localStorage.getItem('auth_token');
-                if (u && storedToken) setUser(u, storedToken);
+                if (summary?.user && storedToken) {
+                    setUser(
+                        {
+                            id:             summary.user.user_id,
+                            name:           summary.user.name,
+                            email:          summary.user.email,
+                            role:           summary.user.role as any,
+                            status:         summary.user.status as any,
+                            orgId:          summary.user.org_id ?? undefined,
+                            isFirstLogin:   summary.user.is_first_login,
+                            isTwoFAEnabled: false,
+                            createdAt:      new Date().toISOString(),
+                        },
+                        storedToken
+                    );
+                }
             });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps

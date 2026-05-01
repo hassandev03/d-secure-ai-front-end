@@ -57,6 +57,8 @@ export default function UserLayout({
                             orgId:         summary.user.org_id ?? undefined,
                             subscriptionTier: summary.quota?.plan_key?.toUpperCase() as any,
                             isFirstLogin:  summary.user.is_first_login,
+                            isTwoFAEnabled: false,
+                            createdAt:     new Date().toISOString(),
                         },
                         storedToken
                     );
@@ -88,9 +90,10 @@ export default function UserLayout({
     }, []);
 
     /**
-     * R12: Fetch subscription + plans with a 5-minute in-memory TTL.
-     * Uses the module-level `useSubscriptionStore` so subsequent page
-     * navigations within the same session skip the fetch entirely.
+     * R12: Sync subscription state from the lightweight /users/me/summary endpoint.
+     * Avoids a separate /subscriptions/summary call — the summary endpoint already
+     * returns subscription + quota data, eliminating one redundant authenticated
+     * API call (and its associated user + department queries) on every page load.
      */
     const syncSubscription = async (role: string | undefined) => {
         if (role !== 'PROFESSIONAL') {
@@ -121,14 +124,24 @@ export default function UserLayout({
         }
 
         try {
-            const { getSubscriptionSummary } = await import("@/services/subscription.service");
-            const summary = await getSubscriptionSummary();
+            // Reuse the lightweight /users/me/summary endpoint instead of the
+            // heavier /subscriptions/summary — same subscription data, fewer queries.
+            const summary = await getCurrentUserSummary();
             if (summary?.subscription && summary?.quota) {
-                subscriptionStore.setSubscription(summary.subscription, []);
-            }
-
-            if (summary?.subscription_plan_key) {
-                updateUser({ subscriptionTier: summary.subscription_plan_key.toUpperCase() as any });
+                subscriptionStore.setSubscription(
+                    {
+                        subscription_id: summary.subscription.subscription_id,
+                        plan_id:         summary.subscription.plan_id,
+                        plan_key:        summary.subscription.plan_key,
+                        status:          summary.subscription.status,
+                        current_period_start: summary.subscription.current_period_start,
+                        current_period_end:   summary.subscription.current_period_end,
+                        billing_cycle:   summary.subscription.billing_cycle,
+                        cancelled_at:    null,
+                    },
+                    []
+                );
+                updateUser({ subscriptionTier: summary.subscription.plan_key.toUpperCase() as any });
             } else {
                 updateUser({ subscriptionTier: 'FREE' });
             }

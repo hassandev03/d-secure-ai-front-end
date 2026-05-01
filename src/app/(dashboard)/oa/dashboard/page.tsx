@@ -21,7 +21,6 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
     getOrgDashboardStats,
-    getOrgDeptUsage,
     getOrgModelUsage,
     getOrgUsageTrend,
     getOrgRecentActivity,
@@ -59,8 +58,13 @@ export default function OrgAdminDashboard() {
     const [activity, setActivity] = useState<RecentActivityItem[]>([]);
 
     useEffect(() => {
-        getOrgDashboardStats().then(setStats);
-        getOrgDeptUsage().then(setDepts);
+        // getOrgDashboardStats now returns { stats, departments } so we reuse
+        // the already-fetched departments instead of calling getOrgDeptUsage()
+        // (which was a thin wrapper around getOADepartments — a duplicate request).
+        getOrgDashboardStats().then(({ stats, departments }) => {
+            setStats(stats);
+            setDepts(departments);
+        });
         getOrgModelUsage().then(setModels);
         getOrgRecentActivity().then(setActivity);
     }, []);

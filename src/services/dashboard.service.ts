@@ -1,5 +1,6 @@
 import api from './api';
 import type { UserStats } from '@/types/analytics.types';
+import { PROVIDER_DISPLAY, MODEL_DISPLAY } from '@/lib/chat.helpers';
 
 /* ══════════════════════════════════════════════════════
    Dashboard-specific types (mirror backend response)
@@ -92,20 +93,8 @@ const MODEL_COLORS: Record<string, string> = {
 };
 const FALLBACK_COLORS = ['#f97316', '#10b981', '#3b82f6', '#8b5cf6', '#ef4444'];
 
-// ─── Model / provider display name maps (mirrored from chat.service) ──────────
-
-const PROVIDER_DISPLAY: Record<string, string> = {
-    openai: 'OpenAI', anthropic: 'Anthropic', google: 'Google', azure: 'OpenAI',
-};
-const MODEL_DISPLAY: Record<string, string> = {
-    'gpt-4.1': 'GPT-4.1',
-    'claude-opus-4-5': 'Claude Opus',
-    'claude-sonnet-4-5': 'Claude Sonnet',
-    'gemini-3.1-flash-preview': 'Gemini 3.1 Flash',
-    'gemini-2.5-flash': 'Gemini 2.5 Flash',
-};
-
-// ─── ChatSessionSummary (inline to avoid cycle with chat.service) ────────────
+// ─── PROVIDER_DISPLAY, MODEL_DISPLAY imported from @/lib/chat.helpers ────────
+// ─── ChatSessionSummary interface (dashboard-local shape) ─────────────────────
 
 export interface ChatSessionSummary {
     id: string;

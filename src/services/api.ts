@@ -62,16 +62,28 @@ api.interceptors.response.use(undefined, async (error) => {
     const config = error.config;
     const status = error.response?.status as number | undefined;
 
-    // Only retry GET/HEAD requests with transient server errors
+    // Only retry GET/HEAD requests with transient server errors.
+    // Callers can opt out by setting config.__noRetry = true (e.g. dashboard
+    // analytics endpoints where fast failure is preferable to a 7-second delay).
     if (
         config &&
         status &&
         RETRYABLE_STATUS.has(status) &&
         ['get', 'head'].includes((config.method ?? '').toLowerCase()) &&
-        (config.__retryCount ?? 0) < MAX_RETRIES
+        (config.__retryCount ?? 0) < MAX_RETRIES &&
+        !config.__noRetry
     ) {
         config.__retryCount = (config.__retryCount ?? 0) + 1;
         const delay = Math.pow(2, config.__retryCount - 1) * 1000; // 1s, 2s, 4s
+
+        if (config.__retryCount === MAX_RETRIES) {
+            console.warn(
+                `[api] Max retries (${MAX_RETRIES}) reached for ` +
+                `${(config.method ?? 'GET').toUpperCase()} ${config.url} — ` +
+                `status ${status}. Giving up.`
+            );
+        }
+
         await new Promise((r) => setTimeout(r, delay));
         return api.request(config);
     }

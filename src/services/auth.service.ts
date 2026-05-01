@@ -177,6 +177,7 @@ export async function getCurrentUser(): Promise<User | null> {
             orgId:          u.org_id ?? undefined,
             isFirstLogin:   u.is_first_login,
             isTwoFAEnabled: false,
+            createdAt:      new Date().toISOString(),
         } as User;
     }
 

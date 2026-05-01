@@ -13,7 +13,7 @@ import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { cn } from "@/lib/utils";
 import { useAuthStore } from "@/store/auth.store";
-import { getCurrentUser } from "@/services/auth.service";
+import { getCurrentUserSummary } from "@/services/auth.service";
 
 const superAdminNav: NavGroup[] = [
     {
@@ -49,9 +49,26 @@ export default function SuperAdminLayout({
 
     useEffect(() => {
         if (!isAuthenticated) {
-            getCurrentUser().then((u) => {
+            // Use getCurrentUserSummary instead of getCurrentUser so we call
+            // /users/me/summary directly (not via getCurrentUser which proxies it).
+            getCurrentUserSummary().then((summary) => {
                 const storedToken = localStorage.getItem('auth_token');
-                if (u && storedToken) setUser(u, storedToken);
+                if (summary?.user && storedToken) {
+                    setUser(
+                        {
+                            id:             summary.user.user_id,
+                            name:           summary.user.name,
+                            email:          summary.user.email,
+                            role:           summary.user.role as any,
+                            status:         summary.user.status as any,
+                            orgId:          summary.user.org_id ?? undefined,
+                            isFirstLogin:   summary.user.is_first_login,
+                            isTwoFAEnabled: false,
+                            createdAt:      new Date().toISOString(), // Mock value, update with actual if available from summary
+                        },
+                        storedToken
+                    );
+                }
             });
         }
     // eslint-disable-next-line react-hooks/exhaustive-deps
