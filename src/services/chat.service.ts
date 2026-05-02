@@ -224,7 +224,7 @@ const _sessionsInFlight = new Map<string, Promise<ChatSessionSummary[]>>();
  * issued.  This eliminates the duplicate ``GET /api/v1/chat/sessions`` calls
  * visible in the DB logs when navigating to the history page.
  */
-export async function getChatSessions(limit = 30, offset = 0): Promise<ChatSessionSummary[]> {
+export async function getChatSessions(limit = 30, offset = 0, signal?: AbortSignal): Promise<ChatSessionSummary[]> {
     const cacheKey = `${limit}:${offset}`;
     const existing = _sessionsInFlight.get(cacheKey);
     if (existing) {
@@ -233,7 +233,7 @@ export async function getChatSessions(limit = 30, offset = 0): Promise<ChatSessi
     }
 
     console.log(`[CHAT_SESSIONS_API_CALL] Starting fresh fetch to GET /chat/sessions (limit: ${limit}, offset: ${offset})`);
-    const promise = _fetchChatSessions(limit, offset).finally(() => {
+    const promise = _fetchChatSessions(limit, offset, signal).finally(() => {
         console.log(`[CHAT_SESSIONS_DEDUP_CLEAR] Clearing in-flight slot for key: ${cacheKey}`);
         _sessionsInFlight.delete(cacheKey);
     });
@@ -242,11 +242,12 @@ export async function getChatSessions(limit = 30, offset = 0): Promise<ChatSessi
     return promise;
 }
 
-async function _fetchChatSessions(limit: number, offset: number): Promise<ChatSessionSummary[]> {
+async function _fetchChatSessions(limit: number, offset: number, signal?: AbortSignal): Promise<ChatSessionSummary[]> {
     try {
         console.log(`[CHAT_SESSIONS_FETCH] Fetching sessions from backend (limit: ${limit}, offset: ${offset})`);
         const { data } = await api.get<BackendSession[]>(
             `/chat/sessions?limit=${limit}&offset=${offset}`,
+            { signal },
         );
         console.log(`[CHAT_SESSIONS_FETCH_SUCCESS] Retrieved ${data.length} sessions`);
         return data.map(mapSession);
@@ -258,10 +259,11 @@ async function _fetchChatSessions(limit: number, offset: number): Promise<ChatSe
 
 /** GET /api/v1/chat/sessions/:id */
 export async function getChatSession(
-    sessionId: string
+    sessionId: string,
+    signal?: AbortSignal,
 ): Promise<ChatSessionSummary | null> {
     try {
-        const { data } = await api.get<BackendSession>(`/chat/sessions/${sessionId}`);
+        const { data } = await api.get<BackendSession>(`/chat/sessions/${sessionId}`, { signal });
         return mapSession(data);
     } catch {
         return null;
@@ -269,10 +271,11 @@ export async function getChatSession(
 }
 
 /** GET /api/v1/chat/sessions/:id/messages */
-export async function getChatMessages(sessionId: string): Promise<ChatMessage[]> {
+export async function getChatMessages(sessionId: string, signal?: AbortSignal): Promise<ChatMessage[]> {
     try {
         const { data } = await api.get<BackendMessage[]>(
-            `/chat/sessions/${sessionId}/messages`
+            `/chat/sessions/${sessionId}/messages`,
+            { signal },
         );
         return data.map(mapMessage);
     } catch {
@@ -320,7 +323,8 @@ export async function sendMessage(
     sessionId: string | null,
     content: string,
     llmModel?: string,
-    fileIds?: string[]
+    fileIds?: string[],
+    signal?: AbortSignal,
 ): Promise<{ userMessage: Message; assistantMessage: Message }> {
     let response: BackendChatResponse;
 
@@ -338,7 +342,7 @@ export async function sendMessage(
             hasFiles: fileIds && fileIds.length > 0,
             messageLength: content.length,
         });
-        const { data } = await api.post<BackendChatResponse>('/chat/message', body);
+        const { data } = await api.post<BackendChatResponse>('/chat/message', body, { signal });
         response = data;
         console.log('[CHAT_MESSAGE_SUCCESS] Message sent successfully', {
             responseSessionId: response.session_id,

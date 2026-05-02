@@ -82,10 +82,10 @@ export interface SubscriptionSummary {
 }
 
 /** GET /api/v1/subscriptions/summary — all subscription data in ONE call */
-export async function getSubscriptionSummary(): Promise<SubscriptionSummary | null> {
+export async function getSubscriptionSummary(signal?: AbortSignal): Promise<SubscriptionSummary | null> {
     try {
         console.log('[SUBSCRIPTION_API_CALL] Fetching subscription summary from GET /subscriptions/summary');
-        const { data } = await api.get<SubscriptionSummary>('/subscriptions/summary');
+        const { data } = await api.get<SubscriptionSummary>('/subscriptions/summary', { signal });
         console.log('[SUBSCRIPTION_API_SUCCESS] Subscription summary retrieved', {
             planKey: data.subscription_plan_key,
             requestsUsed: data.quota.requests_used,
@@ -101,10 +101,10 @@ export async function getSubscriptionSummary(): Promise<SubscriptionSummary | nu
 // ─────────────────────────────────────────────────────────────────────────────
 
 /** GET /api/v1/subscriptions/plans */
-export async function getSubscriptionPlans(): Promise<SubscriptionPlanDisplay[]> {
+export async function getSubscriptionPlans(signal?: AbortSignal): Promise<SubscriptionPlanDisplay[]> {
     try {
         console.log('[SUBSCRIPTION_PLANS_API_CALL] Fetching subscription plans from GET /subscriptions/plans');
-        const { data } = await api.get<BPlan[]>('/subscriptions/plans');
+        const { data } = await api.get<BPlan[]>('/subscriptions/plans', { signal });
         if (data.length === 0) {
             console.log('[SUBSCRIPTION_PLANS_FALLBACK] No plans returned from API, using fallback');
             return _fallbackPlans();

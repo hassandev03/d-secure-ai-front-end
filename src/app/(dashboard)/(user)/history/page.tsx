@@ -33,10 +33,16 @@ export default function HistoryPage() {
     const [hasFile, setHasFile] = useState("all");
 
     useEffect(() => {
+        const controller = new AbortController();
         setLoading(true);
-        getChatSessions()
-            .then(setSessions)
-            .finally(() => setLoading(false));
+        getChatSessions(30, 0, controller.signal)
+            .then((data) => {
+                if (!controller.signal.aborted) setSessions(data);
+            })
+            .finally(() => {
+                if (!controller.signal.aborted) setLoading(false);
+            });
+        return () => controller.abort();
     }, []);
 
     const handleDelete = async (id: string, e: React.MouseEvent) => {

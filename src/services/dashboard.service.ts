@@ -198,7 +198,7 @@ export function invalidateDashboardCache(): void {
 
 // ─── Internal HTTP fetch + transform ─────────────────────────────────────────
 
-async function _fetchDashboard(): Promise<DashboardSummaryResponse | null> {
+async function _fetchDashboard(signal?: AbortSignal): Promise<DashboardSummaryResponse | null> {
     try {
         const { data } = await api.get<{
             usage_30d: BUsageMe['summary'];
@@ -206,7 +206,7 @@ async function _fetchDashboard(): Promise<DashboardSummaryResponse | null> {
             total_sessions: number;
             daily: BUsageMe['daily'];
             recent_sessions: BRecentSession[];
-        }>('/analytics/dashboard/summary');
+        }>('/analytics/dashboard/summary', { signal });
 
         const rawUsage = data.usage_30d;
         const quota    = data.quota;
@@ -274,7 +274,7 @@ async function _fetchDashboard(): Promise<DashboardSummaryResponse | null> {
  * getModelUsageBreakdown, getEntityTypeBreakdown) delegate here so they all
  * benefit from the cache and deduplication automatically.
  */
-export async function getDashboardSummary(): Promise<DashboardSummaryResponse | null> {
+export async function getDashboardSummary(signal?: AbortSignal): Promise<DashboardSummaryResponse | null> {
     // Layer 2 — serve from cache if still fresh.
     if (_cache && Date.now() - _cache.storedAt < CACHE_TTL_MS) {
         const cacheAgeMs = Date.now() - _cache.storedAt;
@@ -291,7 +291,7 @@ export async function getDashboardSummary(): Promise<DashboardSummaryResponse | 
     // No cache and no in-flight request — start a fresh fetch and share the
     // promise so every concurrent caller gets the same result.
     console.log('[DASHBOARD_API_CALL] Starting fresh fetch to GET /analytics/dashboard/summary');
-    _inflight = _fetchDashboard().then((result) => {
+    _inflight = _fetchDashboard(signal).then((result) => {
         if (result !== null) {
             // Warm the cache on success.
             console.log('[DASHBOARD_CACHE_WARM] Populated cache with fresh result');

@@ -100,14 +100,16 @@ export default function SubscriptionPage() {
     const [cardErrors,    setCardErrors]    = useState<Record<string, string | null>>({});
 
     useEffect(() => {
+        const controller = new AbortController();
         setIsLoadingPlans(true);
         // Load plans and summary in parallel. getSubscriptionPlans() handles all
         // the plan-mapping and fallback logic — no need to duplicate it here.
         Promise.all([
-            getSubscriptionSummary(),
-            getSubscriptionPlans(),
+            getSubscriptionSummary(controller.signal),
+            getSubscriptionPlans(controller.signal),
             getPaymentMethods(),
         ]).then(([summary, plans, cards]) => {
+            if (controller.signal.aborted) return;
             if (summary) {
                 // Plans are already mapped correctly by the service layer.
                 setPlansData(plans);
@@ -153,6 +155,7 @@ export default function SubscriptionPage() {
             setSavedCards(cards);
             setIsLoadingPlans(false);
         });
+        return () => controller.abort();
     }, []);
 
     // Format next billing date from real subscription

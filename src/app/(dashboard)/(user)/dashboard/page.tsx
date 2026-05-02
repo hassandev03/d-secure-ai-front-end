@@ -31,8 +31,10 @@ export default function UserDashboard() {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        const controller = new AbortController();
         setIsLoading(true);
-        getDashboardSummary().then((data) => {
+        getDashboardSummary(controller.signal).then((data) => {
+            if (controller.signal.aborted) return;
             if (data) {
                 setStats(data.stats);
                 setActivity(data.dailyActivity);
@@ -54,6 +56,7 @@ export default function UserDashboard() {
             }
             setIsLoading(false);
         });
+        return () => controller.abort();
     }, []);
 
     if (isLoading) {
