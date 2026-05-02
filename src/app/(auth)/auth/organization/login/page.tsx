@@ -12,6 +12,7 @@ import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { login } from "@/services/auth.service";
 import { useAuthStore } from "@/store/auth.store";
+import { getDashboardPath } from "@/lib/utils";
 
 export default function OrganizationLoginPage() {
     const router = useRouter();
@@ -34,9 +35,18 @@ export default function OrganizationLoginPage() {
                 setPendingUser(result.user, result.token);
                 router.push("/auth/organization/verify-2fa");
             } else {
-                const path = result.user.role === "DEPT_ADMIN" ? "/da/dashboard" : "/oa/dashboard";
+                // Guard: only allow ORG_ADMIN, DEPT_ADMIN, and ORG_EMPLOYEE into this portal
+                const orgRoles = ['ORG_ADMIN', 'DEPT_ADMIN', 'ORG_EMPLOYEE'];
+                if (!orgRoles.includes(result.user.role)) {
+                    toast.error(
+                        `Access denied. This portal is for Organization users only. Your role (${result.user.role?.replace(/_/g, ' ')}) should log in from a different portal.`,
+                        { duration: 6000 }
+                    );
+                    setIsLoading(false);
+                    return;
+                }
                 setUser(result.user, result.token);
-                router.push(path);
+                router.push(getDashboardPath(result.user.role));
             }
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Login failed");

@@ -31,7 +31,8 @@ interface BackendOrg {
     country: string | null;
     size_range: string | null;
     status: string;
-    created_at: string;
+    created_at?: string;
+    registered_at?: string;
     admin_name?: string;
     admin_email?: string;
 }
@@ -80,6 +81,7 @@ interface BackendAddon {
 // ── Mappers ──────────────────────────────────────────────────────────────────
 
 function mapOrg(b: BackendOrg): SAOrganization {
+    const rawDate = b.registered_at || b.created_at || new Date().toISOString();
     return {
         id:           b.org_id,
         name:         b.name,
@@ -93,7 +95,7 @@ function mapOrg(b: BackendOrg): SAOrganization {
         employees:    0,
         departments:  0,
         quota:        { percentageUsed: 0, budget: 0 },
-        registeredAt: b.created_at.split('T')[0],
+        registeredAt: rawDate.split('T')[0],
         adminName:    b.admin_name ?? '',
         adminEmail:   b.admin_email ?? '',
         departmentList: [],
@@ -150,20 +152,68 @@ function mapAddon(b: BackendAddon): SAAddonPackage {
     };
 }
 
+// ── Service state & Cache ──────────────────────────────────────────────────
+
+/** 
+ * Simple in-memory cache to prevent redundant calls during rapid navigation 
+ * or simultaneous component mounts (e.g. Dashboard + Sidebar).
+ */
+const _cache = new Map<string, { data: any; timestamp: number }>();
+const _promises = new Map<string, Promise<any>>();
+const CACHE_TTL = 5000; // 5 seconds
+
+/** Generic wrapper for deduplication and short-term caching */
+async function _fetchCached<T>(key: string, fetcher: () => Promise<T>, ttl = CACHE_TTL): Promise<T> {
+    const now = Date.now();
+    const cached = _cache.get(key);
+    
+    // 1. Return from cache if fresh
+    if (cached && (now - cached.timestamp < ttl)) {
+        return cached.data;
+    }
+
+    // 2. Return existing promise if in-flight
+    if (_promises.has(key)) {
+        return _promises.get(key);
+    }
+
+    // 3. Fetch new data
+    const promise = fetcher().then((data) => {
+        _cache.set(key, { data, timestamp: Date.now() });
+        _promises.delete(key);
+        return data;
+    }).catch((err) => {
+        _promises.delete(key);
+        throw err;
+    });
+
+    _promises.set(key, promise);
+    return promise;
+}
+
+/** Invalidate specific cache keys (call after POST/PATCH) */
+function _invalidate(keys: string | string[]) {
+    const k = Array.isArray(keys) ? keys : [keys];
+    k.forEach(key => _cache.delete(key));
+}
+
 // ── Service functions ────────────────────────────────────────────────────────
 
 export async function getOrganizations(): Promise<SAOrganization[]> {
-    try {
-        const { data } = await api.get<BackendOrg[]>('/organizations');
-        return data.map(mapOrg);
-    } catch {
-        return [];
-    }
+    return _fetchCached('organizations', async () => {
+        try {
+            const { data } = await api.get<BackendOrg[]>('/organizations');
+            return data.map(mapOrg);
+        } catch (err) {
+            console.error('[sa.service] getOrganizations error:', err);
+            return [];
+        }
+    });
 }
 
 export async function getOrganizationById(id: string): Promise<SAOrganization | null> {
     try {
-        const { data } = await api.get<BackendOrg>(`/organizations/${id}`);
+        const { data } = await api.get<BackendOrg>(`/organizations/${id}/`);
         return mapOrg(data);
     } catch {
         return null;
@@ -184,6 +234,7 @@ export async function registerOrganization(
         admin_phone: data.adminPhone,
         notes:       data.notes,
     });
+    _invalidate(['organizations', 'dashboard-stats']);
     return mapOrg(res);
 }
 
@@ -192,31 +243,46 @@ export async function updateOrganizationStatus(
     orgStatus: OrgStatus
 ): Promise<SAOrganization | null> {
     try {
-        // Status changes go through user management
         const { data } = await api.patch<BackendOrg>(`/organizations/${id}`, { status: orgStatus });
+        _invalidate(['organizations', 'dashboard-stats']);
         return mapOrg(data);
     } catch {
         return null;
     }
 }
 
-export async function getProfessionals(): Promise<SAProfessional[]> {
-    try {
-        // Fetch individual users (PROFESSIONAL role) — SA sees all
-        const { data } = await api.get<{ users: BackendUser[]; total: number }>(
-            '/users?limit=200'
-        );
-        return data.users
-            .filter((u) => u.role === 'PROFESSIONAL' || !u.role)
-            .map(mapProfessional);
-    } catch {
-        return [];
-    }
+export async function getProfessionals(page = 1, limit = 20): Promise<{ professionals: SAProfessional[]; total: number }> {
+    const offset = (page - 1) * limit;
+    const cacheKey = `professionals-${page}-${limit}`;
+    
+    return _fetchCached(cacheKey, async () => {
+        try {
+            // Fetch individual users (PROFESSIONAL role) — SA sees all
+            const { data } = await api.get<any>(`/users/?limit=${limit}&offset=${offset}&role=PROFESSIONAL&role=INDIVIDUAL`);
+            
+            // Robustly handle response shapes: { users: [] }, { items: [] }, or direct array
+            const rawUsers = Array.isArray(data) ? data : (data.users || data.items || []);
+            const total = data.total ?? (Array.isArray(data) ? rawUsers.length : (data.count || rawUsers.length));
+
+            const professionals = rawUsers
+                .filter((u: any) => {
+                    if (!u.role) return true;
+                    const r = u.role.toUpperCase();
+                    return r === 'PROFESSIONAL' || r === 'INDIVIDUAL';
+                })
+                .map(mapProfessional);
+
+            return { professionals, total };
+        } catch (err) {
+            console.error('[sa.service] getProfessionals error:', err);
+            return { professionals: [], total: 0 };
+        }
+    }, 10000); // 10s cache for pagination pages
 }
 
 export async function getProfessionalById(id: string): Promise<SAProfessional | null> {
     try {
-        const { data } = await api.get<BackendUser>(`/users/${id}`);
+        const { data } = await api.get<BackendUser>(`/users/${id}/`);
         return mapProfessional(data);
     } catch {
         return null;
@@ -231,6 +297,7 @@ export async function updateProfessionalStatus(
         const { data } = await api.patch<BackendUser>(`/users/${id}/status`, {
             status: userStatus,
         });
+        _invalidate('professionals');
         return mapProfessional(data);
     } catch {
         return null;
@@ -245,37 +312,27 @@ export async function resetProfessionalPassword(
 }
 
 export async function getDashboardStats(): Promise<SADashboardStats> {
-    try {
-        const { data } = await api.get<{
-            total_sessions: number;
-            total_messages: number;
-            usage_30d: { total_requests: number; total_cost_usd: number };
-            quota: { used: number } | null;
-        }>('/analytics/dashboard/summary');
-        return {
-            totalOrganizations:  0,
-            activeOrganizations: 0,
-            totalUsers:          0,
-            totalProfessionals:  0,
-            totalCreditsUsed:    data.usage_30d.total_cost_usd,
-            todayCreditsUsed:    0,
-            anonymizationOps:    0,
-            activeSubscriptions: 0,
-            avgCreditsPerUser:   0,
-        };
-    } catch {
-        return {
-            totalOrganizations: 0, activeOrganizations: 0,
-            totalUsers: 0, totalProfessionals: 0,
-            totalCreditsUsed: 0, todayCreditsUsed: 0,
-            anonymizationOps: 0, activeSubscriptions: 0,
-            avgCreditsPerUser: 0,
-        };
-    }
+    return _fetchCached('dashboard-stats', async () => {
+        try {
+            const { data } = await api.get<SADashboardStats>('/analytics/dashboard/platform-summary');
+            return data;
+        } catch (err) {
+            console.error('[sa.service] getDashboardStats error:', err);
+            return {
+                totalOrganizations: 0, activeOrganizations: 0,
+                totalUsers: 0, totalProfessionals: 0,
+                totalCreditsUsed: 0, todayCreditsUsed: 0,
+                anonymizationOps: 0, activeSubscriptions: 0,
+                avgCreditsPerUser: 0, totalCost: 0,
+            };
+        }
+    });
 }
 
 export async function getRecentOrganizations(limit = 5): Promise<SAOrganization[]> {
     const orgs = await getOrganizations();
+    // Optimization: if we already have the full list (from cache), slice it.
+    // If we wanted to be even faster, we could have a 'recent-orgs' endpoint.
     return orgs.slice(0, limit);
 }
 
@@ -284,28 +341,39 @@ export async function getRecentActivity(): Promise<SAActivityItem[]> {
     return [];
 }
 
+async function _getPlans(): Promise<BackendPlan[]> {
+    return _fetchCached('plans', async () => {
+        try {
+            const { data } = await api.get<BackendPlan[]>('/subscriptions/plans');
+            return data;
+        } catch (err) {
+            console.error('[sa.service] _getPlans error:', err);
+            return [];
+        }
+    }, 10000); // 10s cache for plans
+}
+
 export async function getIndividualPlans(): Promise<SAIndividualPlan[]> {
     try {
-        const { data } = await api.get<BackendPlan[]>('/subscriptions/plans');
+        const data = await _getPlans();
         const individual = data.filter(
             (p) => p.plan_type === 'INDIVIDUAL' || p.plan_type === 'PROFESSIONAL'
         );
-        return individual.length > 0 ? individual.map(mapPlan) : _fallbackIndividualPlans();
+        return individual.map(mapPlan);
     } catch {
-        return _fallbackIndividualPlans();
+        return [];
     }
 }
 
 export async function getEnterprisePlans(): Promise<SAEnterprisePlan[]> {
     try {
-        const { data } = await api.get<BackendPlan[]>('/subscriptions/plans');
+        const data = await _getPlans();
         const enterprise = data.filter((p) => p.plan_type === 'ENTERPRISE');
-        if (enterprise.length === 0) return _fallbackEnterprisePlans();
         return enterprise.map((b) => ({
             key:           b.plan_key,
             name:          b.name,
             price:         b.monthly_price,
-            annualPrice:   b.annual_price,
+            annualPrice:   b.annual_price ?? 0,
             perUser:       0,
             maxUploadSize: b.max_upload_size_mb ?? 0,
             contextWindow: b.context_window ?? 8000,
@@ -315,20 +383,23 @@ export async function getEnterprisePlans(): Promise<SAEnterprisePlan[]> {
             color:         'from-blue-500/10 to-blue-500/5',
             borderColor:   'border-blue-200',
             maxCost:       b.max_cost_usd ?? 5,
-            popular:       b.is_popular,
+            popular:       b.is_popular ?? false,
         }));
     } catch {
-        return _fallbackEnterprisePlans();
+        return [];
     }
 }
 
 export async function getAddonPackages(): Promise<SAAddonPackage[]> {
-    try {
-        const { data } = await api.get<BackendAddon[]>('/subscriptions/addons');
-        return data.map(mapAddon);
-    } catch {
-        return [];
-    }
+    return _fetchCached('addons', async () => {
+        try {
+            const { data } = await api.get<BackendAddon[]>('/subscriptions/addons');
+            return data.map(mapAddon);
+        } catch (err) {
+            console.error('[sa.service] getAddons error:', err);
+            return [];
+        }
+    });
 }
 
 export async function updateIndividualPlan(_plan: SAIndividualPlan): Promise<void> {
@@ -352,16 +423,33 @@ export async function updateAddonPackage(pkg: SAAddonPackage): Promise<void> {
             is_popular:       pkg.popular ?? false,
         });
     }
+    _invalidate('addons');
     // Update not yet exposed by backend
 }
 
 export async function getRevenueStats(): Promise<SARevenueStats> {
-    // Revenue aggregation is not yet a backend endpoint (Module J)
-    return {
-        totalRevenue: 0, totalCost: 0, totalProfit: 0,
-        subscriptionsProfit: 0, addonProfit: 0,
-        unusedCreditsProfit: 0, profitMargin: 0,
-    };
+    // Derive revenue from dashboard stats until a dedicated revenue endpoint exists
+    try {
+        const stats = await getDashboardStats();
+        const totalCost = stats.totalCost ?? 0;
+        // Revenue = subscription payments (not yet tracked individually)
+        // For now, show the cost data from the backend
+        return {
+            totalRevenue: 0,   // subscriptions revenue — needs billing module
+            totalCost,
+            totalProfit: -totalCost,
+            subscriptionsProfit: 0,
+            addonProfit: 0,
+            unusedCreditsProfit: 0,
+            profitMargin: 0,
+        };
+    } catch {
+        return {
+            totalRevenue: 0, totalCost: 0, totalProfit: 0,
+            subscriptionsProfit: 0, addonProfit: 0,
+            unusedCreditsProfit: 0, profitMargin: 0,
+        };
+    }
 }
 
 // ── Fallbacks for when no data exists in DB yet ──────────────────────────────

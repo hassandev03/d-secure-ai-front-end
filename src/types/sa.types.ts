@@ -55,6 +55,7 @@ export interface SADashboardStats {
     anonymizationOps: number;
     activeSubscriptions: number;
     avgCreditsPerUser: number;
+    totalCost?: number;
 }
 
 export type ActivityIconType = 'user-plus' | 'check-circle' | 'zap' | 'alert' | 'settings' | 'trending-up';

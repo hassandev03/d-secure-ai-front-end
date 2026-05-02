@@ -34,6 +34,15 @@ export default function SuperAdminLoginPage() {
                 setPendingUser(result.user, result.token);
                 router.push("/auth/super-admin/verify-2fa");
             } else {
+                // Guard: only allow SUPER_ADMIN role into this portal
+                if (result.user.role !== 'SUPER_ADMIN') {
+                    toast.error(
+                        `Access denied. Your account role (${result.user.role?.replace(/_/g, ' ')}) does not have Super Admin privileges.`,
+                        { duration: 6000 }
+                    );
+                    setIsLoading(false);
+                    return;
+                }
                 setUser(result.user, result.token);
                 router.push("/sa/dashboard");
             }

@@ -30,10 +30,11 @@ const planColors: Record<string, string> = {
     MAX:  "bg-gradient-to-r from-brand-600 to-indigo-600 text-white border-transparent",
 };
 
-const PAGE_SIZE = 8;
+const PAGE_SIZE = 20;
 
 export default function ProfessionalsPage() {
     const [pros, setPros] = useState<SAProfessional[]>([]);
+    const [total, setTotal] = useState(0);
     const [loading, setLoading] = useState(true);
     const [search, setSearch] = useState("");
     const [planFilter, setPlanFilter] = useState("all");
@@ -42,11 +43,13 @@ export default function ProfessionalsPage() {
     const [page, setPage] = useState(1);
 
     useEffect(() => {
-        getProfessionals().then((data) => {
-            setPros(data);
+        setLoading(true);
+        getProfessionals(page, PAGE_SIZE).then((res) => {
+            setPros(res.professionals);
+            setTotal(res.total);
             setLoading(false);
         });
-    }, []);
+    }, [page]);
 
     const resetPage = () => setPage(1);
 
@@ -63,8 +66,8 @@ export default function ProfessionalsPage() {
         });
     }, [pros, search, planFilter, statusFilter, industryFilter]);
 
-    const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-    const paginated = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
+    const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
+    const paginated = filtered; // Data is already paginated from server
 
     const hasActiveFilters = search || planFilter !== "all" || statusFilter !== "all" || industryFilter !== "all";
     const clearAll = () => { setSearch(""); setPlanFilter("all"); setStatusFilter("all"); setIndustryFilter("all"); resetPage(); };
@@ -113,7 +116,7 @@ export default function ProfessionalsPage() {
         <div className="mx-auto max-w-7xl space-y-6">
             <PageHeader
                 title="Professionals Directory"
-                subtitle={`${pros.length} independent professionals using the platform.`}
+                subtitle={`${total} independent professionals using the platform.`}
                 breadcrumbs={[{ label: "Super Admin", href: "/sa/dashboard" }, { label: "Professionals" }]}
                 actions={
                     <Button variant="outline" size="sm" onClick={handleExport}>
@@ -123,7 +126,7 @@ export default function ProfessionalsPage() {
             />
 
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
-                <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{pros.length}</p><p className="text-xs text-muted-foreground mt-0.5">Total</p></CardContent></Card>
+                <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold">{total}</p><p className="text-xs text-muted-foreground mt-0.5">Total</p></CardContent></Card>
                 <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-success">{activeCount}</p><p className="text-xs text-muted-foreground mt-0.5">Active</p></CardContent></Card>
                 <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-warning">{unverifiedCount}</p><p className="text-xs text-muted-foreground mt-0.5">Unverified</p></CardContent></Card>
                 <Card><CardContent className="p-4 text-center"><p className="text-2xl font-bold text-danger">{suspendedCount}</p><p className="text-xs text-muted-foreground mt-0.5">Suspended</p></CardContent></Card>
@@ -303,7 +306,7 @@ export default function ProfessionalsPage() {
 
             {totalPages > 1 && (
                 <div className="flex items-center justify-between text-sm text-muted-foreground">
-                    <span>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filtered.length)} of {filtered.length}</span>
+                    <span>Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, total)} of {total}</span>
                     <div className="flex items-center gap-1">
                         <Button variant="outline" size="sm" onClick={() => setPage((p) => Math.max(1, p - 1))} disabled={page === 1}>
                             <ChevronLeft className="h-4 w-4" />

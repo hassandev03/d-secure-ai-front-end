@@ -13,6 +13,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { login } from "@/services/auth.service";
 import { useAuthStore } from "@/store/auth.store";
+import { getDashboardPath } from "@/lib/utils";
 
 export default function UserLoginPage() {
     const router = useRouter();
@@ -37,7 +38,8 @@ export default function UserLoginPage() {
                 router.push("/auth/user/verify-2fa");
             } else {
                 setUser(result.user, result.token);
-                router.push("/dashboard");
+                // Route to the correct portal based on the user's actual role
+                router.push(getDashboardPath(result.user.role));
             }
         } catch (err) {
             toast.error(err instanceof Error ? err.message : "Login failed");
