@@ -13,6 +13,33 @@ export interface DashboardStats extends UserStats {
     periodEndsAt: string;
 }
 
+export interface DashboardInitResponse {
+    user: any; // BackendUserRead
+    permissions: {
+        role: string;
+        has_active_subscription: boolean;
+        has_professional_features: boolean;
+        can_access_context: boolean;
+        can_upload_files: boolean;
+        can_use_all_models: boolean;
+        is_org_member: boolean;
+        is_first_login: boolean;
+    };
+    subscription: any | null;
+    quota: BQuota | null;
+    sidebar_context: {
+        glossary_term_count: number;
+        custom_pattern_count: number;
+        total_context_items: number;
+        has_professional_context: boolean;
+    };
+    recent_sessions: BRecentSession[];
+    total_sessions: number;
+    total_messages: number;
+    usage_30d: BUsageMe['summary'];
+    daily: BUsageMe['daily'];
+}
+
 export interface DashboardSummaryResponse {
     stats: DashboardStats;
     dailyActivity: DailyActivityPoint[];
@@ -63,6 +90,7 @@ interface BUsageMe {
 
 interface BQuota {
     plan_name: string;
+    plan_key: string;
     monthly_requests: number;
     requests_used: number;
     requests_remaining: number;
@@ -198,66 +226,64 @@ export function invalidateDashboardCache(): void {
 
 // ─── Internal HTTP fetch + transform ─────────────────────────────────────────
 
+function transformInitToSummary(data: DashboardInitResponse): DashboardSummaryResponse {
+    const rawUsage = data.usage_30d;
+    const quota    = data.quota;
+    const totalRequests      = rawUsage?.total_requests        ?? 0;
+    const entitiesAnonymized = rawUsage?.total_entities_detected ?? 0;
+
+    const stats: DashboardStats = {
+        totalRequestsThisMonth: totalRequests,
+        totalSessions:          data.total_sessions ?? 0,
+        entitiesAnonymized,
+        quotaRemaining:         quota?.requests_remaining ?? 0,
+        quotaTotal:             quota?.monthly_requests   ?? 0,
+        avgEntitiesPerRequest:  totalRequests > 0
+            ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10
+            : 0,
+        percentageUsed: quota?.requests_remaining_pct
+            ? 100 - quota.requests_remaining_pct
+            : 0,
+        planName:    quota?.plan_name    ?? 'Free',
+        periodEndsAt: quota?.period_ends_at ?? '',
+    };
+
+    const models = (rawUsage?.top_models ?? []).map((m, i) => ({
+        name:  m.model,
+        value: m.count,
+        color: MODEL_COLORS[m.model] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length],
+    }));
+
+    const entities = (rawUsage?.top_entity_types ?? []).map((e) => ({
+        name:  e.type,
+        count: e.count,
+    }));
+
+    // Derive last 7 days from the 30-day daily array already returned.
+    const limit = quota?.monthly_requests ?? 1;
+    let cumulative = 0;
+    const last7 = (data.daily ?? []).slice(-7);
+    const dailyActivity: DailyActivityPoint[] = last7.map((row) => {
+        cumulative += row.request_count;
+        return {
+            date: new Date(row.stat_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+            requests:           row.request_count,
+            entitiesAnonymized: row.entities_detected,
+            quotaUtilizedPct:   Math.round(Math.min((cumulative / limit) * 100, 100)),
+        };
+    });
+
+    const recentSessions = (data.recent_sessions ?? []).map(mapSession);
+
+    return { stats, dailyActivity, models, entities, recentSessions };
+}
+
 async function _fetchDashboard(signal?: AbortSignal): Promise<DashboardSummaryResponse | null> {
     try {
-        const { data } = await api.get<{
-            usage_30d: BUsageMe['summary'];
-            quota: BQuota;
-            total_sessions: number;
-            daily: BUsageMe['daily'];
-            recent_sessions: BRecentSession[];
-        }>('/analytics/dashboard/summary', { signal });
-
-        const rawUsage = data.usage_30d;
-        const quota    = data.quota;
-        const totalRequests      = rawUsage?.total_requests        ?? 0;
-        const entitiesAnonymized = rawUsage?.total_entities_detected ?? 0;
-
-        const stats: DashboardStats = {
-            totalRequestsThisMonth: totalRequests,
-            totalSessions:          data.total_sessions ?? 0,
-            entitiesAnonymized,
-            quotaRemaining:         quota?.requests_remaining ?? 0,
-            quotaTotal:             quota?.monthly_requests   ?? 0,
-            avgEntitiesPerRequest:  totalRequests > 0
-                ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10
-                : 0,
-            percentageUsed: quota?.requests_remaining_pct
-                ? 100 - quota.requests_remaining_pct
-                : 0,
-            planName:    quota?.plan_name    ?? 'Free',
-            periodEndsAt: quota?.period_ends_at ?? '',
-        };
-
-        const models = (rawUsage?.top_models ?? []).map((m, i) => ({
-            name:  m.model,
-            value: m.count,
-            color: MODEL_COLORS[m.model] ?? FALLBACK_COLORS[i % FALLBACK_COLORS.length],
-        }));
-
-        const entities = (rawUsage?.top_entity_types ?? []).map((e) => ({
-            name:  e.type,
-            count: e.count,
-        }));
-
-        // Derive last 7 days from the 30-day daily array already returned.
-        const limit = quota?.monthly_requests ?? 1;
-        let cumulative = 0;
-        const last7 = (data.daily ?? []).slice(-7);
-        const dailyActivity: DailyActivityPoint[] = last7.map((row) => {
-            cumulative += row.request_count;
-            return {
-                date: new Date(row.stat_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-                requests:           row.request_count,
-                entitiesAnonymized: row.entities_detected,
-                quotaUtilizedPct:   Math.round(Math.min((cumulative / limit) * 100, 100)),
-            };
-        });
-
-        const recentSessions = (data.recent_sessions ?? []).map(mapSession);
-
-        return { stats, dailyActivity, models, entities, recentSessions };
-    } catch {
+        const { data } = await api.get<DashboardInitResponse>('/analytics/dashboard/init');
+        return transformInitToSummary(data);
+    } catch (err) {
+        console.error('[DASHBOARD_FETCH_ERROR]', err);
         return null;
     }
 }
@@ -290,7 +316,7 @@ export async function getDashboardSummary(signal?: AbortSignal): Promise<Dashboa
 
     // No cache and no in-flight request — start a fresh fetch and share the
     // promise so every concurrent caller gets the same result.
-    console.log('[DASHBOARD_API_CALL] Starting fresh fetch to GET /analytics/dashboard/summary');
+    console.log('[DASHBOARD_API_CALL] Starting fresh fetch to GET /analytics/dashboard/init');
     _inflight = _fetchDashboard(signal).then((result) => {
         if (result !== null) {
             // Warm the cache on success.
@@ -305,4 +331,16 @@ export async function getDashboardSummary(signal?: AbortSignal): Promise<Dashboa
     });
 
     return _inflight;
+}
+
+/**
+ * GET /api/v1/analytics/dashboard/init — consolidated hydration endpoint.
+ */
+export async function getDashboardInit(signal?: AbortSignal): Promise<DashboardInitResponse | null> {
+    try {
+        const { data } = await api.get<DashboardInitResponse>('/analytics/dashboard/init', { signal });
+        return data;
+    } catch {
+        return null;
+    }
 }

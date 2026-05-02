@@ -246,8 +246,7 @@ async function _fetchChatSessions(limit: number, offset: number, signal?: AbortS
     try {
         console.log(`[CHAT_SESSIONS_FETCH] Fetching sessions from backend (limit: ${limit}, offset: ${offset})`);
         const { data } = await api.get<BackendSession[]>(
-            `/chat/sessions?limit=${limit}&offset=${offset}`,
-            { signal },
+            `/chat/sessions?limit=${limit}&offset=${offset}`
         );
         console.log(`[CHAT_SESSIONS_FETCH_SUCCESS] Retrieved ${data.length} sessions`);
         return data.map(mapSession);

@@ -175,6 +175,11 @@ export async function getCurrentUser(): Promise<User | null> {
             role:           (u.role as User['role']) ?? 'PROFESSIONAL',
             status:         (u.status as User['status']) ?? 'ACTIVE',
             orgId:          u.org_id ?? undefined,
+            jobTitle:       u.job_title ?? undefined,
+            industry:       u.industry ?? undefined,
+            country:        u.country ?? undefined,
+            phone:          u.phone ?? undefined,
+            avatar:         u.avatar_url ?? undefined,
             isFirstLogin:   u.is_first_login,
             isTwoFAEnabled: false,
             createdAt:      new Date().toISOString(),
@@ -211,6 +216,11 @@ export interface UserSummary {
         role: string;
         status: string;
         org_id: string | null;
+        job_title?: string | null;
+        industry?: string | null;
+        country?: string | null;
+        phone?: string | null;
+        avatar_url?: string | null;
         is_first_login: boolean;
         subscriptionTier?: string;
     };
@@ -229,7 +239,7 @@ export interface UserSummary {
         monthly_requests: number;
         requests_used: number;
         requests_remaining: number;
-        percentage_used: number;
+        requests_remaining_pct: number;
         period_ends_at: string;
     } | null;
 }
@@ -250,10 +260,17 @@ export async function getCurrentUserSummary(): Promise<UserSummary | null> {
 
 async function _fetchSummary(token: string): Promise<UserSummary | null> {
     try {
-        const { data } = await api.get<UserSummary>('/users/me/summary', {
+        // Use the consolidated dashboard init endpoint as it's a superset of the user summary.
+        // It provides the same user/sub/quota data but with faster parallel backend fetching.
+        const { data } = await api.get<any>('/analytics/dashboard/init', {
             headers: { 'X-Skip-Auth-Redirect': 'true' },
         });
-        return data;
+        
+        return {
+            user: data.user,
+            subscription: data.subscription,
+            quota: data.quota,
+        } as UserSummary;
     } catch {
         return null;
     }

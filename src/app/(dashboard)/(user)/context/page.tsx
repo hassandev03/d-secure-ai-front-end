@@ -259,8 +259,8 @@ export default function MyContextPage() {
                 setTerms(prev => [...results, ...prev]);
                 toast.success(`Added ${results.length} terms to Glossary.`);
             }
-            const uploadedFile = await contextService.uploadContextDocument(processingDoc.file);
-            setDocs(prev => [uploadedFile, ...prev]);
+            
+            // File is already uploaded during onDrop, we just need to clean up staging.
             setStagedDocs(prev => prev.filter(d => d.id !== processingDoc.id));
             setProcessingDoc(null);
             toast.success(`${processingDoc.name} processed and saved to DB.`);
@@ -270,11 +270,22 @@ export default function MyContextPage() {
     };
 
     const onDrop = useCallback((acceptedFiles: File[]) => {
-        acceptedFiles.forEach((file) => {
+        acceptedFiles.forEach(async (file) => {
             const sizeInMB = file.size / (1024 * 1024);
             const sizeStr = sizeInMB > 1 ? `${sizeInMB.toFixed(1)} MB` : `${(file.size / 1024).toFixed(0)} KB`;
+            // Stage the file for entity extraction
             setStagedDocs(prev => [...prev, { id: Date.now() + Math.random(), name: file.name, size: sizeStr, file }]);
-            toast.success(`${file.name} staged for processing.`);
+            toast.success(`${file.name} staged for processing. Uploading...`);
+            
+            try {
+                // Immediately upload the document to the backend
+                const uploadedFile = await contextService.uploadContextDocument(file);
+                setDocs(prev => [uploadedFile, ...prev]);
+                toast.success(`${file.name} uploaded successfully.`);
+            } catch (error) {
+                console.error("Upload failed:", error);
+                toast.error(`Failed to upload ${file.name}.`);
+            }
         });
     }, []);
 

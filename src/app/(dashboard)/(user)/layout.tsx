@@ -13,7 +13,7 @@ import Sidebar, { type NavGroup } from "@/components/layout/Sidebar";
 import Topbar from "@/components/layout/Topbar";
 import { useAuthStore } from "@/store/auth.store";
 import { useSubscriptionStore } from "@/store/subscription.store";
-import { getCurrentUserSummary, type UserSummary } from "@/services/auth.service";
+import { getDashboardInit, type DashboardInitResponse } from "@/services/dashboard.service";
 import { cn } from "@/lib/utils";
 
 export default function UserLayout({
@@ -41,22 +41,27 @@ export default function UserLayout({
         hasSynced.current = true;
 
         if (!isAuthenticated) {
-            // Single call: user + subscription + quota
-            getCurrentUserSummary().then((summary: UserSummary | null) => {
+            // Single call: user + subscription + quota + permissions + recent sessions
+            getDashboardInit().then((data: DashboardInitResponse | null) => {
                 const storedToken = localStorage.getItem('auth_token');
-                if (summary?.user && storedToken) {
-                    // Hydrate auth store with the user from the summary endpoint
+                if (data?.user && storedToken) {
+                    // Hydrate auth store with the user from the init endpoint
                     const { setUser: storeSetUser } = useAuthStore.getState();
                     storeSetUser(
                         {
-                            id:            summary.user.user_id,
-                            name:          summary.user.name,
-                            email:         summary.user.email,
-                            role:          summary.user.role as any,
-                            status:        summary.user.status as any,
-                            orgId:         summary.user.org_id ?? undefined,
-                            subscriptionTier: summary.quota?.plan_key?.toUpperCase() as any,
-                            isFirstLogin:  summary.user.is_first_login,
+                            id:            data.user.user_id,
+                            name:          data.user.name,
+                            email:         data.user.email,
+                            role:          data.user.role as any,
+                            status:        data.user.status as any,
+                            orgId:         data.user.org_id ?? undefined,
+                            subscriptionTier: (data.quota?.plan_key || 'FREE').toUpperCase() as any,
+                            isFirstLogin:  data.user.is_first_login,
+                            jobTitle:      data.user.job_title ?? undefined,
+                            industry:      data.user.industry ?? undefined,
+                            country:       data.user.country ?? undefined,
+                            phone:         data.user.phone ?? undefined,
+                            avatar:        data.user.avatar_url ?? undefined,
                             isTwoFAEnabled: false,
                             createdAt:     new Date().toISOString(),
                         },
@@ -64,16 +69,16 @@ export default function UserLayout({
                     );
 
                     // Cache subscription data so pages skip their own fetches
-                    if (summary.subscription && summary.quota) {
+                    if (data.subscription && data.quota) {
                         subscriptionStore.setSubscription(
                             {
-                                subscription_id: summary.subscription.subscription_id,
-                                plan_id:         summary.subscription.plan_id,
-                                plan_key:        summary.subscription.plan_key,
-                                status:          summary.subscription.status,
-                                current_period_start: summary.subscription.current_period_start,
-                                current_period_end:   summary.subscription.current_period_end,
-                                billing_cycle:   summary.subscription.billing_cycle,
+                                subscription_id: data.subscription.subscription_id,
+                                plan_id:         data.subscription.plan_id,
+                                plan_key:        data.subscription.plan_key,
+                                status:          data.subscription.status,
+                                current_period_start: data.subscription.current_period_start,
+                                current_period_end:   data.subscription.current_period_end,
+                                billing_cycle:   data.subscription.billing_cycle,
                                 cancelled_at:     null,
                             },
                             [] // plans are empty here; pages that need them will fetch
@@ -124,24 +129,23 @@ export default function UserLayout({
         }
 
         try {
-            // Reuse the lightweight /users/me/summary endpoint instead of the
-            // heavier /subscriptions/summary — same subscription data, fewer queries.
-            const summary = await getCurrentUserSummary();
-            if (summary?.subscription && summary?.quota) {
+            // Reuse the heavy-duty /dashboard/init endpoint for consistent syncing
+            const data = await getDashboardInit();
+            if (data?.subscription && data?.quota) {
                 subscriptionStore.setSubscription(
                     {
-                        subscription_id: summary.subscription.subscription_id,
-                        plan_id:         summary.subscription.plan_id,
-                        plan_key:        summary.subscription.plan_key,
-                        status:          summary.subscription.status,
-                        current_period_start: summary.subscription.current_period_start,
-                        current_period_end:   summary.subscription.current_period_end,
-                        billing_cycle:   summary.subscription.billing_cycle,
+                        subscription_id: data.subscription.subscription_id,
+                        plan_id:         data.subscription.plan_id,
+                        plan_key:        data.subscription.plan_key,
+                        status:          data.subscription.status,
+                        current_period_start: data.subscription.current_period_start,
+                        current_period_end:   data.subscription.current_period_end,
+                        billing_cycle:   data.subscription.billing_cycle,
                         cancelled_at:    null,
                     },
                     []
                 );
-                updateUser({ subscriptionTier: summary.subscription.plan_key.toUpperCase() as any });
+                updateUser({ subscriptionTier: data.subscription.plan_key.toUpperCase() as any });
             } else {
                 updateUser({ subscriptionTier: 'FREE' });
             }
@@ -181,6 +185,17 @@ export default function UserLayout({
     const displayRole = mounted && user?.role
         ? user.role.replace(/_/g, " ")
         : "User";
+
+    if (!mounted || !subscriptionReady) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-600 border-t-transparent" />
+                    <p className="text-sm font-medium text-muted-foreground animate-pulse">Loading your workspace...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-background">

@@ -439,6 +439,7 @@ export async function applyOAOrgPolicyToAllDepts(): Promise<void> {
 
 export async function getOAQuotaRequests(): Promise<OAQuotaRequest[]> {
     // TODO: wire to /org/{org_id}/quota/requests when Module K is complete
+    // For now, return empty array as this requires a new backend endpoint
     return [];
 }
 
@@ -492,17 +493,78 @@ export async function getOrgDeptUsage(): Promise<OADepartment[]> {
 }
 
 export async function getOrgModelUsage(): Promise<OrgModelUsageSlice[]> {
-    // TODO: wire to GET /analytics/usage/org/{org_id} model_breakdown when Module J complete
-    return [];
+    const orgId = getOrgId();
+    if (!orgId) return [];
+
+    try {
+        const { data } = await api.get<{
+            top_models: Array<{ model: string; count: number }>
+        }>(`/analytics/usage/org/${orgId}?days=30`);
+
+        // Map backend model names to frontend format with colors
+        const modelColors = {
+            'gpt-4o': '#10B981',
+            'gpt-4o-mini': '#3B82F6',
+            'claude-3-5-sonnet': '#EC4899',
+            'claude-3-haiku': '#8B5CF6',
+            'gemini-2.5-flash': '#F97316',
+            'gemini-2.0-flash': '#F59E0B',
+            'llama-3.1-405b': '#06B6D4'
+        };
+
+        return data.top_models.map(model => ({
+            name: model.model,
+            value: model.count,
+            color: modelColors[model.model as keyof typeof modelColors] || '#64748B'
+        }));
+    } catch {
+        return [];
+    }
 }
 
-export async function getOrgUsageTrend(_days: 7 | 30 = 7): Promise<OrgUsageTrendPoint[]> {
-    // TODO: wire to Module J analytics endpoint
-    return [];
+export async function getOrgUsageTrend(days: 7 | 30 = 7): Promise<OrgUsageTrendPoint[]> {
+    const orgId = getOrgId();
+    if (!orgId) return [];
+
+    try {
+        const { data } = await api.get<{
+            daily: Array<{ stat_date: string; request_count: number }>
+        }>(`/analytics/usage/org/${orgId}?days=${days}`);
+
+        return data.daily.map(day => ({
+            date: day.stat_date,
+            creditsUsed: day.request_count
+        }));
+    } catch {
+        return [];
+    }
 }
 
 export async function getOrgRecentActivity(): Promise<RecentActivityItem[]> {
-    return [];
+    const orgId = getOrgId();
+    if (!orgId) return [];
+
+    try {
+        const { data } = await api.get<Array<{
+            session_id: string;
+            employee_email: string;
+            timestamp: string;
+            pii_detected: string[];
+        }>>(`/analytics/org/${orgId}/audit/query-logs?limit=8`);
+
+        return data.map((log, index) => ({
+            id: `activity-${index}`,
+            type: 'query',
+            title: `Query from ${log.employee_email}`,
+            description: log.pii_detected.length > 0
+                ? `Detected ${log.pii_detected.length} PII entities`
+                : 'Chat query processed',
+            timestamp: new Date(log.timestamp).toLocaleDateString(),
+            icon: log.pii_detected.length > 0 ? 'shield' : 'brain'
+        }));
+    } catch {
+        return [];
+    }
 }
 
 export async function getOAQueryLogs(): Promise<OAQueryLog[]> {

@@ -75,12 +75,10 @@ export default function ProfilePage() {
     const { user, updateUser } = useAuthStore();
     const [saving, setSaving] = useState(false);
 
-    const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+    const [avatarUrl, setAvatarUrl] = useState<string | null>(user?.avatar || null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    const nameParts = (user?.name || "User").split(" ");
-    const [firstName, setFirstName] = useState(nameParts[0] || "");
-    const [lastName,  setLastName]  = useState(nameParts.slice(1).join(" ") || "");
+    const [fullName, setFullName] = useState(user?.name || "");
     const [email,     setEmail]     = useState(user?.email || "");
     const [phone,     setPhone]     = useState(user?.phone || "");
     const [country,   setCountry]   = useState(user?.country || "");
@@ -98,18 +96,31 @@ export default function ProfilePage() {
     const [confirmPassword,  setConfirmPassword]  = useState("");
     const [pwErrors,         setPwErrors]         = useState<Record<string, string | null>>({});
 
-    const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
             setAvatarUrl(URL.createObjectURL(file));
-            toast.success("Avatar updated locally.");
+            try {
+                toast.info("Uploading avatar...");
+                const { uploadFile } = await import("@/services/file.service");
+                const res = await uploadFile(file, "GENERAL");
+                const newAvatarUrl = `${process.env.NEXT_PUBLIC_FILE_URL || 'http://localhost:8420/api/v1'}/files/public/${res.file_id}`;
+                
+                const result = await updateUserProfile({ avatarUrl: newAvatarUrl });
+                if (result.success && result.user) {
+                    updateUser(result.user);
+                    setAvatarUrl(newAvatarUrl);
+                }
+                toast.success("Avatar updated successfully.");
+            } catch (err) {
+                toast.error("Failed to upload avatar.");
+            }
         }
     };
 
     const handleSave = async () => {
         const newErrors: Record<string, string | null> = {
-            firstName: validateName(firstName, "First Name"),
-            lastName:  validateName(lastName, "Last Name"),
+            fullName: validateName(fullName, "Full Name"),
             email:     validateEmail(email),
             phone:     validatePhone(phone),
             country:   validateCountry(country),
@@ -122,7 +133,7 @@ export default function ProfilePage() {
         }
         setSaving(true);
         try {
-            const result = await updateUserProfile({ name: `${firstName.trim()} ${lastName.trim()}`, phone, country, jobTitle, industry });
+            const result = await updateUserProfile({ name: fullName.trim(), phone, country, jobTitle, industry });
             if (result.success && result.user) updateUser(result.user);
             toast.success("Profile saved successfully.");
         } catch {
@@ -176,7 +187,7 @@ export default function ProfilePage() {
                             <Avatar className="h-24 w-24 border-4 border-background shadow-lg">
                                 {avatarUrl && <AvatarImage src={avatarUrl} alt="Avatar" className="object-cover" />}
                                 <AvatarFallback className="bg-brand-100 text-3xl font-bold text-brand-700">
-                                    {firstName[0]}{lastName[0]}
+                                    {fullName[0]?.toUpperCase() || "U"}
                                 </AvatarFallback>
                             </Avatar>
                             <input
@@ -197,7 +208,7 @@ export default function ProfilePage() {
                         {/* Name + info */}
                         <div className="flex-1 min-w-0 sm:pb-1">
                             <div className="flex flex-wrap items-center gap-2">
-                                <h3 className="text-xl font-bold">{firstName} {lastName}</h3>
+                                <h3 className="text-xl font-bold">{fullName}</h3>
                                 <Badge className={`text-xs border-0 ${planBadgeClass}`}>{planKey} Plan</Badge>
                             </div>
                             <p className="text-sm text-muted-foreground mt-0.5">{email}</p>
@@ -214,15 +225,10 @@ export default function ProfilePage() {
             <Card className="mb-6">
                 <CardHeader><CardTitle className="text-base">Personal Information</CardTitle></CardHeader>
                 <CardContent className="grid gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                        <Label>First Name <span className="text-danger">*</span></Label>
-                        <Input value={firstName} onChange={(e) => { setFirstName(e.target.value); setErrors((p) => ({ ...p, firstName: null })); }} className={errors.firstName ? "border-danger" : ""} />
-                        <FieldError error={errors.firstName ?? null} />
-                    </div>
-                    <div className="space-y-2">
-                        <Label>Last Name <span className="text-danger">*</span></Label>
-                        <Input value={lastName} onChange={(e) => { setLastName(e.target.value); setErrors((p) => ({ ...p, lastName: null })); }} className={errors.lastName ? "border-danger" : ""} />
-                        <FieldError error={errors.lastName ?? null} />
+                    <div className="sm:col-span-2 space-y-2">
+                        <Label>Full Name <span className="text-danger">*</span></Label>
+                        <Input value={fullName} onChange={(e) => { setFullName(e.target.value); setErrors((p) => ({ ...p, fullName: null })); }} className={errors.fullName ? "border-danger" : ""} />
+                        <FieldError error={errors.fullName ?? null} />
                     </div>
                     <div className="sm:col-span-2 space-y-2">
                         <Label>Email <span className="text-danger">*</span></Label>

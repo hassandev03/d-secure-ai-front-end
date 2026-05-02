@@ -24,7 +24,10 @@ export default function DeptAdminLayout({
     const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
     const [pendingCount, setPendingCount] = useState(0);
 
+    const [mounted, setMounted] = useState(false);
+
     useEffect(() => {
+        setMounted(true);
         getDeptPendingQuotaCount().then(setPendingCount).catch(() => {});
         if (!isAuthenticated) {
             // Use getCurrentUserSummary instead of getCurrentUser so we call
@@ -41,6 +44,11 @@ export default function DeptAdminLayout({
                             status:         summary.user.status as any,
                             orgId:          summary.user.org_id ?? undefined,
                             isFirstLogin:   summary.user.is_first_login,
+                            jobTitle:       summary.user.job_title ?? undefined,
+                            industry:       summary.user.industry ?? undefined,
+                            country:        summary.user.country ?? undefined,
+                            phone:          summary.user.phone ?? undefined,
+                            avatar:         summary.user.avatar_url ?? undefined,
                             isTwoFAEnabled: false,
                             createdAt:      new Date().toISOString(),
                         },
@@ -70,6 +78,17 @@ export default function DeptAdminLayout({
             ],
         },
     ], [pendingCount]);
+
+    if (!mounted || !isAuthenticated) {
+        return (
+            <div className="min-h-screen bg-background flex items-center justify-center">
+                <div className="flex flex-col items-center gap-4">
+                    <div className="h-8 w-8 animate-spin rounded-full border-4 border-brand-700 border-t-transparent" />
+                    <p className="text-sm font-medium text-muted-foreground animate-pulse">Loading Dept Admin portal...</p>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div className="min-h-screen bg-background">
