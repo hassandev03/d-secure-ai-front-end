@@ -43,6 +43,7 @@ export interface SAProfessional {
     joinedAt: string;
     lastActive: string;
     bio: string;
+    avatar: string | undefined;
 }
 
 export interface SADashboardStats {

@@ -501,12 +501,12 @@ export default function LandingPage() {
               <div className="mt-4 border-t border-border pt-4">
                 <p className="text-sm text-muted-foreground">
                   New organization?{" "}
-                  <a
-                    href="mailto:admin@dsecureai.com"
+                  <Link
+                    href="/auth/organization/register"
                     className="font-medium text-brand-600 hover:underline"
                   >
                     Contact us to get registered ↗
-                  </a>
+                  </Link>
                 </p>
               </div>
             </motion.div>

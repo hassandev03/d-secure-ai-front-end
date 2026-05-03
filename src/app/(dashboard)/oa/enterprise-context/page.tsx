@@ -27,6 +27,7 @@ import {
 
 import {
     getOAGlossaryTerms, getOAContextDocuments, getOACustomPatterns,
+    toggleOAContextDocumentProcessed, deleteOAContextDocument, uploadOAContextDocument,
     type OAGlossaryTerm, type OAContextDocument, type OACustomPattern,
 } from "@/services/oa.service";
 
@@ -181,9 +182,24 @@ export default function EnterpriseContextPage() {
         maxSize: 10_485_760, // 10 MB
     });
 
-    const handleDeleteDocument = (id: number, name: string) => {
-        setDocuments(prev => prev.filter(d => d.id !== id));
-        toast.success(`"${name}" removed`);
+    const handleDeleteDocument = async (id: string, name: string) => {
+        try {
+            await deleteOAContextDocument(id);
+            setDocuments(prev => prev.filter(d => d.id !== id));
+            toast.success(`"${name}" removed`);
+        } catch (e) {
+            toast.error(`Failed to remove "${name}"`);
+        }
+    };
+
+    const handleToggleProcessed = async (id: string, currentlyProcessed: boolean) => {
+        try {
+            await toggleOAContextDocumentProcessed(id, !currentlyProcessed);
+            setDocuments(prev => prev.map(d => d.id === id ? { ...d, isProcessed: !currentlyProcessed } : d));
+            toast.success(`Document marked as ${!currentlyProcessed ? "processed" : "unprocessed"}`);
+        } catch (e) {
+            toast.error("Failed to update status");
+        }
     };
 
     /* ================================================================ */
@@ -243,11 +259,12 @@ export default function EnterpriseContextPage() {
         }
         const ext = processingDoc.name.split(".").pop()?.toUpperCase();
         setDocuments(prev => [{
-            id: processingDoc.id,
+            id: processingDoc.id.toString(),
             name: processingDoc.name,
             size: processingDoc.size,
             uploadedAt: new Date().toISOString().split("T")[0],
             type: (ext === "PDF" || ext === "TXT") ? ext : "PDF",
+            isProcessed: true
         }, ...prev]);
         setStagedDocs(prev => prev.filter(d => d.id !== processingDoc.id));
         toast.success(`"${processingDoc.name}" processed and saved`);
@@ -537,7 +554,16 @@ export default function EnterpriseContextPage() {
                                                     </p>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-2">
+                                            <div className="flex items-center gap-3">
+                                                <div className="flex items-center gap-2">
+                                                    <Label className="text-xs text-muted-foreground cursor-pointer" htmlFor={`processed-${doc.id}`}>Processed</Label>
+                                                    <Switch
+                                                        id={`processed-${doc.id}`}
+                                                        checked={doc.isProcessed}
+                                                        onCheckedChange={() => handleToggleProcessed(doc.id, doc.isProcessed)}
+                                                    />
+                                                </div>
+                                                <Separator orientation="vertical" className="h-4" />
                                                 <Badge variant="secondary" className="text-[10px]">Indexed</Badge>
                                                 <Button
                                                     variant="ghost"

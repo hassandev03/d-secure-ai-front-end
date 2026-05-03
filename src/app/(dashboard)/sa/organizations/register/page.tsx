@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Building2, CreditCard, Loader2, ShieldCheck, User } from "lucide-react";
 import { toast } from "sonner";
@@ -13,12 +13,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { INDUSTRIES } from "@/lib/constants";
-import { registerOrganization } from "@/services/sa.service";
-import type { RegisterOrgPayload } from "@/types/sa.types";
+import { getEnterprisePlans, registerOrganization } from "@/services/sa.service";
+import type { RegisterOrgPayload, SAEnterprisePlan } from "@/types/sa.types";
 
 export default function RegisterOrganizationPage() {
     const router = useRouter();
     const [isLoading, setIsLoading] = useState(false);
+    const [plans, setPlans] = useState<SAEnterprisePlan[]>([]);
     const [formData, setFormData] = useState<RegisterOrgPayload>({
         name: "",
         industry: "",
@@ -37,6 +38,10 @@ export default function RegisterOrganizationPage() {
     const updateField = <K extends keyof RegisterOrgPayload>(key: K, value: RegisterOrgPayload[K]) => {
         setFormData((prev) => ({ ...prev, [key]: value }));
     };
+
+    useEffect(() => {
+        getEnterprisePlans().then(setPlans);
+    }, []);
 
     const validateForm = () => {
         if (!formData.name.trim()) return "Organization Name is required.";
@@ -178,9 +183,7 @@ export default function RegisterOrganizationPage() {
                                     <Select value={formData.subscriptionPlan} onValueChange={(v) => updateField("subscriptionPlan", v)}>
                                         <SelectTrigger id="plan"><SelectValue placeholder="Select plan" /></SelectTrigger>
                                         <SelectContent>
-                                            <SelectItem value="Starter">Starter</SelectItem>
-                                            <SelectItem value="Professional">Professional</SelectItem>
-                                            <SelectItem value="Enterprise">Enterprise</SelectItem>
+                                            {plans.map(p => <SelectItem key={p.key} value={p.name}>{p.name}</SelectItem>)}
                                         </SelectContent>
                                     </Select>
                                 </div>

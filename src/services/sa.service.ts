@@ -19,7 +19,6 @@ import type {
     SAEnterprisePlan, SAIndividualPlan, SAAddonPackage, RegisterOrgPayload,
     OrgStatus, ProfessionalStatus, SARevenueStats,
 } from '@/types/sa.types';
-import { SUBSCRIPTION_PLANS } from '@/lib/constants';
 
 // ── Backend response shapes ──────────────────────────────────────────────────
 
@@ -45,8 +44,11 @@ interface BackendUser {
     status: string;
     job_title: string | null;
     industry: string | null;
+    avatar_url?: string | null;
     created_at: string;
     last_active_at: string | null;
+    credits_used?: number;
+    plan_key?: string;
 }
 
 interface BackendPlan {
@@ -83,72 +85,71 @@ interface BackendAddon {
 function mapOrg(b: BackendOrg): SAOrganization {
     const rawDate = b.registered_at || b.created_at || new Date().toISOString();
     return {
-        id:           b.org_id,
-        name:         b.name,
-        industry:     b.industry ?? 'Unknown',
-        domain:       b.domain ?? '',
-        country:      b.country ?? '',
-        sizeRange:    b.size_range ?? '',
-        status:       b.status as OrgStatus,
-        plan:         'Enterprise',
+        id: b.org_id,
+        name: b.name,
+        industry: b.industry ?? 'Unknown',
+        domain: b.domain ?? '',
+        country: b.country ?? '',
+        sizeRange: b.size_range ?? '',
+        status: b.status as OrgStatus,
+        plan: 'Enterprise',
         billingCycle: 'MONTHLY',
-        employees:    0,
-        departments:  0,
-        quota:        { percentageUsed: 0, budget: 0 },
+        employees: 0,
+        departments: 0,
+        quota: { percentageUsed: 0, budget: 0 },
         registeredAt: rawDate.split('T')[0],
-        adminName:    b.admin_name ?? '',
-        adminEmail:   b.admin_email ?? '',
+        adminName: b.admin_name ?? '',
+        adminEmail: b.admin_email ?? '',
         departmentList: [],
     };
 }
 
 function mapProfessional(b: BackendUser): SAProfessional {
     return {
-        id:          b.user_id,
-        name:        b.name,
-        email:       b.email,
-        jobTitle:    b.job_title ?? '',
-        industry:    b.industry ?? '',
-        plan:        'FREE',
-        status:      b.status as ProfessionalStatus,
-        creditsUsed: 0,
-        joinedAt:    b.created_at.split('T')[0],
-        lastActive:  b.last_active_at
+        id: b.user_id,
+        name: b.name,
+        email: b.email,
+        jobTitle: b.job_title ?? '',
+        industry: b.industry ?? '',
+        plan: (b.plan_key?.toUpperCase() as any) || 'FREE',
+        status: b.status as ProfessionalStatus,
+        creditsUsed: b.credits_used ?? 0,
+        joinedAt: b.created_at.split('T')[0],
+        lastActive: b.last_active_at
             ? new Date(b.last_active_at).toLocaleDateString()
             : 'Never',
-        bio:         '',
+        bio: '',
+        avatar: b.avatar_url ?? undefined,
     };
 }
 
 function mapPlan(b: BackendPlan): SAIndividualPlan {
-    const key = b.plan_key.toUpperCase() as 'FREE' | 'PRO' | 'MAX';
-    const constants = SUBSCRIPTION_PLANS[key] ?? SUBSCRIPTION_PLANS.FREE;
     return {
-        key:          b.plan_key,
-        name:         b.name,
-        price:        b.monthly_price,
-        annualPrice:  b.annual_price,
-        creditBudget: constants.creditBudget ?? `$${b.monthly_price}/mo`,
+        key: b.plan_key,
+        name: b.name,
+        price: b.monthly_price,
+        annualPrice: b.annual_price ?? 0,
+        creditBudget: `$${b.monthly_price}/mo`,
         maxUploadSize: b.max_upload_size_mb ?? 0,
         contextWindow: b.context_window ?? 4000,
         allowedModels: b.allowed_models ?? ['GPT-4o mini'],
-        features:     b.features ?? [],
-        excluded:     b.excluded_features ?? [],
-        active:       0,
-        popular:      b.is_popular,
-        maxCost:      b.max_cost_usd ?? 0,
+        features: b.features ?? [],
+        excluded: b.excluded_features ?? [],
+        active: 0,
+        popular: b.is_popular,
+        maxCost: b.max_cost_usd ?? 0,
     };
 }
 
 function mapAddon(b: BackendAddon): SAAddonPackage {
     return {
-        id:          b.addon_id,
-        name:        b.name,
-        credits:     b.credits,
-        price:       b.price,
-        cost:        b.cost_per_credit ?? 0,
+        id: b.addon_id,
+        name: b.name,
+        credits: b.credits,
+        price: b.price,
+        cost: b.cost_per_credit ?? 0,
         description: b.description ?? '',
-        popular:     b.is_popular,
+        popular: b.is_popular,
     };
 }
 
@@ -166,7 +167,7 @@ const CACHE_TTL = 5000; // 5 seconds
 async function _fetchCached<T>(key: string, fetcher: () => Promise<T>, ttl = CACHE_TTL): Promise<T> {
     const now = Date.now();
     const cached = _cache.get(key);
-    
+
     // 1. Return from cache if fresh
     if (cached && (now - cached.timestamp < ttl)) {
         return cached.data;
@@ -224,15 +225,15 @@ export async function registerOrganization(
     data: RegisterOrgPayload
 ): Promise<SAOrganization> {
     const { data: res } = await api.post<BackendOrg>('/organizations', {
-        name:        data.name,
-        industry:    data.industry,
-        domain:      data.domain,
-        country:     data.country,
-        size_range:  data.sizeRange,
-        admin_name:  data.adminName,
+        name: data.name,
+        industry: data.industry,
+        domain: data.domain,
+        country: data.country,
+        size_range: data.sizeRange,
+        admin_name: data.adminName,
         admin_email: data.adminEmail,
         admin_phone: data.adminPhone,
-        notes:       data.notes,
+        notes: data.notes,
     });
     _invalidate(['organizations', 'dashboard-stats']);
     return mapOrg(res);
@@ -254,12 +255,12 @@ export async function updateOrganizationStatus(
 export async function getProfessionals(page = 1, limit = 20): Promise<{ professionals: SAProfessional[]; total: number }> {
     const offset = (page - 1) * limit;
     const cacheKey = `professionals-${page}-${limit}`;
-    
+
     return _fetchCached(cacheKey, async () => {
         try {
             // Fetch individual users (PROFESSIONAL role) — SA sees all
-            const { data } = await api.get<any>(`/users/?limit=${limit}&offset=${offset}&role=PROFESSIONAL&role=INDIVIDUAL`);
-            
+            const { data } = await api.get<any>(`/users/?limit=${limit}&offset=${offset}&role=PROFESSIONAL`);
+
             // Robustly handle response shapes: { users: [] }, { items: [] }, or direct array
             const rawUsers = Array.isArray(data) ? data : (data.users || data.items || []);
             const total = data.total ?? (Array.isArray(data) ? rawUsers.length : (data.count || rawUsers.length));
@@ -370,20 +371,20 @@ export async function getEnterprisePlans(): Promise<SAEnterprisePlan[]> {
         const data = await _getPlans();
         const enterprise = data.filter((p) => p.plan_type === 'ENTERPRISE');
         return enterprise.map((b) => ({
-            key:           b.plan_key,
-            name:          b.name,
-            price:         b.monthly_price,
-            annualPrice:   b.annual_price ?? 0,
-            perUser:       0,
+            key: b.plan_key,
+            name: b.name,
+            price: b.monthly_price,
+            annualPrice: b.annual_price ?? 0,
+            perUser: 0,
             maxUploadSize: b.max_upload_size_mb ?? 0,
             contextWindow: b.context_window ?? 8000,
             allowedModels: b.allowed_models ?? ['GPT-4o mini'],
-            features:      b.features ?? [],
-            excluded:      b.excluded_features ?? [],
-            color:         'from-blue-500/10 to-blue-500/5',
-            borderColor:   'border-blue-200',
-            maxCost:       b.max_cost_usd ?? 5,
-            popular:       b.is_popular ?? false,
+            features: b.features ?? [],
+            excluded: b.excluded_features ?? [],
+            color: 'from-blue-500/10 to-blue-500/5',
+            borderColor: 'border-blue-200',
+            maxCost: b.max_cost_usd ?? 5,
+            popular: b.is_popular ?? false,
         }));
     } catch {
         return [];
@@ -415,12 +416,12 @@ export async function updateAddonPackage(pkg: SAAddonPackage): Promise<void> {
     if (!pkg.id || pkg.id.startsWith('addon-')) {
         // Create new addon
         await api.post('/subscriptions/addons', {
-            name:             pkg.name,
-            credits:          pkg.credits,
-            price:            pkg.price,
-            cost_per_credit:  pkg.cost,
-            description:      pkg.description,
-            is_popular:       pkg.popular ?? false,
+            name: pkg.name,
+            credits: pkg.credits,
+            price: pkg.price,
+            cost_per_credit: pkg.cost,
+            description: pkg.description,
+            is_popular: pkg.popular ?? false,
         });
     }
     _invalidate('addons');
@@ -452,20 +453,4 @@ export async function getRevenueStats(): Promise<SARevenueStats> {
     }
 }
 
-// ── Fallbacks for when no data exists in DB yet ──────────────────────────────
 
-function _fallbackIndividualPlans(): SAIndividualPlan[] {
-    return [
-        { key: 'FREE', name: SUBSCRIPTION_PLANS.FREE.name, price: SUBSCRIPTION_PLANS.FREE.price, annualPrice: SUBSCRIPTION_PLANS.FREE.annualPrice, creditBudget: SUBSCRIPTION_PLANS.FREE.creditBudget, maxUploadSize: 5, contextWindow: 4000, allowedModels: ['GPT-4o mini'], features: SUBSCRIPTION_PLANS.FREE.features, excluded: SUBSCRIPTION_PLANS.FREE.excluded, active: 0, maxCost: 0.5 },
-        { key: 'PRO',  name: SUBSCRIPTION_PLANS.PRO.name,  price: SUBSCRIPTION_PLANS.PRO.price,  annualPrice: SUBSCRIPTION_PLANS.PRO.annualPrice,  creditBudget: SUBSCRIPTION_PLANS.PRO.creditBudget,  maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'], features: SUBSCRIPTION_PLANS.PRO.features, excluded: SUBSCRIPTION_PLANS.PRO.excluded, active: 0, popular: true, maxCost: 15 },
-        { key: 'MAX',  name: SUBSCRIPTION_PLANS.MAX.name,  price: SUBSCRIPTION_PLANS.MAX.price,  annualPrice: SUBSCRIPTION_PLANS.MAX.annualPrice,  creditBudget: SUBSCRIPTION_PLANS.MAX.creditBudget,  maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'], features: SUBSCRIPTION_PLANS.MAX.features, excluded: SUBSCRIPTION_PLANS.MAX.excluded, active: 0, maxCost: 50 },
-    ];
-}
-
-function _fallbackEnterprisePlans(): SAEnterprisePlan[] {
-    return [
-        { key: 'starter', name: 'Starter', price: 499, annualPrice: 399, perUser: 4.99, maxUploadSize: 0, contextWindow: 8000, allowedModels: ['GPT-4o mini'], features: ['Basic anonymization', '$5/mo per org'], excluded: [], color: 'from-blue-500/10 to-blue-500/5', borderColor: 'border-blue-200', maxCost: 5 },
-        { key: 'professional', name: 'Professional', price: 999, annualPrice: 799, perUser: 3.99, maxUploadSize: 20, contextWindow: 32000, allowedModels: ['GPT-4o', 'Claude 3.5 Sonnet'], features: ['Context-aware anonymization', '$40/mo per org'], excluded: [], color: 'from-brand-500/20 to-brand-500/5', borderColor: 'border-brand-500', maxCost: 40, popular: true },
-        { key: 'enterprise', name: 'Enterprise', price: 2499, annualPrice: 1999, perUser: 2.99, maxUploadSize: 100, contextWindow: 128000, allowedModels: ['All Models'], features: ['Everything in Pro', '$200/mo per org', 'Dedicated support'], excluded: [], color: 'from-emerald-500/10 to-emerald-500/5', borderColor: 'border-emerald-200', maxCost: 200 },
-    ];
-}

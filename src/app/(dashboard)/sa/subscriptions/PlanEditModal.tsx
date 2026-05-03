@@ -10,14 +10,14 @@ import { Plus, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 
 const AVAILABLE_MODELS = [
-    "GPT-4o",
-    "GPT-4o mini",
-    "Claude 3.5 Sonnet",
-    "Claude 3 Haiku",
-    "Gemini 1.5 Pro",
-    "Gemini 1.5 Flash",
-    "Llama 3 70B",
-    "All Models"
+    "GPT-4.1",
+    "Claude Opus",
+    "Claude Sonnet",
+    "Claude Haiku",
+    "Gemini 3.1 Flash",
+    "Gemini 3.1 Flash Lite",
+    "Gemini 2.5 Flash",
+    "Gemini 2.5 Flash Lite",
 ];
 
 export function PlanEditModal({

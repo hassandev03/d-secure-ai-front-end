@@ -12,7 +12,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import StatusBadge from "@/components/shared/StatusBadge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Avatar, AvatarFallback } from "@/components/ui/avatar";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { getProfessionalById, updateProfessionalStatus, resetProfessionalPassword } from "@/services/sa.service";
@@ -99,6 +99,7 @@ export default function ProfessionalProfilePage({ params }: { params: Promise<{ 
                     <div className="h-24 bg-gradient-to-br from-brand-600 to-indigo-600 relative shrink-0">
                         <div className="absolute -bottom-10 left-1/2 -translate-x-1/2">
                             <Avatar className="h-20 w-20 border-4 border-background shadow-md">
+                                {profile.avatar && <AvatarImage src={profile.avatar} alt={profile.name} />}
                                 <AvatarFallback className="bg-brand-100 text-2xl font-bold text-brand-700">
                                     {initials}
                                 </AvatarFallback>

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuthStore } from "@/store/auth.store";
 import { useSubscriptionStore } from "@/store/subscription.store";
-import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen, Edit, Loader2, CheckCircle2, Clock } from "lucide-react";
+import { Plus, BookText, Upload, Trash2, FileText, Globe, Info, FolderOpen, Edit, Loader2, CheckCircle2, Clock, RefreshCw } from "lucide-react";
 import { toast } from "sonner";
 import { useDropzone } from "react-dropzone";
 import * as contextService from "@/services/context.service";
@@ -121,6 +121,7 @@ export default function MyContextPage() {
     const [editingTerm, setEditingTerm] = useState<contextService.GlossaryTerm | null>(null);
     const [editingPattern, setEditingPattern] = useState<contextService.CustomPattern | null>(null);
     const [isPatternAddModalOpen, setIsPatternAddModalOpen] = useState(false);
+    const [isReprocessModalOpen, setIsReprocessModalOpen] = useState(false);
 
     // Pattern Add form
     const [newPatLabel, setNewPatLabel] = useState("");
@@ -432,13 +433,38 @@ export default function MyContextPage() {
                                     {docs.map((doc) => (
                                         <div key={doc.file_id} className="flex items-center justify-between rounded-lg border border-border p-4">
                                             <div className="flex items-center gap-3">
-                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50"><FileText className="h-5 w-5 text-brand-600" /></div>
+                                                <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-brand-50">
+                                                    {doc.status === 'DONE' ? (
+                                                        <FileText className="h-5 w-5 text-brand-600" />
+                                                    ) : doc.status === 'FAILED' ? (
+                                                        <FileText className="h-5 w-5 text-danger" />
+                                                    ) : (
+                                                        <Loader2 className="h-5 w-5 text-brand-600 animate-spin" />
+                                                    )}
+                                                </div>
                                                 <div>
-                                                    <p className="text-sm font-medium">{doc.filename}</p>
+                                                    <div className="flex items-center gap-2">
+                                                        <p className="text-sm font-medium">{doc.filename}</p>
+                                                        {doc.status !== 'DONE' && (
+                                                            <Badge variant="outline" className="text-[10px] uppercase font-bold px-1 h-4">
+                                                                {doc.status}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
                                                     <p className="text-xs text-muted-foreground">{formatSize(doc.file_size_bytes)} · Uploaded {new Date(doc.created_at).toLocaleDateString()}</p>
                                                 </div>
                                             </div>
-                                            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemoveDoc(doc.file_id)}><Trash2 className="h-4 w-4" /></Button>
+                                            <div className="flex items-center gap-2">
+                                                <Button 
+                                                    variant="ghost" 
+                                                    size="sm" 
+                                                    className="h-8 text-xs text-brand-600 hover:text-brand-700 hover:bg-brand-50"
+                                                    onClick={() => setIsReprocessModalOpen(true)}
+                                                >
+                                                    <RefreshCw className="mr-1.5 h-3.5 w-3.5" /> Reprocess
+                                                </Button>
+                                                <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-danger" onClick={() => handleRemoveDoc(doc.file_id)}><Trash2 className="h-4 w-4" /></Button>
+                                            </div>
                                         </div>
                                     ))}
                                     {docs.length === 0 && <div className="py-8 text-center"><FolderOpen className="mx-auto h-10 w-10 text-muted-foreground/50" /><p className="mt-2 text-sm text-muted-foreground">No documents uploaded yet</p></div>}
@@ -605,6 +631,28 @@ export default function MyContextPage() {
                             <Button className="bg-brand-600 hover:bg-brand-700" onClick={handleSaveEntities}>Save to Context</Button>
                         </DialogFooter>
                     )}
+                </DialogContent>
+            </Dialog>
+
+            {/* Reprocess Feature Modal (Coming Soon) */}
+            <Dialog open={isReprocessModalOpen} onOpenChange={setIsReprocessModalOpen}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Reprocess Document</DialogTitle>
+                        <DialogDescription>Trigger a new PII extraction and context enrichment pass.</DialogDescription>
+                    </DialogHeader>
+                    <div className="flex flex-col items-center justify-center py-6 text-center">
+                        <div className="h-12 w-12 rounded-full bg-brand-50 flex items-center justify-center mb-4 text-brand-600">
+                            <RefreshCw className="h-6 w-6" />
+                        </div>
+                        <h3 className="font-semibold text-lg">Coming Soon</h3>
+                        <p className="text-sm text-muted-foreground mt-2 max-w-[280px]">
+                            Advanced reprocessing and manual entity verification for existing documents is currently being finalized.
+                        </p>
+                    </div>
+                    <DialogFooter>
+                        <Button className="w-full bg-brand-600 hover:bg-brand-700" onClick={() => setIsReprocessModalOpen(false)}>Got it</Button>
+                    </DialogFooter>
                 </DialogContent>
             </Dialog>
         </div>

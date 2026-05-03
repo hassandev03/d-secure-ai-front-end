@@ -131,8 +131,7 @@ export async function getSubscriptionPlans(signal?: AbortSignal): Promise<Subscr
                 name:         p.name,
                 price:        p.monthly_price,
                 creditBudget: cur?.creditBudget ?? `$${p.monthly_price}/mo`,
-                // Prefer our curated feature list; fall back to raw DB values
-                features: cur?.features ?? [
+                features: [
                     ...(p.features ?? []).map((t) => ({ text: t, included: true })),
                     ...(p.excluded_features ?? []).map((t) => ({ text: t, included: false })),
                 ],

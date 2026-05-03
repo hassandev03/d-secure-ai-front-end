@@ -333,3 +333,13 @@ export async function verifyEmail(
     await api.post('/auth/verify-email', { token });
     return { success: true };
 }
+
+/**
+ * POST /api/v1/general/register-organization
+ */
+export async function requestOrganizationRegistration(
+    data: any
+): Promise<{ success: boolean }> {
+    await api.post('/general/register-organization', data);
+    return { success: true };
+}
