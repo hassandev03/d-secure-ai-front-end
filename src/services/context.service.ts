@@ -91,28 +91,27 @@ export const deletePattern = async (id: string): Promise<void> => {
 
 export interface ContextDocument {
     file_id: string;
-    filename: string;
-    file_size_bytes: number;
+    file_name: string;
+    size: number;
     mime_type: string;
     created_at: string;
-    status: string;
+    is_processed: boolean;
 }
 
 export const getContextDocuments = async (): Promise<ContextDocument[]> => {
-    const res = await api.get("/files", { params: { purpose: "KNOWLEDGE_CONTEXT" } });
+    const res = await api.get("/context/documents");
     return res.data;
 };
 
 export const uploadContextDocument = async (file: File): Promise<ContextDocument> => {
     const formData = new FormData();
     formData.append("file", file);
-    formData.append("purpose", "KNOWLEDGE_CONTEXT");
-    const res = await api.post("/files/upload", formData, {
+    const res = await api.post("/context/documents/upload", formData, {
         headers: { "Content-Type": "multipart/form-data" },
     });
     return res.data;
 };
 
 export const deleteContextDocument = async (id: string): Promise<void> => {
-    await api.delete(`/files/${id}`);
+    await api.delete(`/context/documents/${id}`);
 };
