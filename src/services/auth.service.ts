@@ -23,7 +23,7 @@ interface BackendUserRead {
     org_id: string | null;
     job_title: string | null;
     industry: string | null;
-    country: string | null;
+    address: string | null;
     phone: string | null;
     avatar_url: string | null;
     is_first_login: boolean;
@@ -53,7 +53,7 @@ function mapUser(b: BackendUserRead): User {
         orgId: b.org_id ?? undefined,
         jobTitle: b.job_title ?? undefined,
         industry: b.industry ?? undefined,
-        country: b.country ?? undefined,
+        address: b.address ?? undefined,
         phone: b.phone ?? undefined,
         avatar: b.avatar_url ?? undefined,
         isFirstLogin: b.is_first_login,
@@ -114,7 +114,7 @@ export async function register(
         password: data.password,
         job_title: data.jobTitle,
         industry: data.industry,
-        country: data.country,
+        address: data.address,
     });
 
     let backendUser = res.user;
@@ -177,7 +177,7 @@ export async function getCurrentUser(): Promise<User | null> {
             orgId:          u.org_id ?? undefined,
             jobTitle:       u.job_title ?? undefined,
             industry:       u.industry ?? undefined,
-            country:        u.country ?? undefined,
+            address:        u.address ?? undefined,
             phone:          u.phone ?? undefined,
             avatar:         u.avatar_url ?? undefined,
             isFirstLogin:   u.is_first_login,
@@ -218,7 +218,7 @@ export interface UserSummary {
         org_id: string | null;
         job_title?: string | null;
         industry?: string | null;
-        country?: string | null;
+        address?: string | null;
         phone?: string | null;
         avatar_url?: string | null;
         is_first_login: boolean;
@@ -236,10 +236,10 @@ export interface UserSummary {
     quota: {
         plan_name: string;
         plan_key: string;
-        monthly_requests: number;
-        requests_used: number;
-        requests_remaining: number;
-        requests_remaining_pct: number;
+        monthly_budget_usd: number;
+        credits_used_usd: number;
+        credits_remaining_usd: number;
+        percentage_used: number;
         period_ends_at: string;
     } | null;
 }

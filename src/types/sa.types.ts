@@ -73,9 +73,7 @@ export interface SAEnterprisePlan {
     name: string;
     price: number;
     annualPrice: number;
-    perUser: number;
     maxUploadSize?: number;
-    contextWindow?: number;
     allowedModels?: string[];
     popular?: boolean;
     features: string[];
@@ -92,7 +90,6 @@ export interface SAIndividualPlan {
     annualPrice: number;
     creditBudget: string;
     maxUploadSize?: number;
-    contextWindow?: number;
     allowedModels?: string[];
     active: number;
     popular?: boolean;

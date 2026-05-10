@@ -91,11 +91,11 @@ interface BUsageMe {
 interface BQuota {
     plan_name: string;
     plan_key: string;
-    monthly_requests: number;
-    requests_used: number;
-    requests_remaining: number;
+    monthly_budget_usd: number;
+    credits_used_usd: number;
+    credits_remaining_usd: number;
     period_ends_at: string;
-    requests_remaining_pct?: number;
+    percentage_used?: number;
 }
 
 // Backend shape for a chat session embedded in dashboard summary
@@ -236,13 +236,13 @@ function transformInitToSummary(data: DashboardInitResponse): DashboardSummaryRe
         totalRequestsThisMonth: totalRequests,
         totalSessions:          data.total_sessions ?? 0,
         entitiesAnonymized,
-        quotaRemaining:         quota?.requests_remaining ?? 0,
-        quotaTotal:             quota?.monthly_requests   ?? 0,
+        quotaRemaining:         quota?.credits_remaining_usd ?? 0,
+        quotaTotal:             quota?.monthly_budget_usd   ?? 0,
         avgEntitiesPerRequest:  totalRequests > 0
             ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10
             : 0,
-        percentageUsed: quota?.requests_remaining_pct
-            ? 100 - quota.requests_remaining_pct
+        percentageUsed: quota?.percentage_used
+            ? 100 - quota.percentage_used
             : 0,
         planName:    quota?.plan_name    ?? 'Free',
         periodEndsAt: quota?.period_ends_at ?? '',
@@ -260,7 +260,7 @@ function transformInitToSummary(data: DashboardInitResponse): DashboardSummaryRe
     }));
 
     // Derive last 7 days from the 30-day daily array already returned.
-    const limit = quota?.monthly_requests ?? 1;
+    const limit = quota?.monthly_budget_usd ?? 1;
     let cumulative = 0;
     const last7 = (data.daily ?? []).slice(-7);
     const dailyActivity: DailyActivityPoint[] = last7.map((row) => {

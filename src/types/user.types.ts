@@ -18,8 +18,9 @@ export interface User {
     status: UserStatus;
     jobTitle?: string;
     industry?: string;
-    country?: string;
+    address?: string;
     phone?: string;
+    bio?: string;
     emailVerifiedAt?: string;
     createdAt: string;
     lastActiveAt?: string;
@@ -37,7 +38,7 @@ export interface RegisterData {
     password: string;
     jobTitle?: string;
     industry?: string;
-    country?: string;
+    address?: string;
 }
 
 export interface PasswordResetRequest {

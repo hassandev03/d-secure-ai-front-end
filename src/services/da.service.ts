@@ -191,14 +191,14 @@ const _localSystemPrompts: DASystemPrompt[] = [];       // TODO: GET /chat/syste
 // ─── Org Roles (no backend endpoint yet — use static list) ─────────────────────
 
 const ROLE_BUDGETS: Record<string, number> = {
-    'role-1': estimateMonthlyCreditsFixed({ queriesPerDay: 8, avgInputWords: 300, avgOutputWords: 500, modelKey: 'gpt-4.1',          fileQueryPct: 0.30, avgFileWords: 800, ragPct: 0.10 }),
-    'role-2': estimateMonthlyCreditsFixed({ queriesPerDay: 6, avgInputWords: 250, avgOutputWords: 400, modelKey: 'gpt-4.1',          fileQueryPct: 0.20, avgFileWords: 600, ragPct: 0.10 }),
-    'role-3': estimateMonthlyCreditsFixed({ queriesPerDay: 5, avgInputWords: 200, avgOutputWords: 350, modelKey: 'claude-haiku-4-5',  fileQueryPct: 0.15, avgFileWords: 400, ragPct: 0.05 }),
-    'role-4': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'gemini-3.1-flash-preview', fileQueryPct: 0.10, avgFileWords: 300, ragPct: 0.05 }),
-    'role-5': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 150, avgOutputWords: 250, modelKey: 'gemini-2.5-flash',   fileQueryPct: 0.05, avgFileWords: 200, ragPct: 0.00 }),
-    'role-6': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'claude-sonnet-4-5', fileQueryPct: 0.20, avgFileWords: 500, ragPct: 0.20 }),
-    'role-7': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 150, avgOutputWords: 200, modelKey: 'gemini-2.5-flash',   fileQueryPct: 0.10, avgFileWords: 300, ragPct: 0.10 }),
-    'role-8': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 100, avgOutputWords: 200, modelKey: 'gemini-2.5-flash',   fileQueryPct: 0.05, avgFileWords: 200, ragPct: 0.00 }),
+    'role-1': estimateMonthlyCreditsFixed({ queriesPerDay: 8, avgInputWords: 300, avgOutputWords: 500, modelKey: 'gpt-4.1',          fileQueryPct: 0.30, avgFileWords: 800 }),
+    'role-2': estimateMonthlyCreditsFixed({ queriesPerDay: 6, avgInputWords: 250, avgOutputWords: 400, modelKey: 'gpt-4.1',          fileQueryPct: 0.20, avgFileWords: 600 }),
+    'role-3': estimateMonthlyCreditsFixed({ queriesPerDay: 5, avgInputWords: 200, avgOutputWords: 350, modelKey: 'claude-haiku-4-5',  fileQueryPct: 0.15, avgFileWords: 400 }),
+    'role-4': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'gemini-3.1-flash-preview', fileQueryPct: 0.10, avgFileWords: 300 }),
+    'role-5': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 150, avgOutputWords: 250, modelKey: 'gemini-2.5-flash',   fileQueryPct: 0.05, avgFileWords: 200 }),
+    'role-6': estimateMonthlyCreditsFixed({ queriesPerDay: 4, avgInputWords: 200, avgOutputWords: 300, modelKey: 'claude-sonnet-4-5', fileQueryPct: 0.20, avgFileWords: 500 }),
+    'role-7': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 150, avgOutputWords: 200, modelKey: 'gemini-2.5-flash',   fileQueryPct: 0.10, avgFileWords: 300 }),
+    'role-8': estimateMonthlyCreditsFixed({ queriesPerDay: 3, avgInputWords: 100, avgOutputWords: 200, modelKey: 'gemini-2.5-flash',   fileQueryPct: 0.05, avgFileWords: 200 }),
 };
 
 const STATIC_ROLES: OrgRole[] = [
@@ -244,17 +244,17 @@ export async function getDeptInfo(): Promise<DeptInfo> {
 export async function getDeptQuota(): Promise<DeptQuota> {
     try {
         const { data } = await api.get<{
-            monthly_requests: number;
-            requests_used: number;
-            requests_remaining: number;
+            monthly_budget_usd: number;
+            credits_used_usd: number;
+            credits_remaining_usd: number;
             period_ends_at: string;
         }>('/analytics/quota/me');
-        const pct = data.monthly_requests > 0
-            ? Math.round((data.requests_used / data.monthly_requests) * 100)
+        const pct = data.monthly_budget_usd > 0
+            ? Math.round((data.credits_used_usd / data.monthly_budget_usd) * 100)
             : 0;
         return {
             percentageUsed: pct,
-            budget:         data.monthly_requests,
+            budget:         data.monthly_budget_usd,
             renewsAt:       data.period_ends_at ? data.period_ends_at.split('T')[0] : '',
         };
     } catch {

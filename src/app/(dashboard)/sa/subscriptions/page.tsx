@@ -149,8 +149,7 @@ export default function SubscriptionsPage() {
                                             ${isAnnual ? plan.annualPrice.toLocaleString() : plan.price.toLocaleString()}
                                             <span className="ml-1 text-xl font-medium text-muted-foreground">/mo</span>
                                         </div>
-                                        <p className="mt-2 text-sm text-muted-foreground font-medium flex justify-between">
-                                            <span>~${plan.perUser}/user</span>
+                                        <p className="mt-2 text-sm text-muted-foreground font-medium text-right">
                                             {isAnnual && <span className="text-success">Billed annually</span>}
                                         </p>
                                     </CardHeader>
@@ -358,7 +357,7 @@ export default function SubscriptionsPage() {
                     setTimeout(() => setEditingPlan(null), 300);
                 }}
                 onSave={async (updatedPlan) => {
-                    if ('perUser' in updatedPlan) {
+                    if ('color' in updatedPlan) {
                         setEntPlans(prev => prev.map(p => p.key === updatedPlan.key ? updatedPlan : p));
                         await updateEnterprisePlan(updatedPlan);
                     } else {

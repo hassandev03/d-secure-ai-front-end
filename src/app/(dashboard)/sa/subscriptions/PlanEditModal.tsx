@@ -43,14 +43,14 @@ export function PlanEditModal({
 
     if (!plan || !formData) return null;
 
-    const isEnterprise = 'perUser' in formData;
+    const isEnterprise = 'color' in formData; // Enterprise plans have color/borderColor fields
 
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { name, value } = e.target;
         
         setFormData((prev: any) => ({
             ...prev,
-            [name]: name.includes("rice") || ["maxCost", "requests", "perUser", "active", "maxUploadSize", "contextWindow"].includes(name) ? Number(value) : value,
+            [name]: name.includes("rice") || ["maxCost", "requests", "active", "maxUploadSize"].includes(name) ? Number(value) : value,
         }));
     };
 
@@ -158,15 +158,9 @@ export function PlanEditModal({
                                 </div>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4 pt-2">
-                                <div className="grid gap-2">
-                                    <Label htmlFor="maxUploadSize" className="text-sm font-semibold">Max Upload Size (MB)</Label>
-                                    <Input id="maxUploadSize" name="maxUploadSize" type="number" value={formData.maxUploadSize || 0} onChange={handleChange} className="h-11" />
-                                </div>
-                                <div className="grid gap-2">
-                                    <Label htmlFor="contextWindow" className="text-sm font-semibold">Context Window Limit</Label>
-                                    <Input id="contextWindow" name="contextWindow" type="number" value={formData.contextWindow || 0} onChange={handleChange} className="h-11" />
-                                </div>
+                            <div className="grid gap-2 pt-2">
+                                <Label htmlFor="maxUploadSize" className="text-sm font-semibold">Max Upload Size (MB)</Label>
+                                <Input id="maxUploadSize" name="maxUploadSize" type="number" value={formData.maxUploadSize || 0} onChange={handleChange} className="h-11" />
                             </div>
 
                             <div className="grid gap-2 pt-2 relative">
@@ -220,13 +214,6 @@ export function PlanEditModal({
                         <div className="border-t border-border pt-6 space-y-4">
                             {isEnterprise ? (
                                 <>
-                                    <div className="grid grid-cols-2 gap-4">
-                                        <div className="grid gap-2">
-                                            <Label htmlFor="perUser" className="text-sm font-semibold">Base Price Per User ($)</Label>
-                                            <Input id="perUser" name="perUser" type="number" value={formData.perUser || 0} onChange={handleChange} className="h-11" />
-                                        </div>
-                                    </div>
-                                    
                                     <div className="flex items-center space-x-3 p-4 border rounded-lg bg-muted/40 transition-colors hover:bg-muted/60">
                                         <Checkbox
                                             id="popular"
@@ -239,7 +226,6 @@ export function PlanEditModal({
                                             <span className="text-xs text-muted-foreground">This plan will stand out with special styling on the pricing page.</span>
                                         </div>
                                     </div>
-
                                 </>
                             ) : (
                                 <>

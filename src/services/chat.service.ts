@@ -87,9 +87,9 @@ interface BackendChatResponse {
  */
 export interface QuotaStatus {
     plan_name: string;
-    monthly_limit: number;
-    requests_used: number;
-    requests_remaining: number;
+    monthly_budget_usd: number;
+    credits_used_usd: number;
+    credits_remaining_usd: number;
     percentage_used: number;
     period_ends_at: string;
     cost_this_period: number;

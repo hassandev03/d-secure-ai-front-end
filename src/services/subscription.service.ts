@@ -69,9 +69,9 @@ export interface SubscriptionSummary {
     subscription_plan_key: string | null;
     quota: {
         plan_name: string;
-        monthly_requests: number;
-        requests_used: number;
-        requests_remaining: number;
+        monthly_budget_usd: number;
+        credits_used_usd: number;
+        credits_remaining_usd: number;
         percentage_used: number;
         period_ends_at: string;
     };
@@ -88,8 +88,8 @@ export async function getSubscriptionSummary(signal?: AbortSignal): Promise<Subs
         const { data } = await api.get<SubscriptionSummary>('/subscriptions/summary', { signal });
         console.log('[SUBSCRIPTION_API_SUCCESS] Subscription summary retrieved', {
             planKey: data.subscription_plan_key,
-            requestsUsed: data.quota.requests_used,
-            quotaRemaining: data.quota.requests_remaining,
+            creditsUsed: data.quota.credits_used_usd,
+            quotaRemaining: data.quota.credits_remaining_usd,
         });
         return data;
     } catch (err) {

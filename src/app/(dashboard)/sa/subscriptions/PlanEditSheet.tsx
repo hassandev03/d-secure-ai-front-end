@@ -33,7 +33,7 @@ export function PlanEditSheet({
         const { name, value } = e.target;
         setFormData((prev: any) => ({
             ...prev,
-            [name]: name.includes("rice") || name === "requests" || name === "perUser" || name === "active" ? Number(value) : value,
+            [name]: name.includes("rice") || name === "requests" || name === "active" ? Number(value) : value,
         }));
     };
 
@@ -67,10 +67,6 @@ export function PlanEditSheet({
 
                     {isEnterprise ? (
                         <>
-                            <div className="grid gap-2">
-                                <Label htmlFor="perUser">Per User Price ($)</Label>
-                                <Input id="perUser" name="perUser" type="number" value={formData.perUser || 0} onChange={handleChange} />
-                            </div>
                             <div className="flex items-center space-x-2">
                                 <Checkbox
                                     id="popular"

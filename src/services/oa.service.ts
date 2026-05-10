@@ -431,9 +431,28 @@ export async function applyOAOrgPolicyToAllDepts(): Promise<void> {
 // ─────────────────────────────────────────────────────────────────────────────
 
 export async function getOAQuotaRequests(): Promise<OAQuotaRequest[]> {
-    // TODO: wire to /org/{org_id}/quota/requests when Module K is complete
-    // For now, return empty array as this requires a new backend endpoint
-    return [];
+    const orgId = getOrgId();
+    if (!orgId) return [];
+    try {
+        const { data } = await api.get<OAQuotaRequest[]>(`/organizations/${orgId}/quota-requests`);
+        return data;
+    } catch {
+        return [];
+    }
+}
+
+export async function requestOAQuotaIncrease(amount: number, reason: string): Promise<OAQuotaRequest | null> {
+    const orgId = getOrgId();
+    if (!orgId) return null;
+    try {
+        const { data } = await api.post<OAQuotaRequest>(`/organizations/${orgId}/quota-requests`, {
+            amount,
+            reason
+        });
+        return data;
+    } catch {
+        return null;
+    }
 }
 
 // ─────────────────────────────────────────────────────────────────────────────

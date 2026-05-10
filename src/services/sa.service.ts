@@ -64,7 +64,6 @@ interface BackendPlan {
     is_popular: boolean;
     max_cost_usd: number | null;
     max_upload_size_mb: number | null;
-    context_window: number | null;
     allowed_models: string[] | null;
     is_active: boolean;
 }
@@ -131,7 +130,6 @@ function mapPlan(b: BackendPlan): SAIndividualPlan {
         annualPrice: b.annual_price ?? 0,
         creditBudget: `$${b.monthly_price}/mo`,
         maxUploadSize: b.max_upload_size_mb ?? 0,
-        contextWindow: b.context_window ?? 4000,
         allowedModels: b.allowed_models ?? ['GPT-4o mini'],
         features: b.features ?? [],
         excluded: b.excluded_features ?? [],
@@ -375,9 +373,7 @@ export async function getEnterprisePlans(): Promise<SAEnterprisePlan[]> {
             name: b.name,
             price: b.monthly_price,
             annualPrice: b.annual_price ?? 0,
-            perUser: 0,
             maxUploadSize: b.max_upload_size_mb ?? 0,
-            contextWindow: b.context_window ?? 8000,
             allowedModels: b.allowed_models ?? ['GPT-4o mini'],
             features: b.features ?? [],
             excluded: b.excluded_features ?? [],

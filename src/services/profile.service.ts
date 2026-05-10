@@ -15,7 +15,7 @@ export interface ProfileUpdatePayload {
     name?: string;
     jobTitle?: string;
     industry?: string;
-    country?: string;
+    address?: string;
     phone?: string;
     avatarUrl?: string;
 }
@@ -28,7 +28,7 @@ export async function updateUserProfile(
         name:      payload.name,
         job_title: payload.jobTitle,
         industry:  payload.industry,
-        country:   payload.country,
+        address:   payload.address,
         phone:     payload.phone,
         avatar_url: payload.avatarUrl,
     });
@@ -38,7 +38,7 @@ export async function updateUserProfile(
             name:     data.name,
             jobTitle: data.job_title,
             industry: data.industry,
-            country:  data.country,
+            address:  data.address,
             phone:    data.phone,
             avatar:   data.avatar_url,
         },

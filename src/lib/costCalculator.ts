@@ -34,6 +34,13 @@ export const PLATFORM_CONFIG = {
 
     /** ⑥ Speech-to-text fee per minute (USD) */
     STT_PER_MINUTE_FEE: 0.015,
+
+    /** 
+     * Conversion rate: 1 USD = 5,000 Compute Units (CU).
+     * Used for display purposes so users see whole numbers (e.g., 75 CU) 
+     * instead of fractional dollars (e.g., $0.015).
+     */
+    CU_MULTIPLIER: 5000,
 } as const;
 
 // ─── LLM model pricing (matches llm_model_pricing table SA-configured defaults) ─
@@ -312,19 +319,24 @@ export function buildDatedTrend(
 
 // ─── Display helpers ──────────────────────────────────────────────────────────
 
-/** Format a CU credit value for display: "12.3456 CU" */
-export function formatCredits(usd: number, decimals = 4): string {
-    return `${usd.toFixed(decimals)} CU`;
+/** Format a CU credit value for display: "75 CU" (from $0.015) */
+export function formatCredits(usd: number, decimals = 1): string {
+    const cu = usd * PLATFORM_CONFIG.CU_MULTIPLIER;
+    // For small fractional CUs, show 1 decimal, else 0
+    const fraction = cu > 0 && cu < 10 ? 1 : 0;
+    return `${cu.toLocaleString(undefined, { minimumFractionDigits: fraction, maximumFractionDigits: decimals })} CU`;
 }
 
-/** Format a CU credit value compactly: "12.35 CU" */
+/** Format a CU credit value compactly: "75 CU" */
 export function formatCreditsShort(usd: number): string {
-    return `${usd.toFixed(2)} CU`;
+    const cu = usd * PLATFORM_CONFIG.CU_MULTIPLIER;
+    return `${cu.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} CU`;
 }
 
-/** Format a large credit budget: "1,800.00 CU" */
+/** Format a large credit budget: "250,000 CU" */
 export function formatBudget(usd: number): string {
-    return `${usd.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} CU`;
+    const cu = usd * PLATFORM_CONFIG.CU_MULTIPLIER;
+    return `${cu.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 0 })} CU`;
 }
 
 // ─── Internal helpers ─────────────────────────────────────────────────────────
