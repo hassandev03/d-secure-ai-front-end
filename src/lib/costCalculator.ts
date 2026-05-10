@@ -11,10 +11,10 @@
  *   Total cost per interaction =
  *       ① LLM Input Cost        (input_words → tokens → per-1M-token price)
  *     + ② LLM Output Cost       (output_words → tokens → per-1M-token price)
- *     + ③ Anonymization Cost    ($0.000002 per input word)
- *     + ④ De-anonymization Cost ($0.000002 per output word)
- *     + ⑤ File Extraction Cost  ($0.005 flat per file + $0.000003 per extracted word)
- *     + ⑥ Feature Surcharges    (RAG $0.003/query · STT $0.015/min)
+ *     + ③ Anonymization Cost    ($0.000001 per input word)
+ *     + ④ De-anonymization Cost ($0.0000015 per output word)
+ *     + ⑤ File Extraction Cost  ($0.0000002 per extracted word)
+ *     + ⑥ STT Surcharge         (Speech-to-text $0.015/min)
  */
 
 // ─── Platform cost config (matches platform_cost_config table defaults) ────────
@@ -24,19 +24,13 @@ export const PLATFORM_CONFIG = {
     WORDS_TO_TOKENS_RATIO: 1.33,
 
     /** ③ Anonymization fee per input word (USD) */
-    ANONYMIZATION_COST_PER_WORD: 0.000002,
+    ANONYMIZATION_COST_PER_WORD: 0.000001,
 
     /** ④ De-anonymization fee per output word (USD) */
-    DEANONYMIZATION_COST_PER_WORD: 0.000002,
+    DEANONYMIZATION_COST_PER_WORD: 0.0000015,
 
-    /** ⑤ Flat extraction fee per uploaded file (USD) */
-    FILE_EXTRACTION_FLAT_FEE: 0.005,
-
-    /** ⑤ Per-word fee on extracted file text (USD) */
-    FILE_PER_WORD_FEE: 0.000003,
-
-    /** ⑥ RAG / KB retrieval fee per query (USD) */
-    RAG_RETRIEVAL_FEE: 0.003,
+    /** ⑤ Per-word fee on extracted file text (USD) — no flat file fee */
+    FILE_PER_WORD_FEE: 0.0000002,
 
     /** ⑥ Speech-to-text fee per minute (USD) */
     STT_PER_MINUTE_FEE: 0.015,
@@ -118,30 +112,25 @@ export interface CostBreakdown {
     deanonymizationCost:  number;
     fileCost:             number;
     featureCost:          number;
-    /** Sum of all 6 line items. This is what gets deducted from the quota ledger. */
+    /** Sum of all items. This is what gets deducted from the quota ledger. */
     totalCost:            number;
 }
 
 export interface InteractionParams {
-    modelKey:        string;
-    inputWords:      number;
-    outputWords:     number;
+    modelKey:       string;
+    inputWords:     number;
+    outputWords:    number;
     /** Total word count across all attached files (if any) */
-    fileWordCount?:  number;
-    /** Number of attached files (for flat fee) */
-    fileCount?:      number;
-    /** Whether RAG/KB retrieval was used */
-    usedRag?:        boolean;
+    fileWordCount?: number;
     /** Speech-to-text duration in minutes */
-    sttMinutes?:     number;
+    sttMinutes?:    number;
 }
 
 /**
- * Full 6-part cost calculation for a single interaction.
+ * Full cost calculation for a single interaction.
  * Mirrors CostCalculator.calculate_interaction_cost().
  *
  * @example
- * // → $0.000665 + $0.006650 + $0.000400 + $0.001000 = $0.008715
  * calculateInteractionCost({ modelKey:'gpt-4.1', inputWords:200, outputWords:500 })
  */
 export function calculateInteractionCost(params: InteractionParams): CostBreakdown {
@@ -150,8 +139,6 @@ export function calculateInteractionCost(params: InteractionParams): CostBreakdo
         inputWords,
         outputWords,
         fileWordCount = 0,
-        fileCount     = 0,
-        usedRag       = false,
         sttMinutes    = 0,
     } = params;
 
@@ -167,15 +154,11 @@ export function calculateInteractionCost(params: InteractionParams): CostBreakdo
     // ④ De-anonymization (on LLM output)
     const deanonymizationCost = outputWords * cfg.DEANONYMIZATION_COST_PER_WORD;
 
-    // ⑤ File extraction
-    const fileCost = fileCount > 0
-        ? (fileCount * cfg.FILE_EXTRACTION_FLAT_FEE) + (fileWordCount * cfg.FILE_PER_WORD_FEE)
-        : 0;
+    // ⑤ File extraction — per-word only, no flat fee
+    const fileCost = fileWordCount > 0 ? fileWordCount * cfg.FILE_PER_WORD_FEE : 0;
 
-    // ⑥ Feature surcharges
-    let featureCost = 0;
-    if (usedRag)       featureCost += cfg.RAG_RETRIEVAL_FEE;
-    if (sttMinutes > 0) featureCost += cfg.STT_PER_MINUTE_FEE * sttMinutes;
+    // ⑥ STT surcharge
+    const featureCost = sttMinutes > 0 ? cfg.STT_PER_MINUTE_FEE * sttMinutes : 0;
 
     const totalCost = inputCost + outputCost + anonymizationCost + deanonymizationCost + fileCost + featureCost;
 
@@ -211,7 +194,6 @@ export interface MockEmployeeUsageProfile {
     modelKey:         string;
     fileQueryPct?:    number; // 0–1, fraction of queries that include a file
     avgFileWords?:    number; // words in attached file
-    ragPct?:          number; // 0–1, fraction of queries using RAG
     workingDaysUsed?: number; // default 22 (full month)
 }
 
@@ -223,7 +205,6 @@ export function estimateMonthlyCredits(profile: MockEmployeeUsageProfile): numbe
         modelKey,
         fileQueryPct    = 0,
         avgFileWords    = 0,
-        ragPct          = 0,
         workingDaysUsed = 22,
     } = profile;
 
@@ -232,14 +213,11 @@ export function estimateMonthlyCredits(profile: MockEmployeeUsageProfile): numbe
     let total = 0;
     for (let i = 0; i < totalQueries; i++) {
         const hasFile = Math.random() < fileQueryPct;
-        const usedRag  = Math.random() < ragPct;
         const cost = calculateInteractionCost({
             modelKey,
-            inputWords:   avgInputWords,
-            outputWords:  avgOutputWords,
+            inputWords:    avgInputWords,
+            outputWords:   avgOutputWords,
             fileWordCount: hasFile ? avgFileWords : 0,
-            fileCount:     hasFile ? 1 : 0,
-            usedRag,
         });
         total += cost.totalCost;
     }
@@ -262,27 +240,23 @@ export function estimateMonthlyCreditsFixed(profile: MockEmployeeUsageProfile): 
         modelKey,
         fileQueryPct    = 0,
         avgFileWords    = 0,
-        ragPct          = 0,
         workingDaysUsed = 22,
     } = profile;
 
     const totalQueries = queriesPerDay * workingDaysUsed;
 
-    // Expected value per query (weighted by feature usage rates)
+    // Expected value per query (weighted by file usage rate)
     const plainCost = calculateInteractionCost({ modelKey, inputWords: avgInputWords, outputWords: avgOutputWords });
     const fileCost  = calculateInteractionCost({
         modelKey,
-        inputWords:   avgInputWords,
-        outputWords:  avgOutputWords,
+        inputWords:    avgInputWords,
+        outputWords:   avgOutputWords,
         fileWordCount: avgFileWords,
-        fileCount:     1,
     });
-    const ragCost = calculateInteractionCost({ modelKey, inputWords: avgInputWords, outputWords: avgOutputWords, usedRag: true });
 
     const expectedPerQuery =
-        plainCost.totalCost * (1 - fileQueryPct) * (1 - ragPct)
-      + fileCost.totalCost  * fileQueryPct        * (1 - ragPct)
-      + ragCost.totalCost   * (1 - fileQueryPct)  * ragPct;
+        plainCost.totalCost * (1 - fileQueryPct)
+      + fileCost.totalCost  * fileQueryPct;
 
     return round(expectedPerQuery * totalQueries, 4);
 }
