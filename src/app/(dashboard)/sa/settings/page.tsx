@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Loader2, Key, Database, ShieldCheck, Mail, Globe, CheckCircle2, XCircle, Zap, AlertTriangle, Save } from "lucide-react";
+import { getSystemSettings, updateSystemSettings, type SASystemSettings } from "@/services/sa.service";
 import { toast } from "sonner";
 import { motion } from "framer-motion";
 import PageHeader from "@/components/layout/PageHeader";
@@ -128,21 +129,35 @@ function LLMGatewayTab() {
     );
 }
 
+const MotionWrapper = ({ children }: { children: React.ReactNode }) => (
+    <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: "easeOut" }} className="space-y-6">
+        {children}
+    </motion.div>
+);
+
 export default function SettingsPage() {
+    const [settings, setSettings] = useState<SASystemSettings | null>(null);
     const [saving, setSaving] = useState(false);
 
+    useEffect(() => {
+        getSystemSettings().then((res) => {
+            if (res) setSettings(res);
+        });
+    }, []);
+
     const handleSave = async () => {
+        if (!settings) return;
         setSaving(true);
-        await new Promise((r) => setTimeout(r, 800));
+        try {
+            await updateSystemSettings(settings);
+            toast.success("Settings saved successfully!", { description: "Your platform configurations have been updated." });
+        } catch {
+            toast.error("Failed to save settings.");
+        }
         setSaving(false);
-        toast.success("Settings saved successfully!", { description: "Your platform configurations have been updated." });
     };
 
-    const MotionWrapper = ({ children }: { children: React.ReactNode }) => (
-        <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.3, ease: "easeOut" }} className="space-y-6">
-            {children}
-        </motion.div>
-    );
+    if (!settings) return <div className="flex items-center justify-center py-16"><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Loading settings...</div>;
 
     return (
         <div className="mx-auto max-w-5xl">
@@ -165,17 +180,17 @@ export default function SettingsPage() {
                                 <CardDescription>Basic configuration for the D-SecureAI platform.</CardDescription>
                             </CardHeader>
                             <CardContent className="grid gap-6 sm:grid-cols-2">
-                                <div className="space-y-2"><Label>Platform Name</Label><Input defaultValue="D-SecureAI" className="h-11" /></div>
-                                <div className="space-y-2"><Label>Support Email</Label><Input defaultValue="support@dsecureai.com" className="h-11" /></div>
+                                <div className="space-y-2"><Label>Platform Name</Label><Input value={settings.platformName} onChange={e => setSettings({ ...settings, platformName: e.target.value })} className="h-11" /></div>
+                                <div className="space-y-2"><Label>Support Email</Label><Input value={settings.supportEmail} onChange={e => setSettings({ ...settings, supportEmail: e.target.value })} className="h-11" /></div>
                                 <div className="space-y-2">
                                     <Label>Default Timezone</Label>
-                                    <Select defaultValue="UTC"><SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                                    <Select value={settings.defaultTimezone} onValueChange={v => setSettings({ ...settings, defaultTimezone: v })}><SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                                         <SelectContent><SelectItem value="UTC">UTC</SelectItem><SelectItem value="EST">EST (UTC-5)</SelectItem><SelectItem value="PST">PST (UTC-8)</SelectItem><SelectItem value="IST">IST (UTC+5:30)</SelectItem></SelectContent>
                                     </Select>
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Default Language</Label>
-                                    <Select defaultValue="en"><SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
+                                    <Select value={settings.defaultLanguage} onValueChange={v => setSettings({ ...settings, defaultLanguage: v })}><SelectTrigger className="h-11"><SelectValue /></SelectTrigger>
                                         <SelectContent><SelectItem value="en">English</SelectItem><SelectItem value="es">Spanish</SelectItem><SelectItem value="fr">French</SelectItem><SelectItem value="de">German</SelectItem></SelectContent>
                                     </Select>
                                 </div>
@@ -193,23 +208,23 @@ export default function SettingsPage() {
                             </CardHeader>
                             <CardContent className="space-y-6">
                                 {[
-                                    { label: "Mandatory 2FA for All Users", desc: "Require two-factor authentication for all accounts on the platform", checked: true },
-                                    { label: "Mandatory 2FA for Admins Only", desc: "Only require 2FA for admin-level accounts (if global 2FA is off)", checked: false },
+                                    { label: "Mandatory 2FA for All Users", desc: "Require two-factor authentication for all accounts on the platform", key: "force2faAll" as const },
+                                    { label: "Mandatory 2FA for Admins Only", desc: "Only require 2FA for admin-level accounts (if global 2FA is off)", key: "force2faAdmins" as const },
                                 ].map((item) => (
                                     <div key={item.label} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border border-border/50 bg-muted/20">
                                         <div className="space-y-0.5">
                                             <Label className="text-base">{item.label}</Label>
                                             <p className="text-sm text-muted-foreground">{item.desc}</p>
                                         </div>
-                                        <Switch defaultChecked={item.checked} />
+                                        <Switch checked={settings[item.key] as boolean} onCheckedChange={v => setSettings({ ...settings, [item.key]: v })} />
                                     </div>
                                 ))}
                                 <Separator />
                                 <div className="grid gap-6 sm:grid-cols-2">
-                                    <div className="space-y-2"><Label>Minimum Password Length</Label><Input type="number" defaultValue={12} className="h-11" /></div>
-                                    <div className="space-y-2"><Label>Session Timeout (minutes)</Label><Input type="number" defaultValue={60} className="h-11" /></div>
-                                    <div className="space-y-2"><Label>Login Attempts Before Lock</Label><Input type="number" defaultValue={5} className="h-11" /></div>
-                                    <div className="space-y-2"><Label>Password Reset Expiry (minutes)</Label><Input type="number" defaultValue={30} className="h-11" /></div>
+                                    <div className="space-y-2"><Label>Minimum Password Length</Label><Input type="number" value={settings.minPasswordLength} onChange={e => setSettings({ ...settings, minPasswordLength: parseInt(e.target.value) || 0 })} className="h-11" /></div>
+                                    <div className="space-y-2"><Label>Session Timeout (minutes)</Label><Input type="number" value={settings.sessionTimeoutMin} onChange={e => setSettings({ ...settings, sessionTimeoutMin: parseInt(e.target.value) || 0 })} className="h-11" /></div>
+                                    <div className="space-y-2"><Label>Login Attempts Before Lock</Label><Input type="number" value={settings.loginAttemptsBeforeLock} onChange={e => setSettings({ ...settings, loginAttemptsBeforeLock: parseInt(e.target.value) || 0 })} className="h-11" /></div>
+                                    <div className="space-y-2"><Label>Password Reset Expiry (minutes)</Label><Input type="number" value={settings.passwordResetExpiryMin} onChange={e => setSettings({ ...settings, passwordResetExpiryMin: parseInt(e.target.value) || 0 })} className="h-11" /></div>
                                 </div>
                             </CardContent>
                         </Card>
@@ -229,18 +244,18 @@ export default function SettingsPage() {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 {[
-                                    { label: "New Organization Registration", description: "Email when a new org signs up on the platform." },
-                                    { label: "Storage & Quota Thresholds", description: "Alert when platform-wide API costs reach 80% of budget limit." },
-                                    { label: "Security & Suspensions", description: "Notify super admins when an organization or user is suspended." },
-                                    { label: "Subscription Changes", description: "Alert on plan upgrades, downgrades, or cancellations." },
-                                    { label: "System Health Alerts", description: "Critical system alerts, LLM Gateway downtime, and errors." },
+                                    { label: "New Organization Registration", description: "Email when a new org signs up on the platform.", key: "notifyNewOrg" as const },
+                                    { label: "Storage & Quota Thresholds", description: `Alert when platform-wide API costs reach ${settings.globalQuotaAlertPct}% of budget limit.`, key: "notifyQuotaThresholds" as const },
+                                    { label: "Security & Suspensions", description: "Notify super admins when an organization or user is suspended.", key: "notifySecurity" as const },
+                                    { label: "Subscription Changes", description: "Alert on plan upgrades, downgrades, or cancellations.", key: "notifySubscriptions" as const },
+                                    { label: "System Health Alerts", description: "Critical system alerts, LLM Gateway downtime, and errors.", key: "notifySystemHealth" as const },
                                 ].map((n) => (
                                     <div key={n.label} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 rounded-lg border border-border/40">
                                         <div className="space-y-0.5">
                                             <Label className="text-base">{n.label}</Label>
                                             <p className="text-sm text-muted-foreground">{n.description}</p>
                                         </div>
-                                        <Switch defaultChecked />
+                                        <Switch checked={settings[n.key] as boolean} onCheckedChange={v => setSettings({ ...settings, [n.key]: v })} />
                                     </div>
                                 ))}
                             </CardContent>

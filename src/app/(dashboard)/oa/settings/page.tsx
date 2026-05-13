@@ -616,22 +616,22 @@ export default function OrgSettingsPage() {
                                 <SettingToggle
                                     label="File Uploads"
                                     description="Allow employees to upload documents to AI"
-                                    checked={security.allowFileUploads}
-                                    onChange={(v) => setSecurity((p) => ({ ...p, allowFileUploads: v }))}
+                                    checked={orgPolicy.fileUpload}
+                                    onChange={(v) => setOrgPolicy((p) => ({ ...p, fileUpload: v }))}
                                     icon={FileText}
                                 />
                                 <SettingToggle
                                     label="Speech-to-Text"
                                     description="Enable voice input for AI prompts"
-                                    checked={security.allowSpeechToText}
-                                    onChange={(v) => setSecurity((p) => ({ ...p, allowSpeechToText: v }))}
+                                    checked={orgPolicy.speechToText}
+                                    onChange={(v) => setOrgPolicy((p) => ({ ...p, speechToText: v }))}
                                     icon={Mic}
                                 />
                                 <SettingToggle
                                     label="API Access"
                                     description="Allow programmatic API access to AI services"
-                                    checked={security.allowApiAccess}
-                                    onChange={(v) => setSecurity((p) => ({ ...p, allowApiAccess: v }))}
+                                    checked={orgPolicy.allowApiAccess}
+                                    onChange={(v) => setOrgPolicy((p) => ({ ...p, allowApiAccess: v }))}
                                     icon={Globe}
                                     variant="warning"
                                 />

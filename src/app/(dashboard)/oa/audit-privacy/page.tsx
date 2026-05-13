@@ -29,6 +29,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { getOAQueryLogs, type OAQueryLog } from "@/services/oa.service";
+import api from "@/services/api";
 
 // â”€â”€ PII category colour map â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
@@ -182,6 +183,7 @@ const PRESET_EXAMPLES = [
 type SimStep = "input" | "anonymized" | "responded";
 
 interface SimResult {
+    session_id: string;
     anonymized_text: string;
     entities: { label: string; text: string; replacement: string; category: string }[];
     entity_count: number;
@@ -204,14 +206,9 @@ function PrivacyEngineSim() {
         setAnonymizing(true);
         setStep("input");
         try {
-            const res = await fetch(`${API}/analytics/privacy/simulate`, {
-                method: "POST", credentials: "include",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ text: input }),
-            });
-            if (res.ok) {
-                const data: SimResult = await res.json();
-                setSimResult(data);
+            const res = await api.post<SimResult>("/analytics/privacy/simulate", { text: input });
+            if (res.data) {
+                setSimResult(res.data);
             } else {
                 throw new Error("Backend not OK");
             }
@@ -225,6 +222,7 @@ function PrivacyEngineSim() {
                 .replace(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/g, "[PERSON_1]")
                 .replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN_1]");
             setSimResult({
+                session_id: "mock-session",
                 anonymized_text: mockAnon,
                 entities: [],
                 entity_count: 0,
@@ -240,27 +238,35 @@ function PrivacyEngineSim() {
         if (!simResult) return;
         setSending(true);
         try {
-            // Simulate LLM response (replace with real endpoint once chat is wired for simulator)
+            // Simulate LLM response logic (LLM generating response)
             await new Promise((r) => setTimeout(r, 1400));
+            const rawResponse = `Based on the anonymized query:\n\n"${simResult.anonymized_text}"\n\nHere is a detailed response addressing the request. All references have been safely masked before this response was generated. The system processed ${simResult.entity_count} entity/entities across categories: ${simResult.categories_detected.join(", ")}.`;
 
-            const mockRaw = `Based on the anonymized query:\n\n"${simResult.anonymized_text}"\n\nHere is a detailed response addressing [PERSON_1]'s request. All references such as [EMAIL_1], [CARD_1], and [SSN_1] have been safely masked before this response was generated. The system processed ${simResult.entity_count} entity/entities across categories: ${simResult.categories_detected.join(", ")}.`;
-
-            // De-anonymize: reverse-map tokens back to original values
-            let restored = mockRaw;
-            for (const ent of (simResult.entities ?? [])) {
-                restored = restored.replace(new RegExp(escapeRe(ent.replacement), "g"), ent.text);
+            // Call the real deanonymize endpoint
+            try {
+                const res = await api.post<{ deanonymized_text: string; replacements_made: number }>(
+                    "/analytics/privacy/simulate/deanonymize",
+                    { text: rawResponse, session_id: simResult.session_id }
+                );
+                setRawAIResponse(rawResponse);
+                setDeanonResponse(res.data.deanonymized_text);
+            } catch (backendErr) {
+                // Fallback de-anonymize logic if backend fails
+                let restored = rawResponse;
+                for (const ent of (simResult.entities ?? [])) {
+                    restored = restored.replace(new RegExp(escapeRe(ent.replacement), "g"), ent.text);
+                }
+                if (!simResult.entities.length) {
+                    restored = rawResponse
+                        .replace(/\[EMAIL_1\]/g, input.match(/\b[\w.-]+@[\w.-]+\.\w{2,}\b/)?.[0] ?? "[EMAIL]")
+                        .replace(/\[PERSON_1\]/g, input.match(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/)?.[0] ?? "[PERSON]")
+                        .replace(/\[CARD_1\]/g,   input.match(/\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/)?.[0] ?? "[CARD]")
+                        .replace(/\[SSN_1\]/g,    input.match(/\b\d{3}-\d{2}-\d{4}\b/)?.[0] ?? "[SSN]");
+                }
+                setRawAIResponse(rawResponse);
+                setDeanonResponse(restored);
             }
-            // If no entities (mock mode), do basic restore
-            if (!simResult.entities.length) {
-                restored = mockRaw
-                    .replace(/\[EMAIL_1\]/g, input.match(/\b[\w.-]+@[\w.-]+\.\w{2,}\b/)?.[0] ?? "[EMAIL]")
-                    .replace(/\[PERSON_1\]/g, input.match(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/)?.[0] ?? "[PERSON]")
-                    .replace(/\[CARD_1\]/g,   input.match(/\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/)?.[0] ?? "[CARD]")
-                    .replace(/\[SSN_1\]/g,    input.match(/\b\d{3}-\d{2}-\d{4}\b/)?.[0] ?? "[SSN]");
-            }
-
-            setRawAIResponse(mockRaw);
-            setDeanonResponse(restored);
+            
             setStep("responded");
         } finally {
             setSending(false);

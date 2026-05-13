@@ -89,7 +89,7 @@ export function PlanEditSheet({
                     ) : (
                         <>
                             <div className="grid gap-2">
-                                <Label htmlFor="requests">Monthly Requests</Label>
+                                <Label htmlFor="requests">Monthly Compute Units Limit</Label>
                                 <Input id="requests" name="requests" type="number" value={formData.requests || 0} onChange={handleChange} />
                             </div>
                             <div className="flex items-center space-x-2">

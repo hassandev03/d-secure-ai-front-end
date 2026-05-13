@@ -27,7 +27,7 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-import { getOADepartments, DEPT_COLORS, type OADepartment } from "@/services/oa.service";
+import { getOADepartments, createOADepartment, updateOADepartment, deleteOADepartment, DEPT_COLORS, type OADepartment } from "@/services/oa.service";
 
 /* ------------------------------------------------------------------ */
 /* Types & constants                                                    */
@@ -124,32 +124,23 @@ export default function DepartmentsPage() {
     };
 
     /* ---- handlers ---- */
-    const handleCreate = () => {
+    const handleCreate = async () => {
         if (!newName.trim() || !newHead.trim() || !newEmail.trim()) {
             toast.error("Please fill in all required fields");
             return;
         }
         setCreating(true);
-        setTimeout(() => {
-            const color = DEPT_COLORS[departments.length % DEPT_COLORS.length];
-            setDepartments(prev => [
-                ...prev,
-                {
-                    id: `dept-${Date.now()}`,
-                    name: newName.trim(),
-                    head: newHead.trim(),
-                    headEmail: newEmail.trim(),
-                    employees: 0,
-                    budget: parseInt(newQuota) || 1000,
-                    percentageUsed: 0,
-                    color,
-                },
-            ]);
+        try {
+            const newDept = await createOADepartment(newName.trim(), `${newHead.trim()} - ${newEmail.trim()}`, parseInt(newQuota) || 1000);
+            setDepartments(prev => [...prev, newDept]);
             setNewName(""); setNewHead(""); setNewEmail(""); setNewQuota("1000");
-            setCreating(false);
             setCreateOpen(false);
             toast.success(`Department "${newName.trim()}" created`);
-        }, 600);
+        } catch (err: any) {
+            toast.error(err?.response?.data?.detail || "Failed to create department");
+        } finally {
+            setCreating(false);
+        }
     };
 
     const openEdit = (dept: Department) => {
@@ -160,39 +151,35 @@ export default function DepartmentsPage() {
         setEditQuota(String(dept.budget));
     };
 
-    const handleEdit = () => {
+    const handleEdit = async () => {
         if (!editTarget || !editName.trim() || !editHead.trim()) return;
         setEditSaving(true);
-        setTimeout(() => {
-            setDepartments(prev =>
-                prev.map(d =>
-                    d.id === editTarget.id
-                        ? {
-                            ...d,
-                            name:      editName.trim(),
-                            head:      editHead.trim(),
-                            headEmail: editEmail.trim(),
-                            budget:    parseInt(editQuota) || d.budget,
-                        }
-                        : d
-                )
-            );
+        try {
+            const updated = await updateOADepartment(editTarget.id, editName.trim(), `${editHead.trim()} - ${editEmail.trim()}`, parseInt(editQuota) || editTarget.budget);
+            setDepartments(prev => prev.map(d => d.id === editTarget.id ? updated : d));
             setEditTarget(null);
-            setEditSaving(false);
             toast.success("Department updated");
-        }, 500);
+        } catch (err: any) {
+            toast.error(err?.response?.data?.detail || "Failed to update department");
+        } finally {
+            setEditSaving(false);
+        }
     };
 
-    const handleDelete = () => {
+    const handleDelete = async () => {
         if (!deleteTarget) return;
         setDeleting(true);
-        setTimeout(() => {
+        try {
+            await deleteOADepartment(deleteTarget.id);
             setDepartments(prev => prev.filter(d => d.id !== deleteTarget.id));
             const name = deleteTarget.name;
             setDeleteTarget(null);
-            setDeleting(false);
             toast.success(`Department "${name}" removed`);
-        }, 500);
+        } catch (err: any) {
+            toast.error(err?.response?.data?.detail || "Failed to delete department");
+        } finally {
+            setDeleting(false);
+        }
     };
 
     /* ================================================================ */

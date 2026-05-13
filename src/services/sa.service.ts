@@ -112,7 +112,7 @@ function mapProfessional(b: BackendUser): SAProfessional {
         email: b.email,
         jobTitle: b.job_title ?? '',
         industry: b.industry ?? '',
-        plan: (b.plan_key?.toUpperCase() as any) || 'FREE',
+        plan: (b.plan_key?.toUpperCase() as 'FREE' | 'PRO' | 'ENTERPRISE') || 'FREE',
         status: b.status as ProfessionalStatus,
         creditsUsed: (b.credits_used ?? 0) * PLATFORM_CONFIG.CU_MULTIPLIER,
         joinedAt: b.created_at.split('T')[0],
@@ -159,8 +159,8 @@ function mapAddon(b: BackendAddon): SAAddonPackage {
  * Simple in-memory cache to prevent redundant calls during rapid navigation 
  * or simultaneous component mounts (e.g. Dashboard + Sidebar).
  */
-const _cache = new Map<string, { data: any; timestamp: number }>();
-const _promises = new Map<string, Promise<any>>();
+const _cache = new Map<string, { data: unknown; timestamp: number }>();
+const _promises = new Map<string, Promise<unknown>>();
 const CACHE_TTL = 5000; // 5 seconds
 
 /** Generic wrapper for deduplication and short-term caching */
@@ -259,19 +259,20 @@ export async function getProfessionals(page = 1, limit = 20): Promise<{ professi
     return _fetchCached(cacheKey, async () => {
         try {
             // Fetch individual users (PROFESSIONAL role) — SA sees all
-            const { data } = await api.get<any>(`/users/?limit=${limit}&offset=${offset}&role=PROFESSIONAL`);
+            const { data } = await api.get<Record<string, unknown>>(`/users/?limit=${limit}&offset=${offset}&role=PROFESSIONAL`);
 
             // Robustly handle response shapes: { users: [] }, { items: [] }, or direct array
-            const rawUsers = Array.isArray(data) ? data : (data.users || data.items || []);
-            const total = data.total ?? (Array.isArray(data) ? rawUsers.length : (data.count || rawUsers.length));
+            const rawUsers = Array.isArray(data) ? data : ((data.users as unknown[]) || (data.items as unknown[]) || []);
+            const total = (data.total as number) ?? (Array.isArray(data) ? rawUsers.length : ((data.count as number) || rawUsers.length));
 
             const professionals = rawUsers
-                .filter((u: any) => {
-                    if (!u.role) return true;
-                    const r = u.role.toUpperCase();
+                .filter((u: unknown) => {
+                    const user = u as Record<string, unknown>;
+                    if (!user.role) return true;
+                    const r = String(user.role).toUpperCase();
                     return r === 'PROFESSIONAL' || r === 'INDIVIDUAL';
                 })
-                .map(mapProfessional);
+                .map((u) => mapProfessional(u as unknown as BackendUser));
 
             return { professionals, total };
         } catch (err) {
@@ -306,8 +307,9 @@ export async function updateProfessionalStatus(
 }
 
 export async function resetProfessionalPassword(
-    _id: string
+    id: string
 ): Promise<{ success: boolean }> {
+    console.debug('Reset password for', id);
     // Backend sends email via forgot-password flow — SA triggers it
     return { success: true };
 }
@@ -407,12 +409,14 @@ export async function getAddonPackages(): Promise<SAAddonPackage[]> {
     });
 }
 
-export async function updateIndividualPlan(_plan: SAIndividualPlan): Promise<void> {
+export async function updateIndividualPlan(plan: SAIndividualPlan): Promise<void> {
+    console.debug('updateIndividualPlan', plan);
     // SA plan editing → POST /subscriptions/plans (create) or future PATCH
     // Not implemented on backend yet — no-op
 }
 
-export async function updateEnterprisePlan(_plan: SAEnterprisePlan): Promise<void> {
+export async function updateEnterprisePlan(plan: SAEnterprisePlan): Promise<void> {
+    console.debug('updateEnterprisePlan', plan);
     // Same as above
 }
 
@@ -454,6 +458,79 @@ export async function getRevenueStats(): Promise<SARevenueStats> {
             subscriptionsProfit: 0, addonProfit: 0,
             unusedCreditsProfit: 0, profitMargin: 0,
         };
+    }
+}
+
+export interface SASystemSettings {
+    platformName: string;
+    supportEmail: string;
+    defaultTimezone: string;
+    defaultLanguage: string;
+    retentionDays: number;
+    sessionTimeoutMin: number;
+    minPasswordLength: number;
+    force2faAll: boolean;
+    force2faAdmins: boolean;
+    loginAttemptsBeforeLock: number;
+    passwordResetExpiryMin: number;
+    globalQuotaAlertPct: number;
+    notifyNewOrg: boolean;
+    notifyQuotaThresholds: boolean;
+    notifySecurity: boolean;
+    notifySubscriptions: boolean;
+    notifySystemHealth: boolean;
+}
+
+export async function getSystemSettings(): Promise<SASystemSettings | null> {
+    try {
+        const { data } = await api.get<Record<string, unknown>>('/general/system-settings');
+        return {
+            platformName: data.platform_name as string,
+            supportEmail: data.support_email as string,
+            defaultTimezone: data.default_timezone as string,
+            defaultLanguage: data.default_language as string,
+            retentionDays: data.retention_days as number,
+            sessionTimeoutMin: data.session_timeout_min as number,
+            minPasswordLength: data.min_password_length as number,
+            force2faAll: data.force_2fa_all as boolean,
+            force2faAdmins: data.force_2fa_admins as boolean,
+            loginAttemptsBeforeLock: data.login_attempts_before_lock as number,
+            passwordResetExpiryMin: data.password_reset_expiry_min as number,
+            globalQuotaAlertPct: data.global_quota_alert_pct as number,
+            notifyNewOrg: data.notify_new_org as boolean,
+            notifyQuotaThresholds: data.notify_quota_thresholds as boolean,
+            notifySecurity: data.notify_security as boolean,
+            notifySubscriptions: data.notify_subscriptions as boolean,
+            notifySystemHealth: data.notify_system_health as boolean,
+        };
+    } catch {
+        return null;
+    }
+}
+
+export async function updateSystemSettings(s: Partial<SASystemSettings>): Promise<void> {
+    try {
+        const patch: Record<string, unknown> = {};
+        if (s.platformName !== undefined) patch.platform_name = s.platformName;
+        if (s.supportEmail !== undefined) patch.support_email = s.supportEmail;
+        if (s.defaultTimezone !== undefined) patch.default_timezone = s.defaultTimezone;
+        if (s.defaultLanguage !== undefined) patch.default_language = s.defaultLanguage;
+        if (s.retentionDays !== undefined) patch.retention_days = s.retentionDays;
+        if (s.sessionTimeoutMin !== undefined) patch.session_timeout_min = s.sessionTimeoutMin;
+        if (s.minPasswordLength !== undefined) patch.min_password_length = s.minPasswordLength;
+        if (s.force2faAll !== undefined) patch.force_2fa_all = s.force2faAll;
+        if (s.force2faAdmins !== undefined) patch.force_2fa_admins = s.force2faAdmins;
+        if (s.loginAttemptsBeforeLock !== undefined) patch.login_attempts_before_lock = s.loginAttemptsBeforeLock;
+        if (s.passwordResetExpiryMin !== undefined) patch.password_reset_expiry_min = s.passwordResetExpiryMin;
+        if (s.globalQuotaAlertPct !== undefined) patch.global_quota_alert_pct = s.globalQuotaAlertPct;
+        if (s.notifyNewOrg !== undefined) patch.notify_new_org = s.notifyNewOrg;
+        if (s.notifyQuotaThresholds !== undefined) patch.notify_quota_thresholds = s.notifyQuotaThresholds;
+        if (s.notifySecurity !== undefined) patch.notify_security = s.notifySecurity;
+        if (s.notifySubscriptions !== undefined) patch.notify_subscriptions = s.notifySubscriptions;
+        if (s.notifySystemHealth !== undefined) patch.notify_system_health = s.notifySystemHealth;
+        await api.patch('/general/system-settings', patch);
+    } catch (err) {
+        console.error("Failed to update system settings", err);
     }
 }
 

@@ -278,7 +278,7 @@ export function _fallbackPlans(): SubscriptionPlanDisplay[] {
             creditBudget: SUBSCRIPTION_PLANS.FREE.creditBudget,
             features: [
                 { text: 'Basic anonymization', included: true },
-                { text: '50 requests/month', included: true },
+                { text: '50,000 CU/month', included: true },
                 { text: '3 chat sessions/day', included: true },
                 { text: 'GPT-4o-mini & Gemini Flash only', included: true },
                 { text: 'File uploads', included: false },

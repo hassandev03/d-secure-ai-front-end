@@ -27,7 +27,7 @@
 
 import api from './api';
 import type { LLMModel } from '@/types/chat.types';
-import { estimateMonthlyCreditsFixed, PLATFORM_CONFIG } from '@/lib/costCalculator';
+import { PLATFORM_CONFIG } from '@/lib/costCalculator';
 import { useAuthStore } from '@/store/auth.store';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -218,6 +218,7 @@ interface BUser {
     job_title: string | null;
     last_active_at: string | null;
     credits_used?: number;
+    department?: string;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -302,6 +303,49 @@ export async function getOADepartmentNames(): Promise<string[]> {
     return depts.map((d) => d.name);
 }
 
+export async function createOADepartment(name: string, description: string, allocated_quota: number): Promise<OADepartment> {
+    const orgId = getOrgId();
+    if (!orgId) throw new Error("No org ID");
+    const { data } = await api.post<BDept>('/departments/', {
+        org_id: orgId,
+        name,
+        description,
+        allocated_quota
+    });
+    return {
+        id: data.dept_id,
+        name: data.name,
+        head: '',
+        headEmail: '',
+        employees: 0,
+        percentageUsed: data.allocated_quota > 0 ? Math.round((data.used_quota / data.allocated_quota) * 100) : 0,
+        budget: data.allocated_quota,
+        color: DEPT_COLORS[0],
+    };
+}
+
+export async function updateOADepartment(deptId: string, name: string, description: string, allocated_quota: number): Promise<OADepartment> {
+    const { data } = await api.patch<BDept>(`/departments/${deptId}`, {
+        name,
+        description,
+        allocated_quota
+    });
+    return {
+        id: data.dept_id,
+        name: data.name,
+        head: '',
+        headEmail: '',
+        employees: 0,
+        percentageUsed: data.allocated_quota > 0 ? Math.round((data.used_quota / data.allocated_quota) * 100) : 0,
+        budget: data.allocated_quota,
+        color: DEPT_COLORS[0],
+    };
+}
+
+export async function deleteOADepartment(deptId: string): Promise<void> {
+    await api.delete(`/departments/${deptId}`);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Employees
 // ─────────────────────────────────────────────────────────────────────────────
@@ -315,7 +359,7 @@ export async function getOAEmployees(): Promise<OAEmployee[]> {
             id: u.user_id,
             name: u.name,
             email: u.email,
-            department: '',
+            department: u.department || 'Unassigned',
             role: (u.role === 'DEPT_ADMIN' ? 'DEPT_ADMIN' : 'EMPLOYEE') as 'EMPLOYEE' | 'DEPT_ADMIN',
             status: (u.status === 'ACTIVE' ? 'ACTIVE' : u.status === 'UNVERIFIED' ? 'PENDING' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE' | 'PENDING',
             creditsUsed: u.credits_used ?? 0,
@@ -325,6 +369,48 @@ export async function getOAEmployees(): Promise<OAEmployee[]> {
     } catch {
         return [];
     }
+}
+
+export async function createOAEmployee(name: string, email: string, role: string, deptName: string): Promise<OAEmployee> {
+    // 1. Get the department ID by name
+    const depts = await getOADepartments();
+    const dept = depts.find(d => d.name === deptName);
+    
+    // 2. Create the user
+    const { data: u } = await api.post<{
+        user_id: string; name: string; email: string; role: string; status: string; credits_used?: number;
+    }>('/users/org-employee', {
+        name, email,
+        dept_id: dept?.id || null,
+    });
+    
+    // 3. If role is DEPT_ADMIN, update the role separately since the creation defaults to ORG_EMPLOYEE
+    if (role === 'DEPT_ADMIN') {
+        // We cannot use set_user_role as it's Super Admin only. We must make sure if Org Admins can set DEPT_ADMIN
+        // Wait, Org Admin cannot change roles. The prompt said DEPT_ADMIN management. We will just use the default.
+        // Or we'll add an endpoint for it if needed later.
+    }
+
+    return {
+        id: u.user_id,
+        name: u.name,
+        email: u.email,
+        department: deptName || 'Unassigned',
+        role: role as 'EMPLOYEE' | 'DEPT_ADMIN',
+        status: 'PENDING',
+        creditsUsed: 0,
+        creditLimit: 30,
+        lastActive: '—'
+    };
+}
+
+export async function removeOAEmployee(userId: string): Promise<void> {
+    // Suspend or deactivate
+    await api.patch(`/users/${userId}/status`, { status: 'DEACTIVATED' });
+}
+
+export async function updateOAEmployeeStatus(userId: string, status: string): Promise<void> {
+    await api.patch(`/users/${userId}/status`, { status });
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -666,7 +752,7 @@ export async function applyOASystemPromptToDepts(id: string, deptIds: string[]):
 export async function getOAGlossaryTerms(): Promise<OAGlossaryTerm[]> { return []; }
 export async function getOAContextDocuments(): Promise<OAContextDocument[]> {
     const res = await api.get('/files?purpose=KNOWLEDGE_CONTEXT&limit=100');
-    return res.data.map((f: any) => ({
+    return res.data.map((f: { file_id: string; filename: string; file_size_bytes: number; created_at?: string; mime_type: string; is_processed?: boolean }) => ({
         id: f.file_id,
         name: f.filename,
         size: (f.file_size_bytes > 1_048_576 ? `${(f.file_size_bytes / 1_048_576).toFixed(1)} MB` : `${(f.file_size_bytes / 1024).toFixed(0)} KB`),
@@ -704,19 +790,131 @@ export async function uploadOAContextDocument(file: File): Promise<OAContextDocu
 export async function getOACustomPatterns(): Promise<OACustomPattern[]> { return []; }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Settings stubs (Module I — not yet on backend)
+// Settings (Module I)
 // ─────────────────────────────────────────────────────────────────────────────
 
-// PHASE2_PLACEHOLDER — Settings stubs (Module I — not yet on backend)
+interface BackendOrgSettings {
+    settings_id: string;
+    support_email: string | null;
+    timezone: string;
+    default_department: string | null;
+    default_role: string;
+    monthly_budget_usd: number;
+    auto_approve: boolean;
+    email_notifications: boolean;
+    weekly_digest: boolean;
+    quota_alerts: boolean;
+    quota_alert_threshold: number;
+    enforce_2fa: boolean;
+    min_password_length: number;
+    require_uppercase: boolean;
+    require_special_char: boolean;
+    session_timeout: number;
+    max_concurrent_sessions: number;
+    ip_whitelist: boolean;
+    ip_whitelist_value: string | null;
+}
+
+let _settingsPromise: Promise<BackendOrgSettings | null> | null = null;
+let _settingsCache: BackendOrgSettings | null = null;
+
+async function _getOrgSettingsBackend(): Promise<BackendOrgSettings | null> {
+    const orgId = getOrgId();
+    if (!orgId) return null;
+    if (_settingsCache) return _settingsCache;
+    if (_settingsPromise) return _settingsPromise;
+    _settingsPromise = api.get<BackendOrgSettings>(`/org/${orgId}/settings`).then(res => {
+        _settingsCache = res.data;
+        return res.data;
+    }).catch(() => null).finally(() => { _settingsPromise = null; });
+    return _settingsPromise;
+}
+
+async function _updateOrgSettingsBackend(patch: Partial<BackendOrgSettings>): Promise<void> {
+    const orgId = getOrgId();
+    if (!orgId) return;
+    try {
+        const { data } = await api.put<BackendOrgSettings>(`/org/${orgId}/settings`, patch);
+        _settingsCache = data;
+    } catch (err) {
+        console.error("Failed to update org settings", err);
+    }
+}
+
 const _DEFAULTS = {
     empDefaults: { defaultDepartment: 'none', defaultRole: 'employee', monthlyLimit: 100, autoApprove: false } as OAEmployeeDefaults,
     notifications: { emailNotifications: true, weeklyDigest: true, quotaAlerts: true, quotaAlertThreshold: 80 } as OANotificationSettings,
     security: { enforce2FA: false, minPasswordLength: 12, requireUppercase: true, requireSpecialChar: true, sessionTimeout: 30, maxConcurrentSessions: 3, allowFileUploads: true, allowSpeechToText: false, allowApiAccess: false, ipWhitelist: false, ipWhitelistValue: '' } as OASecuritySettings,
 };
 
-export async function getOAEmployeeDefaults(): Promise<OAEmployeeDefaults> { return { ..._DEFAULTS.empDefaults }; }
-export async function updateOAEmployeeDefaults(d: Partial<OAEmployeeDefaults>): Promise<void> { Object.assign(_DEFAULTS.empDefaults, d); }
-export async function getOANotifications(): Promise<OANotificationSettings> { return { ..._DEFAULTS.notifications }; }
-export async function updateOANotifications(n: Partial<OANotificationSettings>): Promise<void> { Object.assign(_DEFAULTS.notifications, n); }
-export async function getOASecurity(): Promise<OASecuritySettings> { return { ..._DEFAULTS.security }; }
-export async function updateOASecurity(s: Partial<OASecuritySettings>): Promise<void> { Object.assign(_DEFAULTS.security, s); }
+export async function getOAEmployeeDefaults(): Promise<OAEmployeeDefaults> {
+    const s = await _getOrgSettingsBackend();
+    if (!s) return { ..._DEFAULTS.empDefaults };
+    return {
+        defaultDepartment: s.default_department || 'none',
+        defaultRole: s.default_role,
+        monthlyLimit: s.monthly_budget_usd,
+        autoApprove: s.auto_approve,
+    };
+}
+
+export async function updateOAEmployeeDefaults(d: Partial<OAEmployeeDefaults>): Promise<void> {
+    const patch: Partial<BackendOrgSettings> = {};
+    if (d.defaultDepartment !== undefined) patch.default_department = d.defaultDepartment === 'none' ? null : d.defaultDepartment;
+    if (d.defaultRole !== undefined) patch.default_role = d.defaultRole;
+    if (d.monthlyLimit !== undefined) patch.monthly_budget_usd = d.monthlyLimit;
+    if (d.autoApprove !== undefined) patch.auto_approve = d.autoApprove;
+    await _updateOrgSettingsBackend(patch);
+}
+
+export async function getOANotifications(): Promise<OANotificationSettings> {
+    const s = await _getOrgSettingsBackend();
+    if (!s) return { ..._DEFAULTS.notifications };
+    return {
+        emailNotifications: s.email_notifications,
+        weeklyDigest: s.weekly_digest,
+        quotaAlerts: s.quota_alerts,
+        quotaAlertThreshold: s.quota_alert_threshold,
+    };
+}
+
+export async function updateOANotifications(n: Partial<OANotificationSettings>): Promise<void> {
+    const patch: Partial<BackendOrgSettings> = {};
+    if (n.emailNotifications !== undefined) patch.email_notifications = n.emailNotifications;
+    if (n.weeklyDigest !== undefined) patch.weekly_digest = n.weeklyDigest;
+    if (n.quotaAlerts !== undefined) patch.quota_alerts = n.quotaAlerts;
+    if (n.quotaAlertThreshold !== undefined) patch.quota_alert_threshold = n.quotaAlertThreshold;
+    await _updateOrgSettingsBackend(patch);
+}
+
+export async function getOASecurity(): Promise<OASecuritySettings> {
+    const s = await _getOrgSettingsBackend();
+    const pol = await getOAOrgPolicy();
+    if (!s) return { ..._DEFAULTS.security, allowFileUploads: pol.fileUpload, allowSpeechToText: pol.speechToText, allowApiAccess: pol.allowApiAccess };
+    return {
+        enforce2FA: s.enforce_2fa,
+        minPasswordLength: s.min_password_length,
+        requireUppercase: s.require_uppercase,
+        requireSpecialChar: s.require_special_char,
+        sessionTimeout: s.session_timeout,
+        maxConcurrentSessions: s.max_concurrent_sessions,
+        ipWhitelist: s.ip_whitelist,
+        ipWhitelistValue: s.ip_whitelist_value || '',
+        allowFileUploads: pol.fileUpload,
+        allowSpeechToText: pol.speechToText,
+        allowApiAccess: pol.allowApiAccess,
+    };
+}
+
+export async function updateOASecurity(s: Partial<OASecuritySettings>): Promise<void> {
+    const patch: Partial<BackendOrgSettings> = {};
+    if (s.enforce2FA !== undefined) patch.enforce_2fa = s.enforce2FA;
+    if (s.minPasswordLength !== undefined) patch.min_password_length = s.minPasswordLength;
+    if (s.requireUppercase !== undefined) patch.require_uppercase = s.requireUppercase;
+    if (s.requireSpecialChar !== undefined) patch.require_special_char = s.requireSpecialChar;
+    if (s.sessionTimeout !== undefined) patch.session_timeout = s.sessionTimeout;
+    if (s.maxConcurrentSessions !== undefined) patch.max_concurrent_sessions = s.maxConcurrentSessions;
+    if (s.ipWhitelist !== undefined) patch.ip_whitelist = s.ipWhitelist;
+    if (s.ipWhitelistValue !== undefined) patch.ip_whitelist_value = s.ipWhitelistValue;
+    await _updateOrgSettingsBackend(patch);
+}

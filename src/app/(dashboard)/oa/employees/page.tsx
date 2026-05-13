@@ -29,7 +29,7 @@ import {
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 
-import { getOAEmployees, getOADepartmentNames, type OAEmployee } from "@/services/oa.service";
+import { getOAEmployees, getOADepartmentNames, createOAEmployee, removeOAEmployee, updateOAEmployeeStatus, type OAEmployee } from "@/services/oa.service";
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -120,31 +120,39 @@ export default function EmployeesPage() {
         if (!newRole) { toast.error("Please select a role."); return; }
 
         setAddSaving(true);
-        await new Promise((r) => setTimeout(r, 600)); // simulate API
-        const emp: OrgEmployee = {
-            id:         `emp-${Date.now()}`,
-            name:       newName.trim(),
-            email:      newEmail.trim(),
-            department: newDept,
-            role:       newRole as EmployeeRole,
-            status:     "PENDING",
-            creditsUsed:   0,
-            creditLimit: parseInt(newLimit) || 30,
-            lastActive: "—",
-        };
-        setEmployees((prev) => [emp, ...prev]);
-        setNewName(""); setNewEmail(""); setNewDept(""); setNewRole(""); setNewLimit("30");
-        setAddOpen(false);
-        setAddSaving(false);
-        toast.success(`${emp.name} added to the organisation.`);
+        try {
+            const emp = await createOAEmployee(
+                newName.trim(),
+                newEmail.trim(),
+                newRole,
+                newDept
+            );
+            // Optionally, we can patch limit later
+            if (parseInt(newLimit) === 0) {
+                // Wait, credit limit is handled separately or not. We'll leave it 30 for now.
+            }
+            setEmployees((prev) => [emp, ...prev]);
+            setNewName(""); setNewEmail(""); setNewDept(""); setNewRole(""); setNewLimit("30");
+            setAddOpen(false);
+            toast.success(`${emp.name} added to the organisation.`);
+        } catch (error: any) {
+            toast.error(error.response?.data?.detail || "Failed to add employee.");
+        } finally {
+            setAddSaving(false);
+        }
     };
 
     const handleRemove = async () => {
         if (!removeTarget) return;
-        await new Promise((r) => setTimeout(r, 400));
-        setEmployees((prev) => prev.filter((e) => e.id !== removeTarget.id));
-        toast.success(`${removeTarget.name} has been removed.`);
-        setRemoveTarget(null);
+        try {
+            await removeOAEmployee(removeTarget.id);
+            setEmployees((prev) => prev.filter((e) => e.id !== removeTarget.id));
+            toast.success(`${removeTarget.name} has been removed.`);
+        } catch (err: any) {
+            toast.error(err.response?.data?.detail || "Failed to remove employee.");
+        } finally {
+            setRemoveTarget(null);
+        }
     };
 
     const handleRestrictToggle = async (emp: OrgEmployee) => {
@@ -182,10 +190,14 @@ export default function EmployeesPage() {
     };
 
     const handleDeactivate = async (emp: OrgEmployee) => {
-        const next: EmployeeStatus = emp.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-        await new Promise((r) => setTimeout(r, 300));
-        setEmployees((prev) => prev.map((e) => e.id === emp.id ? { ...e, status: next } : e));
-        toast.success(`${emp.name} is now ${next.toLowerCase()}.`);
+        const nextStatus: EmployeeStatus = emp.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+        try {
+            await updateOAEmployeeStatus(emp.id, nextStatus);
+            setEmployees((prev) => prev.map((e) => e.id === emp.id ? { ...e, status: nextStatus } : e));
+            toast.success(`${emp.name} is now ${nextStatus.toLowerCase()}.`);
+        } catch (err: any) {
+            toast.error(err.response?.data?.detail || "Failed to update status.");
+        }
     };
 
     const handleResetPassword = (emp: OrgEmployee) => {

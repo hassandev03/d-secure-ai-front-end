@@ -230,7 +230,7 @@ export function PlanEditModal({
                             ) : (
                                 <>
                                     <div className="grid gap-2">
-                                        <Label htmlFor="requests" className="text-sm font-semibold">Monthly Query Limit</Label>
+                                        <Label htmlFor="requests" className="text-sm font-semibold">Monthly CU Limit</Label>
                                         <Input id="requests" name="requests" type="number" value={formData.requests || 0} onChange={handleChange} className="h-11" />
                                     </div>
                                     <div className="flex items-center space-x-3 p-4 border rounded-lg bg-muted/40 transition-colors hover:bg-muted/60">
