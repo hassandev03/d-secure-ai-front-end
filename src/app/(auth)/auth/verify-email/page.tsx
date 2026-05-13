@@ -46,16 +46,6 @@ function VerifyEmailContent() {
                     const currentUser = useAuthStore.getState().user;
                     if (currentToken && currentUser) {
                         setCredentials({ ...currentUser, emailVerifiedAt: new Date().toISOString() }, currentToken);
-                        
-                        // Automatically redirect to the dashboard or registration step
-                        setTimeout(() => {
-                            router.push("/dashboard");
-                        }, 2000);
-                    } else {
-                        // If there is no active session, send to login
-                        setTimeout(() => {
-                            router.push("/auth/user/login");
-                        }, 2000);
                     }
                 }
             } catch (err) {
@@ -90,9 +80,9 @@ function VerifyEmailContent() {
                     </div>
                     <h2 className="text-xl font-semibold text-foreground">Success!</h2>
                     <p className="text-sm text-muted-foreground">{message}</p>
-                    <p className="text-sm text-muted-foreground">Redirecting you in a moment...</p>
-                    <Button onClick={() => router.push("/dashboard")} className="mt-4 bg-brand-600 hover:bg-brand-700">
-                        Go to Dashboard
+                    <p className="text-sm font-medium text-brand-600 mt-2">You can now close this tab and return to your original screen.</p>
+                    <Button onClick={() => router.push(useAuthStore.getState().user?.isTwoFAEnabled ? "/dashboard" : "/auth/user/login")} className="mt-4 bg-brand-600 hover:bg-brand-700">
+                        Continue to Login
                     </Button>
                 </>
             )}

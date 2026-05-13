@@ -63,10 +63,10 @@ export const MODEL_PRICING: Record<string, { input: number; output: number; disp
 // ─── Subscription plan budgets ────────────────────────────────────────────────
 
 export const PLAN_BUDGETS: Record<string, number> = {
-    FREE:       0.50,
-    PRO:       25.00,
-    MAX:       80.00,
-    ENTERPRISE: 500.00, // per-department budget, total org is higher
+    FREE:        0.50,
+    PRO:        29.00,
+    MAX:        80.00,
+    ENTERPRISE: 299.00, // per-department budget (matches enterprise plan price)
 };
 
 // ─── Core cost calculation functions ─────────────────────────────────────────
@@ -229,7 +229,7 @@ export function estimateMonthlyCredits(profile: MockEmployeeUsageProfile): numbe
         total += cost.totalCost;
     }
 
-    return round(total, 4);
+    return round(total * PLATFORM_CONFIG.CU_MULTIPLIER, 0);
 }
 
 /**
@@ -265,7 +265,7 @@ export function estimateMonthlyCreditsFixed(profile: MockEmployeeUsageProfile): 
         plainCost.totalCost * (1 - fileQueryPct)
       + fileCost.totalCost  * fileQueryPct;
 
-    return round(expectedPerQuery * totalQueries, 4);
+    return round(expectedPerQuery * totalQueries * PLATFORM_CONFIG.CU_MULTIPLIER, 0);
 }
 
 /**
@@ -291,7 +291,7 @@ export function buildDailyCredits(
         const base = isWeekend ? weekendAvg : workdayAvg;
         return {
             day:     DAY_NAMES[d.getDay()],
-            credits: round(base, 4),
+            credits: round(base * PLATFORM_CONFIG.CU_MULTIPLIER, 0),
         };
     });
 }
@@ -312,7 +312,7 @@ export function buildDatedTrend(
         const isWeekend = d.getDay() === 0 || d.getDay() === 6;
         return {
             date:        d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-            creditsUsed: round(isWeekend ? weekendAvg : workdayAvg, 4),
+            creditsUsed: round((isWeekend ? weekendAvg : workdayAvg) * PLATFORM_CONFIG.CU_MULTIPLIER, 0),
         };
     });
 }

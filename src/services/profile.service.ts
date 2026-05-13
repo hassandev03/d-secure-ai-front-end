@@ -17,6 +17,7 @@ export interface ProfileUpdatePayload {
     industry?: string;
     address?: string;
     phone?: string;
+    bio?: string;
     avatarUrl?: string;
 }
 
@@ -25,11 +26,12 @@ export async function updateUserProfile(
     payload: ProfileUpdatePayload
 ): Promise<{ success: boolean; user: Partial<User> }> {
     const { data } = await api.patch('/users/me', {
-        name:      payload.name,
-        job_title: payload.jobTitle,
-        industry:  payload.industry,
-        address:   payload.address,
-        phone:     payload.phone,
+        name:       payload.name,
+        job_title:  payload.jobTitle,
+        industry:   payload.industry,
+        address:    payload.address,
+        phone:      payload.phone,
+        bio:        payload.bio,
         avatar_url: payload.avatarUrl,
     });
     return {
@@ -40,10 +42,12 @@ export async function updateUserProfile(
             industry: data.industry,
             address:  data.address,
             phone:    data.phone,
+            bio:      data.bio,
             avatar:   data.avatar_url,
         },
     };
 }
+
 
 /** POST /api/v1/users/me/change-password */
 export async function changePassword(

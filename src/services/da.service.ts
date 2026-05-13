@@ -21,6 +21,7 @@ import { MODELS } from '@/lib/constants';
 import type { LLMModel } from '@/types/chat.types';
 import {
     estimateMonthlyCreditsFixed,
+    PLATFORM_CONFIG,
 } from '@/lib/costCalculator';
 import { useAuthStore } from '@/store/auth.store';
 
@@ -163,7 +164,7 @@ interface BPolicy {
     override_file_uploads: boolean | null;
     allow_file_uploads?: boolean;
     allow_speech_to_text?: boolean;
-    daily_limit: number | null;
+    daily_budget_usd: number | null;
     synced_with_org?: boolean;
 }
 
@@ -172,7 +173,7 @@ interface BAccess {
     file_upload_allowed: boolean;
     stt_allowed: boolean;
     allowed_models: string[] | null;
-    daily_limit: number;
+    daily_budget_usd: number;
 }
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
@@ -254,7 +255,7 @@ export async function getDeptQuota(): Promise<DeptQuota> {
             : 0;
         return {
             percentageUsed: pct,
-            budget:         data.monthly_budget_usd,
+            budget:         data.monthly_budget_usd * PLATFORM_CONFIG.CU_MULTIPLIER,
             renewsAt:       data.period_ends_at ? data.period_ends_at.split('T')[0] : '',
         };
     } catch {
@@ -274,7 +275,7 @@ export async function getDeptEmployees(): Promise<DeptEmployee[]> {
             roleId:      'role-3',
             roleName:    u.job_title ?? 'Developer',
             status:      (u.status === 'ACTIVE' ? 'ACTIVE' : 'INACTIVE') as 'ACTIVE' | 'INACTIVE',
-            creditsUsed: 0,
+            creditsUsed: (u.credits_used ?? 0) * PLATFORM_CONFIG.CU_MULTIPLIER,
             creditLimit: Math.ceil(ROLE_BUDGETS['role-3']),
             lastActive:  u.last_active_at ? u.last_active_at.split('T')[0] : 'Never',
         }));
@@ -296,7 +297,7 @@ export async function removeDeptEmployee(empId: string): Promise<void> {
 }
 
 export async function updateEmployeeLimit(empId: string, limit: number): Promise<DeptEmployee> {
-    await api.put(`/policies/dept/${getDeptId()}/access/${empId}`, { daily_limit: limit });
+    await api.put(`/policies/dept/${getDeptId()}/access/${empId}`, { daily_budget_usd: limit });
     // Fetch only the updated user — avoids a full GET /users?limit=200 for a single record.
     const { data } = await api.get<BUser>(`/users/${empId}`);
     return {
@@ -352,7 +353,7 @@ export async function getDeptAccessData(): Promise<EmpAccessData[]> {
                 speechToText:  a?.stt_allowed ?? false,
                 allModels:     !a?.allowed_models || a.allowed_models.length === 0,
                 allowedModels: (a?.allowed_models ?? []) as LLMModel[],
-                limit:         a?.daily_limit ?? 30,
+                limit:         a?.daily_budget_usd ?? 30,
             };
         });
     } catch {
@@ -372,7 +373,7 @@ export async function getDeptPolicy(): Promise<DeptPolicy> {
             speechToText:    data.allow_speech_to_text ?? false,
             allModels:       !data.allowed_models || data.allowed_models.length === 0,
             permittedModels: (data.allowed_models ?? []) as LLMModel[],
-            creditLimit:     data.daily_limit ?? 30,
+            creditLimit:     data.daily_budget_usd ?? 30,
         };
     } catch {
         return { fileUpload: true, speechToText: false, allModels: true, permittedModels: [], creditLimit: 30 };
@@ -386,7 +387,7 @@ export async function saveDeptPolicy(policy: DeptPolicy): Promise<void> {
         allowed_models:       policy.allModels ? null : policy.permittedModels,
         override_file_uploads: policy.fileUpload,
         allow_speech_to_text: policy.speechToText,
-        daily_limit:          policy.creditLimit,
+        daily_budget_usd:          policy.creditLimit,
     });
 }
 
@@ -398,7 +399,7 @@ export async function applyPolicyToSelected(policy: DeptPolicy, ids: string[]): 
                 file_upload_allowed: policy.fileUpload,
                 stt_allowed:         policy.speechToText,
                 allowed_models:      policy.allModels ? null : policy.permittedModels,
-                daily_limit:         policy.creditLimit,
+                daily_budget_usd:         policy.creditLimit,
             })
         ));
     }

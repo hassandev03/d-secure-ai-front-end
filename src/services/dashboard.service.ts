@@ -1,6 +1,7 @@
 import api from './api';
 import type { UserStats } from '@/types/analytics.types';
 import { PROVIDER_DISPLAY, MODEL_DISPLAY } from '@/lib/chat.helpers';
+import { PLATFORM_CONFIG } from '@/lib/costCalculator';
 
 /* ══════════════════════════════════════════════════════
    Dashboard-specific types (mirror backend response)
@@ -11,6 +12,7 @@ export interface DashboardStats extends UserStats {
     percentageUsed: number;
     planName: string;
     periodEndsAt: string;
+    computeUnitsUsed: number;
 }
 
 export interface DashboardInitResponse {
@@ -51,6 +53,7 @@ export interface DashboardSummaryResponse {
 export interface DailyActivityPoint {
     date: string;
     requests: number;
+    computeUnits: number;
     entitiesAnonymized: number;
     quotaUtilizedPct: number;
 }
@@ -236,16 +239,15 @@ function transformInitToSummary(data: DashboardInitResponse): DashboardSummaryRe
         totalRequestsThisMonth: totalRequests,
         totalSessions:          data.total_sessions ?? 0,
         entitiesAnonymized,
-        quotaRemaining:         quota?.credits_remaining_usd ?? 0,
-        quotaTotal:             quota?.monthly_budget_usd   ?? 0,
+        quotaRemaining:         (quota?.credits_remaining_usd ?? 0) * PLATFORM_CONFIG.CU_MULTIPLIER,
+        quotaTotal:             (quota?.monthly_budget_usd   ?? 0) * PLATFORM_CONFIG.CU_MULTIPLIER,
         avgEntitiesPerRequest:  totalRequests > 0
             ? Math.round((entitiesAnonymized / totalRequests) * 10) / 10
             : 0,
-        percentageUsed: quota?.percentage_used
-            ? 100 - quota.percentage_used
-            : 0,
+        percentageUsed: quota?.percentage_used ?? 0,
         planName:    quota?.plan_name    ?? 'Free',
         periodEndsAt: quota?.period_ends_at ?? '',
+        computeUnitsUsed: Math.round((quota?.credits_used_usd ?? 0) * PLATFORM_CONFIG.CU_MULTIPLIER),
     };
 
     const models = (rawUsage?.top_models ?? []).map((m, i) => ({
@@ -261,17 +263,21 @@ function transformInitToSummary(data: DashboardInitResponse): DashboardSummaryRe
 
     // Derive last 7 days from the 30-day daily array already returned.
     const limit = quota?.monthly_budget_usd ?? 1;
-    let cumulative = 0;
-    const last7 = (data.daily ?? []).slice(-7);
-    const dailyActivity: DailyActivityPoint[] = last7.map((row) => {
-        cumulative += row.request_count;
+    let cumulativeCost = 0;
+    
+    // We need to calculate cumulative cost since the START of the 30d period (or at least up to the last 7)
+    // to make the percentage used line meaningful on the chart.
+    const allDaily = data.daily ?? [];
+    const dailyActivity: DailyActivityPoint[] = allDaily.map((row) => {
+        cumulativeCost += row.llm_cost_usd;
         return {
             date: new Date(row.stat_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
             requests:           row.request_count,
+            computeUnits:       Math.round(row.llm_cost_usd * PLATFORM_CONFIG.CU_MULTIPLIER),
             entitiesAnonymized: row.entities_detected,
-            quotaUtilizedPct:   Math.round(Math.min((cumulative / limit) * 100, 100)),
+            quotaUtilizedPct:   Math.round(Math.min((cumulativeCost / limit) * 100, 100)),
         };
-    });
+    }).slice(-7);
 
     const recentSessions = (data.recent_sessions ?? []).map(mapSession);
 

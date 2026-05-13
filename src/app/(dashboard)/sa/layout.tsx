@@ -68,10 +68,11 @@ export default function SuperAdminLayout({
                             isFirstLogin:   summary.user.is_first_login,
                             jobTitle:       summary.user.job_title ?? undefined,
                             industry:       summary.user.industry ?? undefined,
-                            country:        summary.user.country ?? undefined,
+                            address:        summary.user.address ?? undefined,
                             phone:          summary.user.phone ?? undefined,
+                            bio:            summary.user.bio ?? undefined,
                             avatar:         summary.user.avatar_url ?? undefined,
-                            isTwoFAEnabled: false,
+                            isTwoFAEnabled: summary.user.is_two_fa_enabled ?? false,
                             createdAt:      new Date().toISOString(), // Mock value, update with actual if available from summary
                         },
                         storedToken

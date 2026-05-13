@@ -139,10 +139,10 @@ export const SUBSCRIPTION_PLANS = {
         name: 'Pro',
         price: 29,
         annualPrice: 290,
-        creditBudget: '$25.00/mo',
+        creditBudget: '$29.00/mo',
         sessionsPerDay: -1, // unlimited
         features: [
-            '$25.00 monthly credit budget',
+            '$29.00 monthly credit budget',
             'Per-word billing — pay for what you use',
             'Full context-aware anonymization',
             'Unlimited sessions',

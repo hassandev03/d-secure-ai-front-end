@@ -25,8 +25,10 @@ interface BackendUserRead {
     industry: string | null;
     address: string | null;
     phone: string | null;
+    bio: string | null;
     avatar_url: string | null;
     is_first_login: boolean;
+    is_two_fa_enabled?: boolean;
     email_verified_at: string | null;
     created_at: string;
     last_active_at: string | null;
@@ -55,9 +57,10 @@ function mapUser(b: BackendUserRead): User {
         industry: b.industry ?? undefined,
         address: b.address ?? undefined,
         phone: b.phone ?? undefined,
+        bio: b.bio ?? undefined,
         avatar: b.avatar_url ?? undefined,
         isFirstLogin: b.is_first_login,
-        isTwoFAEnabled: false,          // backend doesn't expose this in UserRead yet
+        isTwoFAEnabled: b.is_two_fa_enabled ?? false,
         emailVerifiedAt: b.email_verified_at ?? undefined,
         createdAt: b.created_at,
         lastActiveAt: b.last_active_at ?? undefined,
@@ -147,6 +150,14 @@ export async function setup2FA(): Promise<{ secret: string; provisioningUri: str
 }
 
 /**
+ * DELETE /api/v1/auth/2fa/disable
+ */
+export async function disable2FA(): Promise<{ success: boolean }> {
+    await api.delete('/auth/2fa/disable');
+    return { success: true };
+}
+
+/**
  * GET /api/v1/users/me — lightweight fallback for the auth guard.
  *
  * Prefer ``getCurrentUserSummary()`` for layout hydration.  This function
@@ -179,9 +190,10 @@ export async function getCurrentUser(): Promise<User | null> {
             industry:       u.industry ?? undefined,
             address:        u.address ?? undefined,
             phone:          u.phone ?? undefined,
+            bio:            u.bio ?? undefined,
             avatar:         u.avatar_url ?? undefined,
             isFirstLogin:   u.is_first_login,
-            isTwoFAEnabled: false,
+            isTwoFAEnabled: u.is_two_fa_enabled ?? false,
             createdAt:      new Date().toISOString(),
         } as User;
     }
@@ -220,8 +232,10 @@ export interface UserSummary {
         industry?: string | null;
         address?: string | null;
         phone?: string | null;
+        bio?: string | null;
         avatar_url?: string | null;
         is_first_login: boolean;
+        is_two_fa_enabled?: boolean;
         subscriptionTier?: string;
     };
     subscription: {

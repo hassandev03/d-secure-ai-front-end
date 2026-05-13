@@ -19,6 +19,7 @@ import type {
     SAEnterprisePlan, SAIndividualPlan, SAAddonPackage, RegisterOrgPayload,
     OrgStatus, ProfessionalStatus, SARevenueStats,
 } from '@/types/sa.types';
+import { PLATFORM_CONFIG } from '@/lib/costCalculator';
 
 // ── Backend response shapes ──────────────────────────────────────────────────
 
@@ -44,6 +45,7 @@ interface BackendUser {
     status: string;
     job_title: string | null;
     industry: string | null;
+    bio: string | null;
     avatar_url?: string | null;
     created_at: string;
     last_active_at: string | null;
@@ -112,12 +114,12 @@ function mapProfessional(b: BackendUser): SAProfessional {
         industry: b.industry ?? '',
         plan: (b.plan_key?.toUpperCase() as any) || 'FREE',
         status: b.status as ProfessionalStatus,
-        creditsUsed: b.credits_used ?? 0,
+        creditsUsed: (b.credits_used ?? 0) * PLATFORM_CONFIG.CU_MULTIPLIER,
         joinedAt: b.created_at.split('T')[0],
         lastActive: b.last_active_at
             ? new Date(b.last_active_at).toLocaleDateString()
             : 'Never',
-        bio: '',
+        bio: b.bio ?? '',
         avatar: b.avatar_url ?? undefined,
     };
 }
@@ -314,6 +316,12 @@ export async function getDashboardStats(): Promise<SADashboardStats> {
     return _fetchCached('dashboard-stats', async () => {
         try {
             const { data } = await api.get<SADashboardStats>('/analytics/dashboard/platform-summary');
+            
+            // Scale CU figures for the frontend
+            data.totalCreditsUsed *= PLATFORM_CONFIG.CU_MULTIPLIER;
+            data.todayCreditsUsed *= PLATFORM_CONFIG.CU_MULTIPLIER;
+            data.avgCreditsPerUser *= PLATFORM_CONFIG.CU_MULTIPLIER;
+            
             return data;
         } catch (err) {
             console.error('[sa.service] getDashboardStats error:', err);

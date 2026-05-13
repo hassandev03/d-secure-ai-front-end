@@ -26,6 +26,21 @@ export type ChatMessage = Message;
 export type { AnonymizedEntity };
 
 // ---------------------------------------------------------------------------
+// Label → AnonymizedEntity type mapper
+// ---------------------------------------------------------------------------
+
+function _labelToType(label: string): AnonymizedEntity['type'] {
+    const l = label.toLowerCase();
+    if (l.includes('name') || l === 'first name' || l === 'last name') return 'PERSON';
+    if (l.includes('email')) return 'EMAIL';
+    if (l.includes('phone')) return 'PHONE';
+    if (l.includes('location') || l.includes('address') || l.includes('city') ||
+        l.includes('state') || l.includes('country') || l.includes('zip') || l.includes('street')) return 'LOCATION';
+    if (l.includes('org') || l.includes('facility') || l.includes('company')) return 'ORG';
+    return 'CUSTOM';
+}
+
+// ---------------------------------------------------------------------------
 // Backend → Frontend mappers
 // ---------------------------------------------------------------------------
 
@@ -55,10 +70,11 @@ interface BackendMessage {
     anonymized_content: string | null;
     entities_detected: number;
     created_at: string;
-    // message_metadata carries entity_types, vault etc. (present on detailed read)
+    // message_metadata carries per-entity details, vault, entity_types
     message_metadata?: {
         entity_types?: string[];
         vault?: Record<string, string>;
+        entities?: Array<{ original: string; replacement: string; label: string }>;
     } | null;
 }
 
@@ -74,6 +90,8 @@ interface BackendChatResponse {
         entities_count: number;
         entity_types: string[];
     };
+    /** Per-entity anonymization detail — populated by the anonymization engine */
+    entities?: Array<{ original: string; replacement: string; label: string }>;
     provider: string;
     model: string;
     prompt_tokens: number;
@@ -119,19 +137,29 @@ function mapSession(b: BackendSession): ChatSession {
 }
 
 function mapMessage(b: BackendMessage): Message {
-    // Build entity list from metadata vault: {fake_val → orig_val}
-    const entities: AnonymizedEntity[] = [];
-    const vault = b.message_metadata?.vault ?? {};
-    const entityTypes = b.message_metadata?.entity_types ?? [];
+    // Prefer the rich per-entity list stored in message_metadata.entities.
+    // Fall back to vault-based reconstruction for older messages.
+    const metaEntities = b.message_metadata?.entities;
+    let entities: AnonymizedEntity[] = [];
 
-    // Each vault entry is fake_val → original_val
-    Object.entries(vault).forEach(([fake, original], i) => {
-        entities.push({
-            replacement: fake,
-            original,
-            type: (entityTypes[i] as AnonymizedEntity['type']) ?? 'CUSTOM',
+    if (metaEntities && metaEntities.length > 0) {
+        entities = metaEntities.map((e) => ({
+            original:    e.original,
+            replacement: e.replacement,
+            type:        _labelToType(e.label),
+        }));
+    } else {
+        // Legacy fallback: vault {fake_val → original_val}
+        const vault = b.message_metadata?.vault ?? {};
+        const entityTypes = b.message_metadata?.entity_types ?? [];
+        Object.entries(vault).forEach(([fake, original], i) => {
+            entities.push({
+                replacement: fake,
+                original,
+                type: (entityTypes[i] as AnonymizedEntity['type']) ?? 'CUSTOM',
+            });
         });
-    });
+    }
 
     return {
         id: b.message_id,
@@ -354,21 +382,24 @@ export async function sendMessage(
 
     const now = new Date().toISOString();
 
+    // Build entity list from the rich per-entity response (original/replacement/label)
+    const responseEntities = response!.entities ?? [];
+    const userEntities: AnonymizedEntity[] | undefined =
+        responseEntities.length > 0
+            ? responseEntities.map((e) => ({
+                  original:    e.original,
+                  replacement: e.replacement,
+                  type:        _labelToType(e.label),
+              }))
+            : undefined;
+
     const userMessage: Message = {
         id: `user-${Date.now()}`,
         sessionId: response!.session_id,
         role: 'user',
         content,
         anonymizedContent: response!.anonymized_prompt ?? undefined,
-        // Build entities from PII info (entity_types only — vault not returned here)
-        entities:
-            response!.pii.entities_count > 0
-                ? response!.pii.entity_types.map((t) => ({
-                      replacement: `[${t}]`,
-                      original: '(anonymized)',
-                      type: t as AnonymizedEntity['type'],
-                  }))
-                : undefined,
+        entities: userEntities,
         createdAt: now,
     };
 

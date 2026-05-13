@@ -15,6 +15,7 @@
  */
 import api from './api';
 import { SUBSCRIPTION_PLANS } from '@/lib/constants';
+import { PLATFORM_CONFIG } from '@/lib/costCalculator';
 
 /* ══════════════════════════════════════════════════════
    Types
@@ -86,6 +87,13 @@ export async function getSubscriptionSummary(signal?: AbortSignal): Promise<Subs
     try {
         console.log('[SUBSCRIPTION_API_CALL] Fetching subscription summary from GET /subscriptions/summary');
         const { data } = await api.get<SubscriptionSummary>('/subscriptions/summary', { signal });
+        // Scale up the backend USD values to Compute Units (CU) for frontend display
+        if (data.quota) {
+            data.quota.monthly_budget_usd *= PLATFORM_CONFIG.CU_MULTIPLIER;
+            data.quota.credits_used_usd *= PLATFORM_CONFIG.CU_MULTIPLIER;
+            data.quota.credits_remaining_usd *= PLATFORM_CONFIG.CU_MULTIPLIER;
+        }
+
         console.log('[SUBSCRIPTION_API_SUCCESS] Subscription summary retrieved', {
             planKey: data.subscription_plan_key,
             creditsUsed: data.quota.credits_used_usd,

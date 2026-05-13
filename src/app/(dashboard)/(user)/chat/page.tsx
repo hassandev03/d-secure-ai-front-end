@@ -4,8 +4,11 @@ import { useState, useRef, useEffect, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import {
     Send, Plus, Paperclip, Mic, Bot, User, Shield, Sparkles,
-    ChevronDown, Eye, ExternalLink, X, FileText, AlertTriangle, CreditCard, Lock, Loader2
+    ChevronDown, Eye, ExternalLink, X, FileText, AlertTriangle, CreditCard, Lock, Loader2, ArrowRight
 } from "lucide-react";
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription
+} from "@/components/ui/dialog";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -70,7 +73,7 @@ function ChatInterface() {
     const [model, setModel] = useState<LLMModel>(DEFAULT_MODEL);
     const [isLoading, setIsLoading] = useState(false);
     const [isLoadingSession, setIsLoadingSession] = useState(false);
-    const [expandedEntities, setExpandedEntities] = useState<string | null>(null);
+    const [dialogMessage, setDialogMessage] = useState<Message | null>(null);
     const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
 
     // Error banner state — cleared on each new send attempt
@@ -200,40 +203,69 @@ function ChatInterface() {
         setAttachedFiles(prev => prev.filter((_, i) => i !== index));
     };
 
-    const toggleEntities = (id: string) =>
-        setExpandedEntities((prev) => (prev === id ? null : id));
+    const toggleEntities = (msg: Message) => setDialogMessage(msg);
 
     const selectedModel = MODELS.find((m) => m.id === model);
 
-    /* ── Entity badge row component ─── */
-    const EntityBadges = ({
-        entities,
-        variant,
-    }: {
-        entities: AnonymizedEntity[];
-        variant: "light" | "dark";
-    }) => (
-        <div className="flex flex-wrap gap-1.5 mt-2">
-            {entities.map((e, i) => (
-                <span
-                    key={i}
-                    className={cn(
-                        "inline-flex items-center gap-1 rounded-md border px-1.5 py-0.5 text-[10px] font-medium",
-                        variant === "dark"
-                            ? "border-white/20 bg-white/10 text-white/90"
-                            : entityColors[e.type]
-                    )}
-                >
-                    <span className="font-mono">{e.replacement}</span>
-                    <span className="opacity-50">←</span>
-                    <span>{e.original}</span>
-                </span>
-            ))}
-        </div>
+
+
+    /* ── Anonymization dialog ──────────────────────────────────────────── */
+    const AnonymizationDialog = () => (
+        <Dialog open={!!dialogMessage} onOpenChange={(open) => !open && setDialogMessage(null)}>
+            <DialogContent className="max-w-lg max-h-[80vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2">
+                        <Shield className="h-4 w-4 text-brand-600" />
+                        Anonymization Details
+                    </DialogTitle>
+                    <DialogDescription>
+                        {dialogMessage?.entities?.length ?? 0} entit{(dialogMessage?.entities?.length ?? 0) === 1 ? 'y was' : 'ies were'} detected and replaced before sending to the AI.
+                    </DialogDescription>
+                </DialogHeader>
+
+                {/* Entity table */}
+                {dialogMessage?.entities && dialogMessage.entities.length > 0 && (
+                    <div className="mt-2 rounded-lg border border-border overflow-hidden">
+                        <div className="grid grid-cols-[1fr_auto_1fr] bg-muted px-3 py-2 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                            <span>Original</span>
+                            <span className="text-center">Type</span>
+                            <span className="text-right">Replaced With</span>
+                        </div>
+                        {dialogMessage.entities.map((e, i) => (
+                            <div
+                                key={i}
+                                className={cn(
+                                    "grid grid-cols-[1fr_auto_1fr] items-center gap-2 px-3 py-2 text-xs",
+                                    i % 2 === 0 ? "bg-background" : "bg-muted/40"
+                                )}
+                            >
+                                <span className="font-medium text-foreground truncate" title={e.original}>{e.original}</span>
+                                <span className={cn(
+                                    "rounded px-1.5 py-0.5 text-[10px] font-semibold whitespace-nowrap",
+                                    entityColors[e.type] ?? entityColors.CUSTOM
+                                )}>{e.type}</span>
+                                <span className="text-right font-mono text-muted-foreground truncate" title={e.replacement}>{e.replacement}</span>
+                            </div>
+                        ))}
+                    </div>
+                )}
+
+                {/* Anonymized prompt preview */}
+                {dialogMessage?.anonymizedContent && (
+                    <div className="mt-4">
+                        <p className="mb-1.5 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">Anonymized Prompt Sent to AI</p>
+                        <div className="rounded-lg border border-border bg-muted/50 p-3 text-[11px] font-mono leading-relaxed text-foreground/80 whitespace-pre-wrap">
+                            {dialogMessage.anonymizedContent}
+                        </div>
+                    </div>
+                )}
+            </DialogContent>
+        </Dialog>
     );
 
     return (
         <div className="mx-auto flex h-[calc(100vh-7rem)] max-w-4xl flex-col">
+            <AnonymizationDialog />
             {/* ─── Header ─── */}
             <div className="flex items-center justify-between border-b border-border pb-4 mb-4 shrink-0">
                 <div className="flex items-center gap-3">
@@ -342,42 +374,19 @@ function ChatInterface() {
                                 )}
                                 <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
 
-                                {/* ─── Anonymization entity viewer (universal) ─── */}
+                                {/* ─── Anonymization entity viewer (opens dialog) ─── */}
                                 {msg.entities && msg.entities.length > 0 && (
                                     <div className={cn("mt-2 border-t pt-2", msg.role === 'user' ? 'border-white/20' : 'border-border')}>
                                         <button
-                                            onClick={() => toggleEntities(msg.id)}
+                                            onClick={() => toggleEntities(msg)}
                                             className={cn("flex items-center gap-1.5 text-[11px] font-medium transition-colors",
                                                 msg.role === 'user' ? "text-white/70 hover:text-white" : "text-muted-foreground hover:text-foreground"
                                             )}
                                         >
                                             <Eye className="h-3 w-3" />
-                                            {expandedEntities === msg.id ? "Hide" : "View"}{" "}
-                                            {msg.entities.length} anonymized {msg.entities.length === 1 ? "entity" : "entities"}
-                                            <ChevronDown className={cn(
-                                                "h-3 w-3 transition-transform",
-                                                expandedEntities === msg.id && "rotate-180"
-                                            )} />
+                                            View {msg.entities.length} anonymized {msg.entities.length === 1 ? "entity" : "entities"}
+                                            <ArrowRight className="h-3 w-3" />
                                         </button>
-
-                                        {expandedEntities === msg.id && (
-                                            <>
-                                                <EntityBadges
-                                                    entities={msg.entities}
-                                                    variant={msg.role === 'user' ? "dark" : "light"}
-                                                />
-                                                {msg.anonymizedContent && (
-                                                    <div className={cn("mt-2 rounded-lg p-2.5 text-[11px] font-mono leading-relaxed",
-                                                        msg.role === 'user' ? "bg-black/20 text-white/80" : "bg-muted/50 border border-border text-foreground/80"
-                                                    )}>
-                                                        <p className={cn("mb-1 font-sans text-[10px]", msg.role === 'user' ? "text-white/50" : "text-muted-foreground")}>
-                                                            Anonymized prompt sent to AI:
-                                                        </p>
-                                                        {msg.anonymizedContent}
-                                                    </div>
-                                                )}
-                                            </>
-                                        )}
                                     </div>
                                 )}
 

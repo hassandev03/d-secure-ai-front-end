@@ -59,10 +59,11 @@ export default function UserLayout({
                             isFirstLogin:  data.user.is_first_login,
                             jobTitle:      data.user.job_title ?? undefined,
                             industry:      data.user.industry ?? undefined,
-                            country:       data.user.country ?? undefined,
+                            address:       data.user.address ?? undefined,
                             phone:         data.user.phone ?? undefined,
+                            bio:           data.user.bio ?? undefined,
                             avatar:        data.user.avatar_url ?? undefined,
-                            isTwoFAEnabled: false,
+                            isTwoFAEnabled: data.user.is_two_fa_enabled ?? false,
                             createdAt:     new Date().toISOString(),
                         },
                         storedToken

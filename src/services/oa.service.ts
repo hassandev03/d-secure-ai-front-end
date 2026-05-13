@@ -27,7 +27,7 @@
 
 import api from './api';
 import type { LLMModel } from '@/types/chat.types';
-import { estimateMonthlyCreditsFixed } from '@/lib/costCalculator';
+import { estimateMonthlyCreditsFixed, PLATFORM_CONFIG } from '@/lib/costCalculator';
 import { useAuthStore } from '@/store/auth.store';
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -338,8 +338,8 @@ interface BOrgPolicy {
     allow_file_uploads: boolean;
     allow_speech_to_text: boolean;
     max_file_size_mb: number;
-    default_daily_limit: number;
-    max_daily_limit: number;
+    default_daily_budget_usd: number;
+    max_daily_budget_usd: number;
     allow_api_access: boolean;
 }
 
@@ -351,8 +351,8 @@ export async function getOAOrgPolicy(): Promise<OAOrgPolicy> {
             speechToText: data.allow_speech_to_text,
             allModels: !data.allowed_models || data.allowed_models.length === 0,
             permittedModels: (data.allowed_models ?? []) as LLMModel[],
-            defaultCreditLimit: data.default_daily_limit,
-            maxCreditLimit: data.max_daily_limit,
+            defaultCreditLimit: data.default_daily_budget_usd,
+            maxCreditLimit: data.max_daily_budget_usd,
             allowApiAccess: data.allow_api_access,
         };
     } catch {
@@ -365,8 +365,8 @@ export async function updateOAOrgPolicy(pol: Partial<OAOrgPolicy>): Promise<void
         allow_file_uploads: pol.fileUpload,
         allow_speech_to_text: pol.speechToText,
         allowed_models: pol.allModels ? null : pol.permittedModels,
-        default_daily_limit: pol.defaultCreditLimit,
-        max_daily_limit: pol.maxCreditLimit,
+        default_daily_budget_usd: pol.defaultCreditLimit,
+        max_daily_budget_usd: pol.maxCreditLimit,
         allow_api_access: pol.allowApiAccess,
     });
 }
@@ -385,7 +385,7 @@ export async function getOADeptPolicies(existingDepts?: OADepartment[]): Promise
                 allow_file_uploads?: boolean;
                 override_file_uploads?: boolean | null;
                 synced_with_org?: boolean;
-                daily_limit?: number | null;
+                daily_budget_usd?: number | null;
             }>(`/policies/dept/${d.id}`)
         )
     );
@@ -402,7 +402,7 @@ export async function getOADeptPolicies(existingDepts?: OADepartment[]): Promise
             speechToText: false,
             allModels: !pol?.allowed_models || pol.allowed_models.length === 0,
             permittedModels: (pol?.allowed_models ?? []) as LLMModel[],
-            creditLimit: pol?.daily_limit ?? 50,
+            creditLimit: pol?.daily_budget_usd ?? 50,
             synced: pol?.synced_with_org ?? false,
         };
     });
@@ -415,7 +415,7 @@ export async function updateOADeptPolicy(
     await api.patch(`/policies/dept/${id}`, {
         allowed_models: pol.allModels ? null : pol.permittedModels,
         override_file_uploads: pol.fileUpload,
-        daily_limit: pol.creditLimit,
+        daily_budget_usd: pol.creditLimit,
     });
 }
 
@@ -480,6 +480,20 @@ export async function getOrgDashboardStats(): Promise<OrgDashboardStatsResult> {
             stats: OrgDashboardStats;
             departments: OADepartment[];
         }>(`/analytics/org/${orgId}/dashboard`);
+
+        // Scale CU figures for the frontend
+        if (data.stats) {
+            data.stats.monthlyCredits *= PLATFORM_CONFIG.CU_MULTIPLIER;
+            data.stats.monthlyBudget *= PLATFORM_CONFIG.CU_MULTIPLIER;
+            data.stats.unallocatedBudget *= PLATFORM_CONFIG.CU_MULTIPLIER;
+            data.stats.avgCreditsPerEmployee *= PLATFORM_CONFIG.CU_MULTIPLIER;
+        }
+
+        if (data.departments) {
+            data.departments.forEach((dept) => {
+                dept.budget *= PLATFORM_CONFIG.CU_MULTIPLIER;
+            });
+        }
 
         return data;
     } catch (err) {

@@ -52,7 +52,7 @@ export default function ProfessionalRegisterPage() {
     // Step 2 fields
     const [jobTitle, setJobTitle] = useState("");
     const [industry, setIndustry] = useState("");
-    const [country, setCountry] = useState("");
+    const [address, setAddress] = useState("");
 
     const getPasswordStrength = (pwd: string) => {
         let score = 0;
@@ -69,7 +69,7 @@ export default function ProfessionalRegisterPage() {
     const handleRegister = async () => {
         setIsLoading(true);
         try {
-            const result = await register({ name, email, password, jobTitle, industry, country });
+            const result = await register({ name, email, password, jobTitle, industry, address });
             setUser(result.user, result.token);
             toast.success("Account created! Please verify your email.");
             setStep(3);
@@ -165,8 +165,8 @@ export default function ProfessionalRegisterPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label htmlFor="country">Country</Label>
-                            <Input id="country" placeholder="United States" value={country} onChange={(e) => setCountry(e.target.value)} />
+                            <Label htmlFor="address">Address</Label>
+                            <Input id="address" placeholder="123 Main St, City, Country" value={address} onChange={(e) => setAddress(e.target.value)} />
                         </div>
                         <div className="flex gap-3">
                             <Button variant="outline" onClick={() => setStep(1)} className="flex-1"><ArrowLeft className="mr-2 h-4 w-4" /> Back</Button>

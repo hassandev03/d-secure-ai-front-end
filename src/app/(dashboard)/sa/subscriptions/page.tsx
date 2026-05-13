@@ -327,7 +327,7 @@ export default function SubscriptionsPage() {
                                 <CardContent className="flex-1 px-6">
                                     <div className="rounded-lg border border-border bg-muted/30 p-4 space-y-3 mb-2 flex items-center justify-between">
                                         <span className="text-muted-foreground font-medium text-sm">Credits Included</span>
-                                        <span className="font-bold text-lg text-brand-600">+{addon.credits.toLocaleString()}</span>
+                                        <span className="font-bold text-lg text-brand-600">+{((addon.credits || addon.credit_amount) || 0).toLocaleString()}</span>
                                     </div>
                                 </CardContent>
 

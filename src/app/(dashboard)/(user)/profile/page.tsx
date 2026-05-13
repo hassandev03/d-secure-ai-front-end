@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useRef } from "react";
-import { Save, Loader2, Camera, ShieldCheck, KeyRound, AlertCircle, Briefcase, MapPin, Phone } from "lucide-react";
+import { useState, useRef, useEffect } from "react";
+import { Save, Loader2, Camera, ShieldCheck, KeyRound, AlertCircle, Briefcase, MapPin, Phone, Shield } from "lucide-react";
+import { QRCodeSVG } from "qrcode.react";
 import { toast } from "sonner";
 import PageHeader from "@/components/layout/PageHeader";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -14,9 +15,11 @@ import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
+import OTPInput from "@/components/auth/OTPInput";
 import { INDUSTRIES } from "@/lib/constants";
 import { useAuthStore } from "@/store/auth.store";
 import { updateUserProfile, changePassword } from "@/services/profile.service";
+import { setup2FA, verify2FA, disable2FA } from "@/services/auth.service";
 
 function validateEmail(email: string): string | null {
     if (!email.trim()) return "Email is required.";
@@ -33,10 +36,9 @@ function validatePhone(phone: string): string | null {
     if (!/^\+?[\d\s\-()]{7,20}$/.test(phone)) return "Enter a valid phone number.";
     return null;
 }
-function validateCountry(country: string): string | null {
-    if (!country.trim()) return "Country is required.";
-    if (country.trim().length < 2) return "Country must be at least 2 characters.";
-    if (!/^[A-Za-z\s\-,.]+$/.test(country)) return "Enter a valid country name.";
+function validateAddress(address: string): string | null {
+    if (!address.trim()) return "Address is required.";
+    if (address.trim().length < 5) return "Address must be at least 5 characters.";
     return null;
 }
 function validateJobTitle(title: string): string | null {
@@ -63,6 +65,39 @@ function FieldError({ error }: { error: string | null }) {
     );
 }
 
+const TwoFASetupFlow = ({ onClose }: { onClose: () => void }) => {
+    const { user, updateUser } = useAuthStore();
+    const [qrUri, setQrUri] = useState("");
+    const [isVerifying, setIsVerifying] = useState(false);
+
+    useEffect(() => {
+        setup2FA().then(data => setQrUri(data.provisioningUri)).catch(() => toast.error("Failed to initialize 2FA setup"));
+    }, []);
+
+    return (
+        <div className="py-4 space-y-4 text-center">
+            <div className="mx-auto flex h-48 w-48 items-center justify-center rounded-2xl border-2 border-dashed border-border bg-muted/50 overflow-hidden bg-white">
+                {qrUri ? <QRCodeSVG value={qrUri} size={160} /> : <Loader2 className="h-8 w-8 text-muted-foreground animate-spin" />}
+            </div>
+            <p className="text-sm text-muted-foreground">Enter the 6-digit code to confirm setup:</p>
+            <OTPInput onComplete={async (code) => {
+                setIsVerifying(true);
+                try {
+                    await verify2FA({ code });
+                    toast.success("2FA verified and enabled!");
+                    updateUser({ ...user!, isTwoFAEnabled: true });
+                    onClose();
+                } catch {
+                    toast.error("Invalid verification code. Please try again.");
+                } finally {
+                    setIsVerifying(false);
+                }
+            }} disabled={isVerifying} />
+            {isVerifying && <p className="text-xs text-center text-muted-foreground flex items-center justify-center gap-2"><Loader2 className="h-3 w-3 animate-spin"/> Verifying...</p>}
+        </div>
+    );
+};
+
 const PLAN_BADGE: Record<string, string> = {
     FREE:         "bg-muted text-muted-foreground",
     PRO:          "bg-brand-100 text-brand-700",
@@ -81,10 +116,23 @@ export default function ProfilePage() {
     const [fullName, setFullName] = useState(user?.name || "");
     const [email,     setEmail]     = useState(user?.email || "");
     const [phone,     setPhone]     = useState(user?.phone || "");
-    const [country,   setCountry]   = useState(user?.country || "");
+    const [address,   setAddress]   = useState(user?.address || "");
     const [jobTitle,  setJobTitle]  = useState(user?.jobTitle || "");
     const [industry,  setIndustry]  = useState(user?.industry || "");
-    const [bio,       setBio]       = useState("");
+    const [bio,       setBio]       = useState(user?.bio || "");
+
+    useEffect(() => {
+        if (user) {
+            setFullName(user.name || "");
+            setEmail(user.email || "");
+            setPhone(user.phone || "");
+            setAddress(user.address || "");
+            setJobTitle(user.jobTitle || "");
+            setIndustry(user.industry || "");
+            setBio(user.bio || "");
+            setAvatarUrl(user.avatar || null);
+        }
+    }, [user]);
 
     const [errors, setErrors] = useState<Record<string, string | null>>({});
 
@@ -123,7 +171,7 @@ export default function ProfilePage() {
             fullName: validateName(fullName, "Full Name"),
             email:     validateEmail(email),
             phone:     validatePhone(phone),
-            country:   validateCountry(country),
+            address:   validateAddress(address),
             jobTitle:  validateJobTitle(jobTitle),
         };
         setErrors(newErrors);
@@ -133,7 +181,7 @@ export default function ProfilePage() {
         }
         setSaving(true);
         try {
-            const result = await updateUserProfile({ name: fullName.trim(), phone, country, jobTitle, industry });
+            const result = await updateUserProfile({ name: fullName.trim(), phone, address, jobTitle, industry, bio });
             if (result.success && result.user) updateUser(result.user);
             toast.success("Profile saved successfully.");
         } catch {
@@ -244,12 +292,12 @@ export default function ProfilePage() {
                         <FieldError error={errors.phone ?? null} />
                     </div>
                     <div className="space-y-2">
-                        <Label>Country <span className="text-danger">*</span></Label>
+                        <Label>Address <span className="text-danger">*</span></Label>
                         <div className="relative">
                             <MapPin className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <Input value={country} onChange={(e) => { setCountry(e.target.value); setErrors((p) => ({ ...p, country: null })); }} className={`pl-9 ${errors.country ? "border-danger" : ""}`} />
+                            <Input value={address} onChange={(e) => { setAddress(e.target.value); setErrors((p) => ({ ...p, address: null })); }} placeholder="123 Main St, City, Country" className={`pl-9 ${errors.address ? "border-danger" : ""}`} />
                         </div>
-                        <FieldError error={errors.country ?? null} />
+                        <FieldError error={errors.address ?? null} />
                     </div>
                 </CardContent>
             </Card>
@@ -331,28 +379,49 @@ export default function ProfilePage() {
 
                     <div className="flex items-center justify-between">
                         <div>
-                            <Label className="flex items-center gap-2">Two-Factor Authentication <Badge variant="outline" className="bg-success/10 text-success text-[10px] h-5">Enabled</Badge></Label>
-                            <p className="text-xs text-muted-foreground mt-0.5">Currently enabled via authenticator app</p>
+                            <Label className="flex items-center gap-2">Two-Factor Authentication <Badge variant="outline" className={user?.isTwoFAEnabled ? "bg-success/10 text-success text-[10px] h-5" : "bg-muted text-muted-foreground text-[10px] h-5"}>{user?.isTwoFAEnabled ? "Enabled" : "Disabled"}</Badge></Label>
+                            <p className="text-xs text-muted-foreground mt-0.5">Currently {user?.isTwoFAEnabled ? "enabled via authenticator app" : "disabled. Enable it to secure your account."}</p>
                         </div>
                         <Dialog open={twoFAOpen} onOpenChange={setTwoFAOpen}>
-                            <DialogTrigger asChild><Button variant="outline" size="sm">Manage 2FA</Button></DialogTrigger>
+                            <DialogTrigger asChild><Button variant="outline" size="sm">{user?.isTwoFAEnabled ? "Manage 2FA" : "Enable 2FA"}</Button></DialogTrigger>
                             <DialogContent className="sm:max-w-[425px]">
-                                <DialogHeader>
-                                    <DialogTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-success" /> Manage 2FA</DialogTitle>
-                                    <DialogDescription>Your account is currently protected by Two-Factor Authentication.</DialogDescription>
-                                </DialogHeader>
-                                <div className="py-4 space-y-4">
-                                    <div className="rounded-lg border border-border p-4 bg-muted/30">
-                                        <p className="text-sm font-medium">Authenticator App</p>
-                                        <p className="text-xs text-muted-foreground mt-1 mb-3">You are using Google Authenticator or a similar TOTP app to generate codes.</p>
-                                        <Button variant="destructive" size="sm" onClick={() => { setTwoFAOpen(false); toast.info("2FA Disabled (Simulated)."); }}>Disable 2FA</Button>
-                                    </div>
-                                    <div className="rounded-lg border border-border p-4 bg-muted/30">
-                                        <p className="text-sm font-medium">Backup Codes</p>
-                                        <p className="text-xs text-muted-foreground mt-1 mb-3">Generate new backup codes if you lose access to your device.</p>
-                                        <Button variant="outline" size="sm" onClick={() => toast.success("New backup codes generated.")}>Regenerate Codes</Button>
-                                    </div>
-                                </div>
+                                {user?.isTwoFAEnabled ? (
+                                    <>
+                                        <DialogHeader>
+                                            <DialogTitle className="flex items-center gap-2"><ShieldCheck className="h-5 w-5 text-success" /> Manage 2FA</DialogTitle>
+                                            <DialogDescription>Your account is currently protected by Two-Factor Authentication.</DialogDescription>
+                                        </DialogHeader>
+                                        <div className="py-4 space-y-4">
+                                            <div className="rounded-lg border border-border p-4 bg-muted/30">
+                                                <p className="text-sm font-medium">Authenticator App</p>
+                                                <p className="text-xs text-muted-foreground mt-1 mb-3">You are using Google Authenticator or a similar TOTP app to generate codes.</p>
+                                                <Button variant="destructive" size="sm" onClick={async () => { 
+                                                    try {
+                                                        await disable2FA();
+                                                        updateUser({ ...user!, isTwoFAEnabled: false });
+                                                        setTwoFAOpen(false); 
+                                                        toast.success("2FA Disabled successfully."); 
+                                                    } catch (err) {
+                                                        toast.error("Failed to disable 2FA.");
+                                                    }
+                                                }}>Disable 2FA</Button>
+                                            </div>
+                                            <div className="rounded-lg border border-border p-4 bg-muted/30">
+                                                <p className="text-sm font-medium">Backup Codes</p>
+                                                <p className="text-xs text-muted-foreground mt-1 mb-3">Used if you lose access to your authenticator app.</p>
+                                                <Button variant="outline" size="sm" onClick={() => toast.success("New backup codes generated.")}>Regenerate Codes</Button>
+                                            </div>
+                                        </div>
+                                    </>
+                                ) : (
+                                    <>
+                                        <DialogHeader>
+                                            <DialogTitle className="flex items-center gap-2"><Shield className="h-5 w-5 text-muted-foreground" /> Enable 2FA</DialogTitle>
+                                            <DialogDescription>Scan the QR code with your authenticator app and enter the 6-digit code.</DialogDescription>
+                                        </DialogHeader>
+                                        <TwoFASetupFlow onClose={() => setTwoFAOpen(false)} />
+                                    </>
+                                )}
                             </DialogContent>
                         </Dialog>
                     </div>

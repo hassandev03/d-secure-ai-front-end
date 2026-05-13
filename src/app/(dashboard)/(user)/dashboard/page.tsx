@@ -53,6 +53,7 @@ export default function UserDashboard() {
                     percentageUsed: 0,
                     planName: "Free",
                     periodEndsAt: new Date(new Date().setMonth(new Date().getMonth() + 1)).toISOString(),
+                    computeUnitsUsed: 0,
                 });
             }
             setIsLoading(false);
@@ -90,7 +91,7 @@ export default function UserDashboard() {
 
             <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <StatCard title="Chat Sessions" value={stats.totalSessions} icon={MessageSquare} />
-                <StatCard title="AI Requests" value={stats.totalRequestsThisMonth} icon={Activity} iconColor="text-brand-600 bg-brand-100" />
+                <StatCard title="Compute Units" value={stats.computeUnitsUsed.toLocaleString()} icon={Activity} iconColor="text-brand-600 bg-brand-100" />
                 <StatCard title="Entities Anonymized" value={stats.entitiesAnonymized} icon={Shield} iconColor="text-success bg-success/10" />
                 <StatCard title="Avg. Entities/Request" value={stats.avgEntitiesPerRequest} icon={BarChart3} iconColor="text-purple-600 bg-purple-100" />
             </div>
@@ -99,7 +100,7 @@ export default function UserDashboard() {
                 {/* ── Left: Main Activity Chart (2/3 width) ── */}
                 <Card className="lg:col-span-2 flex flex-col">
                     <CardHeader>
-                        <CardTitle className="text-base font-semibold">Daily Request Activity</CardTitle>
+                        <CardTitle className="text-base font-semibold">Daily Compute Unit Activity</CardTitle>
                     </CardHeader>
                     <CardContent className="flex-1 min-h-[350px] w-full pb-4">
                         <ResponsiveContainer width="100%" height="100%">
@@ -112,7 +113,7 @@ export default function UserDashboard() {
                                     contentStyle={{ borderRadius: '8px', border: '1px solid #e2e8f0', boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1)' }}
                                 />
                                 <Legend wrapperStyle={{ paddingTop: '20px', fontSize: '12px' }} />
-                                <Bar dataKey="requests" name="AI Requests" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={24} />
+                                <Bar dataKey="computeUnits" name="Compute Units" fill="#3b82f6" radius={[4, 4, 0, 0]} barSize={24} />
                                 <Bar dataKey="entitiesAnonymized" name="Entities Anonymized" fill="#10b981" radius={[4, 4, 0, 0]} barSize={24} />
                                 <Line type="monotone" dataKey="quotaUtilizedPct" name="Quota Used (%)" stroke="#f59e0b" strokeWidth={3} dot={{ r: 4, fill: "#f59e0b", strokeWidth: 2, stroke: "#fff" }} />
                             </ComposedChart>
@@ -141,8 +142,8 @@ export default function UserDashboard() {
                                     <Badge variant="outline" className="text-success border-success/20 bg-success/5 uppercase text-[10px]">{stats.planName}</Badge>
                                 </div>
                                 <div className="flex items-center justify-between text-sm">
-                                    <span className="text-muted-foreground">Requests Used</span>
-                                    <span className="font-medium">{stats.totalRequestsThisMonth} / {stats.quotaTotal}</span>
+                                    <span className="text-muted-foreground">Compute Units</span>
+                                    <span className="font-medium">{stats.computeUnitsUsed.toLocaleString()} / {stats.quotaTotal.toLocaleString()}</span>
                                 </div>
                                 <div className="pt-2">
                                     {!isOrgUser && (
