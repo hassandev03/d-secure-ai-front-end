@@ -29,6 +29,7 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogC
 import { Badge } from "@/components/ui/badge";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import SuspendDialog from "@/components/shared/SuspendDialog";
 
 const PAGE_SIZE = 8;
 
@@ -89,6 +90,8 @@ export default function EmployeeManagementPage() {
     const [removeTarget, setRemoveTarget]     = useState<DeptEmployee | null>(null);
     const [limitTarget, setLimitTarget]       = useState<DeptEmployee | null>(null);
     const [activityTarget, setActivityTarget] = useState<DeptEmployee | null>(null);
+    const [suspendTarget, setSuspendTarget]   = useState<DeptEmployee | null>(null);
+    const [suspending, setSuspending]         = useState(false);
 
     // ── Add-employee form state ──────────────────────────────────────────
     const [newName,   setNewName]   = useState("");
@@ -179,12 +182,16 @@ export default function EmployeeManagementPage() {
 
     const handleRestrictToggle = async (emp: DeptEmployee) => {
         const restricting = emp.creditLimit !== 0;
+        if (restricting) setSuspending(true);
         try {
             const updated = await setEmployeeRestriction(emp.id, restricting);
             setEmployees((prev) => prev.map((e) => e.id === emp.id ? updated : e));
-            toast.success(`${emp.name} has been ${restricting ? "restricted" : "unrestricted"}.`);
+            toast.success(`${emp.name} has been ${restricting ? "suspended" : "reactivated"}.`);
+            if (restricting) setSuspendTarget(null);
         } catch {
-            toast.error(`Failed to ${restricting ? "restrict" : "unrestrict"} ${emp.name}.`);
+            toast.error(`Failed to ${restricting ? "suspend" : "reactivate"} ${emp.name}.`);
+        } finally {
+            if (restricting) setSuspending(false);
         }
     };
 
@@ -374,10 +381,10 @@ export default function EmployeeManagementPage() {
                                                     <Shield className="mr-2 h-3.5 w-3.5" /> Set Credit Limit
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
-                                                    onClick={() => handleRestrictToggle(m)}
+                                                    onClick={() => m.creditLimit === 0 ? handleRestrictToggle(m) : setSuspendTarget(m)}
                                                     className={m.creditLimit === 0 ? "text-success focus:text-success" : "text-warning focus:text-warning"}
                                                 >
-                                                    {m.creditLimit === 0 ? "Unrestrict Access" : "Restrict Access"}
+                                                    {m.creditLimit === 0 ? "Reactivate Account" : "Suspend Account"}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem
@@ -571,6 +578,16 @@ export default function EmployeeManagementPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* ── Suspend Dialog ────────────────────────────────────────────── */}
+            <SuspendDialog
+                open={!!suspendTarget}
+                onOpenChange={(o) => !o && setSuspendTarget(null)}
+                entityName={suspendTarget?.name || ""}
+                entityType="account"
+                onConfirm={() => suspendTarget && handleRestrictToggle(suspendTarget)}
+                isLoading={suspending}
+            />
         </div>
     );
 }

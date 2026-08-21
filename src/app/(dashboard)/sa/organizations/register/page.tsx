@@ -31,7 +31,6 @@ export default function RegisterOrganizationPage() {
         adminPhone: "",
         subscriptionPlan: "",
         billingCycle: "MONTHLY",
-        initialQuota: 5000,
         notes: "",
     });
 
@@ -50,7 +49,6 @@ export default function RegisterOrganizationPage() {
         if (!formData.adminName.trim()) return "Admin Name is required.";
         if (!formData.adminEmail.trim()) return "Admin Email is required.";
         if (!formData.subscriptionPlan) return "Subscription Plan is required.";
-        if (formData.initialQuota < 100) return "Initial Quota must be at least 100.";
         return null;
     };
 
@@ -197,11 +195,6 @@ export default function RegisterOrganizationPage() {
                                         </SelectContent>
                                     </Select>
                                 </div>
-                                <div className="sm:col-span-2 space-y-2">
-                                    <Label htmlFor="quota">Monthly AI Request Quota <span className="text-destructive">*</span></Label>
-                                    <Input id="quota" type="number" placeholder="5000" min={100} required value={formData.initialQuota || ""} onChange={(e) => updateField("initialQuota", parseInt(e.target.value) || 0)} />
-                                    <p className="text-xs text-muted-foreground">This limits the total number of AI interactions the organization can perform per month.</p>
-                                </div>
                             </CardContent>
                         </Card>
 
@@ -259,10 +252,6 @@ export default function RegisterOrganizationPage() {
                             <div className="flex justify-between items-center py-1 border-b">
                                 <span className="text-muted-foreground">Billing:</span>
                                 <span className="font-medium capitalize">{formData.billingCycle.toLowerCase()}</span>
-                            </div>
-                            <div className="flex justify-between items-center py-1 border-b">
-                                <span className="text-muted-foreground">Quota:</span>
-                                <span className="font-medium">{formData.initialQuota.toLocaleString()} Req/mo</span>
                             </div>
                             <div className="flex justify-between items-center py-1">
                                 <span className="text-muted-foreground">Admin:</span>

@@ -499,26 +499,60 @@ export async function getDeptRequestTypeBreakdown(): Promise<UsageTypePoint[]>  
 
 // ─── System Prompts ───────────────────────────────────────────────────────────
 
-export async function getDASystemPrompts(): Promise<DASystemPrompt[]>           { return structuredClone(_localSystemPrompts); }
+export async function getDASystemPrompts(): Promise<DASystemPrompt[]> {
+    const deptId = getDeptId();
+    if (!deptId) return structuredClone(_localSystemPrompts);
+    try {
+        const { data } = await api.get<Array<{
+            prompt_id: string; name: string; content: string; created_at: string;
+        }>>(`/chat/system-prompts/dept/${deptId}`);
+        return data.map((p) => ({
+            id: p.prompt_id, name: p.name, content: p.content,
+            appliedToEmployees: [], createdAt: p.created_at.split('T')[0],
+        }));
+    } catch {
+        return structuredClone(_localSystemPrompts);
+    }
+}
 export async function getOAPromptsForDept(): Promise<DASystemPrompt[]>          { return []; }
 
 export async function createDASystemPrompt(name: string, content: string): Promise<DASystemPrompt> {
-    const p: DASystemPrompt = { id: `sp-da-${Date.now()}`, name: name.trim(), content: content.trim(), appliedToEmployees: [], createdAt: new Date().toISOString().split('T')[0] };
-    _localSystemPrompts.push(p);
-    return structuredClone(p);
+    const deptId = getDeptId();
+    try {
+        if (!deptId) throw new Error("No dept id");
+        const { data } = await api.post<{ prompt_id: string; name: string; content: string; created_at: string }>(
+            '/chat/system-prompts', { name, content, scope: 'DEPT', dept_id: deptId }
+        );
+        return { id: data.prompt_id, name: data.name, content: data.content, appliedToEmployees: [], createdAt: data.created_at.split('T')[0] };
+    } catch {
+        const p: DASystemPrompt = { id: `sp-da-${Date.now()}`, name: name.trim(), content: content.trim(), appliedToEmployees: [], createdAt: new Date().toISOString().split('T')[0] };
+        _localSystemPrompts.push(p);
+        return structuredClone(p);
+    }
 }
 
 export async function updateDASystemPrompt(id: string, patch: Partial<Pick<DASystemPrompt, 'name' | 'content'>>): Promise<DASystemPrompt> {
-    const p = _localSystemPrompts.find((x) => x.id === id);
-    if (!p) throw new Error(`Prompt ${id} not found`);
-    if (patch.name)    p.name    = patch.name;
-    if (patch.content) p.content = patch.content;
-    return structuredClone(p);
+    try {
+        const { data } = await api.patch<{ prompt_id: string; name: string; content: string; created_at: string }>(
+            `/chat/system-prompts/${id}`, patch
+        );
+        return { id: data.prompt_id, name: data.name, content: data.content, appliedToEmployees: [], createdAt: data.created_at.split('T')[0] };
+    } catch {
+        const p = _localSystemPrompts.find((x) => x.id === id);
+        if (!p) throw new Error(`Prompt ${id} not found`);
+        if (patch.name)    p.name    = patch.name;
+        if (patch.content) p.content = patch.content;
+        return structuredClone(p);
+    }
 }
 
 export async function deleteDASystemPrompt(id: string): Promise<void> {
-    const i = _localSystemPrompts.findIndex((p) => p.id === id);
-    if (i !== -1) _localSystemPrompts.splice(i, 1);
+    try {
+        await api.delete(`/chat/system-prompts/${id}`);
+    } catch {
+        const i = _localSystemPrompts.findIndex((p) => p.id === id);
+        if (i !== -1) _localSystemPrompts.splice(i, 1);
+    }
 }
 
 export async function applyDASystemPromptToEmployees(id: string, empIds: string[]): Promise<DASystemPrompt> {

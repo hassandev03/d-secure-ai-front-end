@@ -16,6 +16,7 @@ import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { getProfessionalById, updateProfessionalStatus, resetProfessionalPassword } from "@/services/sa.service";
+import SuspendDialog from "@/components/shared/SuspendDialog";
 import type { SAProfessional, ProfessionalStatus } from "@/types/sa.types";
 
 const planColors: Record<string, string> = {
@@ -28,6 +29,8 @@ export default function ProfessionalProfilePage({ params }: { params: Promise<{ 
     const { id } = use(params);
     const [profile, setProfile] = useState<SAProfessional | null>(null);
     const [loading, setLoading] = useState(true);
+    const [suspendOpen, setSuspendOpen] = useState(false);
+    const [suspending, setSuspending] = useState(false);
 
     useEffect(() => {
         getProfessionalById(id).then((data) => {
@@ -53,6 +56,17 @@ export default function ProfessionalProfilePage({ params }: { params: Promise<{ 
         }
     };
 
+    const handleSuspendConfirm = async () => {
+        if (!profile) return;
+        setSuspending(true);
+        try {
+            await handleStatusChange("SUSPENDED");
+            setSuspendOpen(false);
+        } finally {
+            setSuspending(false);
+        }
+    };
+
     if (loading) {
         return (
             <div className="flex items-center justify-center h-[60vh]">
@@ -75,6 +89,14 @@ export default function ProfessionalProfilePage({ params }: { params: Promise<{ 
 
     return (
         <div className="mx-auto max-w-5xl space-y-6">
+            <SuspendDialog
+                open={suspendOpen}
+                onOpenChange={setSuspendOpen}
+                entityName={profile.name}
+                entityType="account"
+                onConfirm={handleSuspendConfirm}
+                isLoading={suspending}
+            />
             <div className="flex items-start gap-4 mb-2">
                 <Link href="/sa/professionals" className="mt-1">
                     <Button variant="outline" size="icon" className="h-9 w-9 shrink-0 rounded-full shadow-sm">
@@ -149,7 +171,7 @@ export default function ProfessionalProfilePage({ params }: { params: Promise<{ 
                             <CardContent className="p-4 flex flex-col items-center justify-center text-center space-y-1">
                                 <Activity className="h-5 w-5 text-brand-500 mb-1" />
                                 <span className="text-2xl font-bold">{profile.creditsUsed.toLocaleString()}</span>
-                                <span className="text-xs text-muted-foreground">Credits Used</span>
+                                <span className="text-xs text-muted-foreground">Usage (CU)</span>
                             </CardContent>
                         </Card>
                         <Card>
@@ -211,7 +233,7 @@ export default function ProfessionalProfilePage({ params }: { params: Promise<{ 
                                     <Button
                                         variant="outline"
                                         className="text-warning hover:bg-warning/10 hover:text-warning border-warning/20"
-                                        onClick={() => handleStatusChange("SUSPENDED")}
+                                        onClick={() => setSuspendOpen(true)}
                                     >
                                         <Ban className="mr-2 h-4 w-4" /> Suspend Account
                                     </Button>

@@ -88,14 +88,14 @@ export default function SuperAdminDashboard() {
                     iconColor="text-info bg-info/10"
                 />
                 <StatCard
-                    title="Credits Used Today"
+                    title="Compute Units Today"
                     value={stats.todayCreditsUsed.toLocaleString()}
                     icon={Activity}
                     delta={{ value: "+12% vs yesterday", trend: "up" }}
                     iconColor="text-success bg-success/10"
                 />
                 <StatCard
-                    title="Avg Credits / User"
+                    title="Avg CU / User"
                     value={stats.avgCreditsPerUser}
                     icon={TrendingUp}
                     delta={{ value: "Per registered user, all-time", trend: "flat" }}

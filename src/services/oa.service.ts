@@ -196,7 +196,21 @@ export const DEPT_COLORS = [
 
 /** Get the auth user's org_id from the Zustand store */
 function getOrgId(): string | undefined {
-    return useAuthStore.getState().user?.orgId ?? undefined;
+    const state = useAuthStore.getState();
+    if (state.user?.orgId) return state.user.orgId;
+
+    // Fallback for Next.js hydration race condition
+    if (typeof window !== 'undefined') {
+        try {
+            const stored = localStorage.getItem('dsecure-auth');
+            if (stored) {
+                const parsed = JSON.parse(stored);
+                return parsed?.state?.user?.orgId;
+            }
+        } catch {}
+    }
+    
+    return undefined;
 }
 
 // Backend dept shape
@@ -229,7 +243,7 @@ export async function getOAOrgConfig(): Promise<OAOrgConfig> {
     const orgId = getOrgId();
     if (!orgId) return _defaultOrgConfig();
     try {
-        const [orgRes, subRes] = await Promise.all([
+        const [orgRes, subRes, settingsRes] = await Promise.all([
             api.get<{
                 org_id: string; name: string; industry: string | null;
                 domain: string | null; country: string | null;
@@ -238,11 +252,14 @@ export async function getOAOrgConfig(): Promise<OAOrgConfig> {
             api.get<{ plan_name?: string; period_ends_at?: string } | null>(
                 `/subscriptions/org/${orgId}`
             ).catch(() => ({ data: null })),
+            api.get<BackendOrgSettings>(`/org/${orgId}/settings`).catch(() => ({ data: null })),
         ]);
         const org = orgRes.data;
         const sub = (subRes as { data: { plan_name?: string; period_ends_at?: string } | null }).data;
+        const settings = (settingsRes as { data: BackendOrgSettings | null }).data;
+
         return {
-            totalBudget: 0,
+            totalBudget: (settings?.monthly_budget_usd ?? 0) * PLATFORM_CONFIG.CU_MULTIPLIER,
             plan: sub?.plan_name ?? 'Free',
             quotaRenewsAt: sub?.period_ends_at?.split('T')[0] ?? '',
             name: org.name,
@@ -319,7 +336,7 @@ export async function createOADepartment(name: string, description: string, allo
         headEmail: '',
         employees: 0,
         percentageUsed: data.allocated_quota > 0 ? Math.round((data.used_quota / data.allocated_quota) * 100) : 0,
-        budget: data.allocated_quota,
+        budget: data.allocated_quota * PLATFORM_CONFIG.CU_MULTIPLIER,
         color: DEPT_COLORS[0],
     };
 }
@@ -337,7 +354,7 @@ export async function updateOADepartment(deptId: string, name: string, descripti
         headEmail: '',
         employees: 0,
         percentageUsed: data.allocated_quota > 0 ? Math.round((data.used_quota / data.allocated_quota) * 100) : 0,
-        budget: data.allocated_quota,
+        budget: data.allocated_quota * PLATFORM_CONFIG.CU_MULTIPLIER,
         color: DEPT_COLORS[0],
     };
 }

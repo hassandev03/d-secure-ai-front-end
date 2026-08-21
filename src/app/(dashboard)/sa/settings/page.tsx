@@ -37,11 +37,21 @@ function LLMGatewayTab() {
 
     useEffect(() => {
         fetch(`${API}/llm-gateway/providers`, { credentials: "include" })
-            .then((r) => r.json())
-            .then((data: ProviderConfig[]) => {
-                setProviders(data);
+            .then((r) => {
+                if (!r.ok) throw new Error("Failed to fetch");
+                return r.json();
             })
-            .catch(() => toast.error("Failed to load provider configs"))
+            .then((data: ProviderConfig[]) => {
+                if (Array.isArray(data)) {
+                    setProviders(data);
+                } else {
+                    setProviders([]);
+                }
+            })
+            .catch(() => {
+                toast.error("Failed to load provider configs");
+                setProviders([]);
+            })
             .finally(() => setLoading(false));
     }, []);
 

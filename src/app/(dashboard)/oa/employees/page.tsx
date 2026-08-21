@@ -28,6 +28,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
+import SuspendDialog from "@/components/shared/SuspendDialog";
 
 import { getOAEmployees, getOADepartmentNames, createOAEmployee, removeOAEmployee, updateOAEmployeeStatus, type OAEmployee } from "@/services/oa.service";
 
@@ -70,6 +71,8 @@ export default function EmployeesPage() {
     const [limitTarget,    setLimitTarget]    = useState<OrgEmployee | null>(null);
     const [activityTarget, setActivityTarget] = useState<OrgEmployee | null>(null);
     const [deptTarget,     setDeptTarget]     = useState<OrgEmployee | null>(null);
+    const [suspendTarget,  setSuspendTarget]  = useState<OrgEmployee | null>(null);
+    const [suspending,     setSuspending]     = useState(false);
 
     // ── Add-employee form ────────────────────────────────────────────────
     const [newName,   setNewName]   = useState("");
@@ -157,11 +160,16 @@ export default function EmployeesPage() {
 
     const handleRestrictToggle = async (emp: OrgEmployee) => {
         const restricting = emp.creditLimit !== 0;
+        if (restricting) setSuspending(true);
         await new Promise((r) => setTimeout(r, 300));
         setEmployees((prev) => prev.map((e) =>
             e.id === emp.id ? { ...e, creditLimit: restricting ? 0 : 30 } : e,
         ));
-        toast.success(`${emp.name} has been ${restricting ? "restricted" : "unrestricted"}.`);
+        toast.success(`${emp.name} has been ${restricting ? "suspended" : "reactivated"}.`);
+        if (restricting) {
+            setSuspending(false);
+            setSuspendTarget(null);
+        }
     };
 
     const handleSetLimit = async () => {
@@ -173,7 +181,7 @@ export default function EmployeesPage() {
         setEmployees((prev) => prev.map((e) =>
             e.id === limitTarget.id ? { ...e, creditLimit: val } : e,
         ));
-        toast.success(`Credit Limit for ${limitTarget.name} set to ${val}.`);
+        toast.success(`CU Limit for ${limitTarget.name} set to ${val}.`);
         setLimitSaving(false);
         setLimitTarget(null);
     };
@@ -206,7 +214,7 @@ export default function EmployeesPage() {
 
     const handleDownload = () => {
         const rows = [
-            ["Name", "Email", "Department", "Role", "Status", "creditsUsed", "Credit Limit", "Last Active"],
+            ["Name", "Email", "Department", "Role", "Status", "creditsUsed", "CU Limit", "Last Active"],
             ...filtered.map((e) => [e.name, e.email, e.department, e.role, e.status, e.creditsUsed, e.creditLimit, e.lastActive]),
         ];
         const csv = rows.map((r) => r.join(",")).join("\n");
@@ -259,7 +267,7 @@ export default function EmployeesPage() {
                 <Card>
                     <CardContent className="p-4 text-center">
                         <p className="text-2xl font-bold text-brand-700">{totalCredits.toLocaleString()}</p>
-                        <p className="text-xs text-muted-foreground mt-0.5">Total Credits Used</p>
+                        <p className="text-xs text-muted-foreground mt-0.5">Total CU Used</p>
                     </CardContent>
                 </Card>
             </div>
@@ -383,8 +391,8 @@ export default function EmployeesPage() {
                                 <TableHead>Department</TableHead>
                                 <TableHead>Role</TableHead>
                                 <TableHead>Status</TableHead>
-                                <TableHead className="text-center">Credits Used</TableHead>
-                                <TableHead className="text-center">Credit Limit</TableHead>
+                                <TableHead className="text-center">CU Used</TableHead>
+                                <TableHead className="text-center">CU Limit</TableHead>
                                 <TableHead>Last Active</TableHead>
                                 <TableHead className="w-10" />
                             </TableRow>
@@ -452,13 +460,13 @@ export default function EmployeesPage() {
                                                     <Activity className="mr-2 h-3.5 w-3.5" /> View Activity
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem onClick={() => { setLimitTarget(emp); setEditLimit(String(emp.creditLimit)); }}>
-                                                    <Shield className="mr-2 h-3.5 w-3.5" /> Set Credit Limit
+                                                    <Shield className="mr-2 h-3.5 w-3.5" /> Set CU Limit
                                                 </DropdownMenuItem>
                                                 <DropdownMenuItem
-                                                    onClick={() => handleRestrictToggle(emp)}
+                                                    onClick={() => emp.creditLimit === 0 ? handleRestrictToggle(emp) : setSuspendTarget(emp)}
                                                     className={emp.creditLimit === 0 ? "text-success focus:text-success" : "text-warning focus:text-warning"}
                                                 >
-                                                    {emp.creditLimit === 0 ? "Unrestrict Access" : "Restrict Access"}
+                                                    {emp.creditLimit === 0 ? "Reactivate Account" : "Suspend Account"}
                                                 </DropdownMenuItem>
                                                 <DropdownMenuSeparator />
                                                 <DropdownMenuItem onClick={() => { setDeptTarget(emp); setNewDeptChange(emp.department); }}>
@@ -573,7 +581,7 @@ export default function EmployeesPage() {
                             </Select>
                         </div>
                         <div className="space-y-2">
-                            <Label>Credit Limit</Label>
+                            <Label>CU Limit</Label>
                             <Input
                                 type="number"
                                 value={newLimit}
@@ -608,17 +616,17 @@ export default function EmployeesPage() {
                 </DialogContent>
             </Dialog>
 
-            {/* ── Set Credit Limit ──────────────────────────────────────────── */}
+            {/* ── Set CU Limit ──────────────────────────────────────────── */}
             <Dialog open={!!limitTarget} onOpenChange={(o) => !o && setLimitTarget(null)}>
                 <DialogContent>
-                    <DialogHeader><DialogTitle>Set Credit Limit</DialogTitle></DialogHeader>
+                    <DialogHeader><DialogTitle>Set CU Limit</DialogTitle></DialogHeader>
                     <div className="py-2 space-y-3">
                         <p className="text-sm text-muted-foreground">
                             Setting limit for <strong>{limitTarget?.name}</strong>.
                             Use <strong>0</strong> to restrict access entirely.
                         </p>
                         <div className="space-y-2">
-                            <Label>Credit Limit</Label>
+                            <Label>CU Limit</Label>
                             <Input
                                 type="number"
                                 value={editLimit}
@@ -678,13 +686,13 @@ export default function EmployeesPage() {
                         <div className="grid grid-cols-2 gap-3">
                             <div className="rounded-lg border border-border p-4 text-center">
                                 <p className="text-2xl font-bold">{activityTarget?.creditsUsed.toLocaleString()}</p>
-                                <p className="text-xs text-muted-foreground mt-0.5">Total Credits Used</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">Total CU Used</p>
                             </div>
                             <div className="rounded-lg border border-border p-4 text-center">
                                 <p className="text-2xl font-bold">
                                     {activityTarget?.creditLimit === 0 ? "—" : activityTarget?.creditLimit}
                                 </p>
-                                <p className="text-xs text-muted-foreground mt-0.5">Credit Limit</p>
+                                <p className="text-xs text-muted-foreground mt-0.5">CU Limit</p>
                             </div>
                         </div>
                         <Separator />
@@ -718,6 +726,16 @@ export default function EmployeesPage() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* ── Suspend Dialog ────────────────────────────────────────────── */}
+            <SuspendDialog
+                open={!!suspendTarget}
+                onOpenChange={(o) => !o && setSuspendTarget(null)}
+                entityName={suspendTarget?.name || ""}
+                entityType="account"
+                onConfirm={() => suspendTarget && handleRestrictToggle(suspendTarget)}
+                isLoading={suspending}
+            />
         </div>
     );
 }

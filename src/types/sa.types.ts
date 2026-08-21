@@ -119,7 +119,6 @@ export interface RegisterOrgPayload {
     adminPhone?: string;
     subscriptionPlan: string;
     billingCycle: 'MONTHLY' | 'ANNUAL';
-    initialQuota: number;
     notes?: string;
 }
 

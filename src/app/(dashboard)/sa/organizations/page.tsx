@@ -20,6 +20,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { getOrganizations, updateOrganizationStatus } from "@/services/sa.service";
+import SuspendDialog from "@/components/shared/SuspendDialog";
 import type { SAOrganization, OrgStatus } from "@/types/sa.types";
 
 const PAGE_SIZE = 8;
@@ -32,6 +33,8 @@ export default function OrganizationsPage() {
     const [industryFilter, setIndustryFilter] = useState("all");
     const [countryFilter, setCountryFilter] = useState("all");
     const [page, setPage] = useState(1);
+    const [pendingSuspend, setPendingSuspend] = useState<{ id: string; name: string } | null>(null);
+    const [suspending, setSuspending] = useState(false);
 
     useEffect(() => {
         getOrganizations().then((data) => {
@@ -74,6 +77,17 @@ export default function OrganizationsPage() {
         }
     };
 
+    const handleSuspendConfirm = async () => {
+        if (!pendingSuspend) return;
+        setSuspending(true);
+        try {
+            await handleStatusChange(pendingSuspend.id, pendingSuspend.name, "SUSPENDED");
+            setPendingSuspend(null);
+        } finally {
+            setSuspending(false);
+        }
+    };
+
     const handleExport = () => {
         const rows = [
             ["Name", "Domain", "Industry", "Country", "Status", "Plan", "Employees", "Quota Used (%)", "Budget (CU)", "Registered"],
@@ -97,6 +111,14 @@ export default function OrganizationsPage() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-6">
+            <SuspendDialog
+                open={!!pendingSuspend}
+                onOpenChange={(open) => { if (!open) setPendingSuspend(null); }}
+                entityName={pendingSuspend?.name ?? ""}
+                entityType="organization"
+                onConfirm={handleSuspendConfirm}
+                isLoading={suspending}
+            />
             <PageHeader
                 title="Organizations Directory"
                 subtitle={`${orgs.length} registered organizations across the platform.`}
@@ -259,7 +281,7 @@ export default function OrganizationsPage() {
                                                     </DropdownMenuItem>
                                                 )}
                                                 {org.status !== "SUSPENDED" && org.status !== "DEACTIVATED" && (
-                                                    <DropdownMenuItem className="cursor-pointer text-warning focus:text-warning" onClick={() => handleStatusChange(org.id, org.name, "SUSPENDED")}>
+                                                    <DropdownMenuItem className="cursor-pointer text-warning focus:text-warning" onClick={() => setPendingSuspend({ id: org.id, name: org.name })}>
                                                         Suspend
                                                     </DropdownMenuItem>
                                                 )}

@@ -131,8 +131,8 @@ export default function QuotaManagementPage() {
         const partial = granted < approveTarget.amount;
         toast.success(
             partial
-                ? `Partially approved: +${granted} credits of ${approveTarget.amount} allocated to ${approveTarget.deptName}.`
-                : `Approved +${granted} credits for ${approveTarget.deptName}.`,
+                ? `Partially approved: +${granted} CU of ${approveTarget.amount} allocated to ${approveTarget.deptName}.`
+                : `Approved +${granted} CU for ${approveTarget.deptName}.`,
         );
         setApproveTarget(null);
         setApproving(false);
@@ -175,7 +175,7 @@ export default function QuotaManagementPage() {
         setDepts((prev) => prev.map((d) =>
             d.id === editTarget.id ? { ...d, budget: val, percentageUsed: val > 0 ? (currentUsed / val) * 100 : 0 } : d,
         ));
-        toast.success(`${editTarget.name} budget updated to ${val.toLocaleString()} credits.`);
+        toast.success(`${editTarget.name} budget updated to ${val.toLocaleString()} CU.`);
         setEditTarget(null);
         setEditing(false);
     };
@@ -203,7 +203,7 @@ export default function QuotaManagementPage() {
         <div className="mx-auto max-w-6xl">
             <PageHeader
                 title="Quota Management"
-                subtitle="Manage AI credit budgets across your organisation and act on department requests."
+                subtitle="Manage AI CU budgets across your organisation and act on department requests."
                 breadcrumbs={[{ label: "Organization", href: "/oa/dashboard" }, { label: "Quota Management" }]}
                 actions={
                     <Button variant="outline" onClick={() => setRequestOpen(true)}>
@@ -221,7 +221,7 @@ export default function QuotaManagementPage() {
                     iconColor="text-brand-700 bg-brand-50"
                 />
                 <StatCard
-                    title="Credits Used This Month"
+                    title="Compute Units Used This Month"
                     value={Math.round(totalUsedCredits).toLocaleString()}
                     icon={TrendingUp}
                     iconColor="text-blue-600 bg-blue-50"
@@ -320,7 +320,7 @@ export default function QuotaManagementPage() {
                                                         <p className="text-sm font-semibold">{req.deptName}</p>
                                                         <span className="text-xs text-muted-foreground">via {req.requestedBy}</span>
                                                         <Badge variant="outline" className="border-warning/30 bg-warning/10 text-xs text-warning">
-                                                            +{req.amount.toLocaleString()} credits requested
+                                                            +{req.amount.toLocaleString()} CU requested
                                                         </Badge>
                                                     </div>
                                                     {dept && (
@@ -510,7 +510,7 @@ export default function QuotaManagementPage() {
                                                         req.status === "APPROVED" ? "text-success" : "text-danger",
                                                     )}>
                                                         {req.status === "APPROVED" ? "+" : ""}
-                                                        {(req.grantedAmount ?? req.amount).toLocaleString()} credits
+                                                        {(req.grantedAmount ?? req.amount).toLocaleString()} CU
                                                     </span>
                                                 )}
                                             </div>
@@ -550,7 +550,7 @@ export default function QuotaManagementPage() {
                                     </div>
                                     <div className="flex justify-between">
                                         <span className="text-muted-foreground">Amount requested</span>
-                                        <span className="font-medium">+{approveTarget.amount.toLocaleString()} credits</span>
+                                        <span className="font-medium">+{approveTarget.amount.toLocaleString()} CU</span>
                                     </div>
                                     {dept && (
                                         <div className="flex justify-between">
@@ -582,7 +582,7 @@ export default function QuotaManagementPage() {
                                 )}
 
                                 <div className="space-y-1.5">
-                                    <Label>Credits to Allocate</Label>
+                                    <Label>CU to Allocate</Label>
                                     <Input
                                         type="number"
                                         min="1"
@@ -754,7 +754,7 @@ export default function QuotaManagementPage() {
                     </DialogHeader>
                     <div className="grid gap-4 py-2">
                         <div className="space-y-2">
-                            <Label>Additional Credits Needed</Label>
+                            <Label>Additional CU Needed</Label>
                             <Input
                                 type="number"
                                 placeholder="5000"

@@ -193,7 +193,7 @@ export default function ProfessionalRegisterPage() {
                         <button onClick={() => setStep(2)} className="block mx-auto text-sm text-muted-foreground hover:text-foreground">Change email address</button>
                         <Button className="w-full bg-brand-600 hover:bg-brand-700" onClick={async () => {
                             const user = await getCurrentUser();
-                            if (user?.emailVerifiedAt) {
+                            if (user?.status === 'ACTIVE' || user?.emailVerifiedAt) {
                                 setStep(4);
                             } else {
                                 toast.error("Email not verified yet. Please check your inbox and click the link.");

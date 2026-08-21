@@ -114,7 +114,7 @@ export default function OrgAdminDashboard() {
                     delta={{ value: `${stats.activeEmployees} of ${stats.totalEmployees} employees active`, trend: stats.adoptionRate >= 80 ? "up" : "down" }}
                 />
                 <StatCard
-                    title="Avg Credits / Employee"
+                    title="Avg CU / Employee"
                     value={stats.avgCreditsPerEmployee}
                     icon={TrendingUp}
                     delta={{ value: "Per active employee this month", trend: "flat" }}
@@ -124,7 +124,7 @@ export default function OrgAdminDashboard() {
                     title="Budget Utilization"
                     value={`${stats.quotaUtilization}%`}
                     icon={Percent}
-                    delta={{ value: `${stats.monthlyCredits.toLocaleString()} of ${stats.monthlyBudget.toLocaleString()} credits used`, trend: stats.quotaUtilization >= 80 ? "up" : "flat" }}
+                    delta={{ value: `${stats.monthlyCredits.toLocaleString()} of ${stats.monthlyBudget.toLocaleString()} CU used`, trend: stats.quotaUtilization >= 80 ? "up" : "flat" }}
                     iconColor="text-info bg-info/10"
                 />
                 <StatCard
@@ -141,7 +141,7 @@ export default function OrgAdminDashboard() {
                 <CardHeader className="flex-row items-center justify-between space-y-0 pb-3">
                     <div>
                         <CardTitle className="text-base font-semibold">Organisation Budget</CardTitle>
-                        <CardDescription className="mt-0.5">{stats.unallocatedBudget.toLocaleString()} credits unallocated — available to assign to departments.</CardDescription>
+                        <CardDescription className="mt-0.5">{stats.unallocatedBudget.toLocaleString()} CU unallocated — available to assign to departments.</CardDescription>
                     </div>
                     <Link href="/oa/quota"><Button variant="ghost" size="sm">Manage →</Button></Link>
                 </CardHeader>
@@ -157,8 +157,8 @@ export default function OrgAdminDashboard() {
                 {/* Department Quota Usage — "Which teams are consuming the most quota?" */}
                 <Card className="flex flex-col">
                     <CardHeader>
-                        <CardTitle className="text-base font-semibold">Department Credit Usage</CardTitle>
-                        <CardDescription>Credits (CU) consumed by each department this month.</CardDescription>
+                        <CardTitle className="text-base font-semibold">Department CU Usage</CardTitle>
+                        <CardDescription>Compute Units (CU) consumed by each department this month.</CardDescription>
                     </CardHeader>
                     <CardContent className="flex-1 min-h-75 pb-4">
                         <ResponsiveContainer width="100%" height="100%">
@@ -168,9 +168,9 @@ export default function OrgAdminDashboard() {
                                 <YAxis type="category" dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} width={90} />
                                 <RechartsTooltip
                                     contentStyle={TOOLTIP_STYLE}
-                                    formatter={(value: number | undefined) => [`${(value ?? 0).toLocaleString()} CU`, "Credits Used"]}
+                                    formatter={(value: number | undefined) => [`${(value ?? 0).toLocaleString()} CU`, "Compute Units Used"]}
                                 />
-                                <Bar dataKey="used" name="Credits (CU)" radius={[0, 4, 4, 0]} barSize={18}>
+                                <Bar dataKey="used" name="Compute Units (CU)" radius={[0, 4, 4, 0]} barSize={18}>
                                     {deptUsage.map((entry) => (
                                         <Cell key={entry.name} fill={entry.color} />
                                     ))}
@@ -257,7 +257,7 @@ export default function OrgAdminDashboard() {
                             />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 12, fill: "#64748b" }} />
                             <RechartsTooltip contentStyle={TOOLTIP_STYLE} />
-                            <Area type="monotone" dataKey="creditsUsed" name="Credits Used (CU)" stroke="#3b82f6" strokeWidth={2} fill="url(#gradOrgRequests)" />
+                            <Area type="monotone" dataKey="creditsUsed" name="Compute Units Used (CU)" stroke="#3b82f6" strokeWidth={2} fill="url(#gradOrgRequests)" />
                         </AreaChart>
                     </ResponsiveContainer>
                 </CardContent>

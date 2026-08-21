@@ -45,7 +45,7 @@ function VerifyEmailContent() {
                     const currentToken = useAuthStore.getState().token;
                     const currentUser = useAuthStore.getState().user;
                     if (currentToken && currentUser) {
-                        setCredentials({ ...currentUser, emailVerifiedAt: new Date().toISOString() }, currentToken);
+                        setCredentials({ ...currentUser, status: "ACTIVE", emailVerifiedAt: new Date().toISOString() }, currentToken);
                     }
                 }
             } catch (err) {

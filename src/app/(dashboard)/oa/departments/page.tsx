@@ -27,7 +27,7 @@ import {
     Select, SelectContent, SelectItem, SelectTrigger, SelectValue,
 } from "@/components/ui/select";
 
-import { getOADepartments, createOADepartment, updateOADepartment, deleteOADepartment, DEPT_COLORS, type OADepartment } from "@/services/oa.service";
+import { getOADepartments, createOADepartment, updateOADepartment, deleteOADepartment, getOAOrgConfig, DEPT_COLORS, type OADepartment } from "@/services/oa.service";
 
 /* ------------------------------------------------------------------ */
 /* Types & constants                                                    */
@@ -52,9 +52,11 @@ function quotaHealth(dept: Department): { label: string; className: string } {
 export default function DepartmentsPage() {
     /* ---- data ---- */
     const [departments, setDepartments] = useState<Department[]>([]);
+    const [totalOrgBudget, setTotalOrgBudget] = useState(0);
 
     useEffect(() => {
         getOADepartments().then(setDepartments);
+        getOAOrgConfig().then(cfg => setTotalOrgBudget(cfg.totalBudget));
     }, []);
 
     /* ---- filters ---- */
@@ -67,7 +69,7 @@ export default function DepartmentsPage() {
     const [newName,    setNewName]    = useState("");
     const [newHead,    setNewHead]    = useState("");
     const [newEmail,   setNewEmail]   = useState("");
-    const [newQuota,   setNewQuota]   = useState("1000");
+    const [newQuota,   setNewQuota]   = useState("5000");
     const [creating,   setCreating]   = useState(false);
 
     /* ---- edit dialog ---- */
@@ -114,8 +116,8 @@ export default function DepartmentsPage() {
     /* ---- active filter chips ---- */
     const activeFilters: { key: string; label: string }[] = [];
     if (search.trim())        activeFilters.push({ key: "search", label: `"${search}"` });
-    if (quotaFilter !== "all") activeFilters.push({ key: "quota",  label: `Quota: ${quotaFilter}` });
-    if (sortBy !== "name")    activeFilters.push({ key: "sort",   label: `Sort: ${sortBy === "employees" ? "Most Employees" : "Highest Quota"}` });
+    if (quotaFilter !== "all") activeFilters.push({ key: "quota",  label: `Budget: ${quotaFilter}` });
+    if (sortBy !== "name")    activeFilters.push({ key: "sort",   label: `Sort: ${sortBy === "employees" ? "Most Employees" : "Highest Budget"}` });
 
     const clearFilter = (key: string) => {
         if (key === "search") setSearch("");
@@ -125,15 +127,20 @@ export default function DepartmentsPage() {
 
     /* ---- handlers ---- */
     const handleCreate = async () => {
-        if (!newName.trim() || !newHead.trim() || !newEmail.trim()) {
-            toast.error("Please fill in all required fields");
+        if (!newName.trim()) {
+            toast.error("Please provide a department name");
             return;
         }
         setCreating(true);
         try {
-            const newDept = await createOADepartment(newName.trim(), `${newHead.trim()} - ${newEmail.trim()}`, parseInt(newQuota) || 1000);
-            setDepartments(prev => [...prev, newDept]);
-            setNewName(""); setNewHead(""); setNewEmail(""); setNewQuota("1000");
+            const headDesc = newHead.trim() || newEmail.trim() ? `${newHead.trim()} - ${newEmail.trim()}` : "";
+            // Divide by multiplier because backend expects base units (USD)
+            const baseQuota = (parseInt(newQuota) || 5000) / 5000;
+            const newDept = await createOADepartment(newName.trim(), headDesc, baseQuota);
+            // Re-fetch to get updated list with proper scaling
+            const updated = await getOADepartments();
+            setDepartments(updated);
+            setNewName(""); setNewHead(""); setNewEmail(""); setNewQuota("5000");
             setCreateOpen(false);
             toast.success(`Department "${newName.trim()}" created`);
         } catch (err: any) {
@@ -152,11 +159,15 @@ export default function DepartmentsPage() {
     };
 
     const handleEdit = async () => {
-        if (!editTarget || !editName.trim() || !editHead.trim()) return;
+        if (!editTarget || !editName.trim()) return;
         setEditSaving(true);
         try {
-            const updated = await updateOADepartment(editTarget.id, editName.trim(), `${editHead.trim()} - ${editEmail.trim()}`, parseInt(editQuota) || editTarget.budget);
-            setDepartments(prev => prev.map(d => d.id === editTarget.id ? updated : d));
+            const headDesc = editHead.trim() || editEmail.trim() ? `${editHead.trim()} - ${editEmail.trim()}` : "";
+            const baseQuota = (parseInt(editQuota) || editTarget.budget) / 5000;
+            const updated = await updateOADepartment(editTarget.id, editName.trim(), headDesc, baseQuota);
+            // Re-fetch or manually update
+            const refreshed = await getOADepartments();
+            setDepartments(refreshed);
             setEditTarget(null);
             toast.success("Department updated");
         } catch (err: any) {
@@ -219,16 +230,17 @@ export default function DepartmentsPage() {
                     iconColor="text-success bg-success/10"
                 />
                 <StatCard
-                    title="Budget Utilisation"
-                    value={totalQuotaMax ? `${Math.round((totalQuotaUsed / totalQuotaMax) * 100)}%` : "0%"}
+                    title="Total Org Budget"
+                    value={`${totalOrgBudget.toLocaleString()} CU`}
                     icon={Database}
-                    iconColor="text-warning bg-warning/10"
+                    iconColor="text-brand-700 bg-brand-50"
                 />
                 <StatCard
-                    title="Critical Budget"
-                    value={criticalCount}
+                    title="Allocated Budget"
+                    value={`${totalQuotaMax.toLocaleString()} CU`}
                     icon={TrendingUp}
-                    iconColor={criticalCount > 0 ? "text-danger bg-danger/10" : "text-success bg-success/10"}
+                    iconColor={totalQuotaMax > totalOrgBudget ? "text-danger bg-danger/10" : "text-success bg-success/10"}
+                    delta={{ value: totalQuotaMax > totalOrgBudget ? "Overallocated" : "Within limits", trend: totalQuotaMax > totalOrgBudget ? "down" : "up" }}
                 />
             </div>
 
@@ -367,7 +379,7 @@ export default function DepartmentsPage() {
                                                 </AvatarFallback>
                                             </Avatar>
                                             <div className="min-w-0">
-                                                <p className="truncate text-xs font-medium">{dept.head}</p>
+                                                <p className="truncate text-xs font-medium">{dept.head || 'Unassigned'}</p>
                                                 <p className="text-[11px] text-muted-foreground">Department Head</p>
                                             </div>
                                         </div>
@@ -380,7 +392,7 @@ export default function DepartmentsPage() {
                                             </div>
                                             <div className="flex items-center gap-1">
                                                 <Database className="h-3.5 w-3.5" />
-                                                <span>{dept.budget.toLocaleString()} credits</span>
+                                                <span>{dept.budget.toLocaleString()} CU</span>
                                             </div>
                                         </div>
 
@@ -414,30 +426,34 @@ export default function DepartmentsPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Department Head <span className="text-danger">*</span></Label>
+                            <Label>Department Head</Label>
                             <Input
-                                placeholder="Full name"
+                                placeholder="Full name (optional)"
                                 value={newHead}
                                 onChange={e => setNewHead(e.target.value)}
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Head Email <span className="text-danger">*</span></Label>
+                            <Label>Head Email</Label>
                             <Input
                                 type="email"
-                                placeholder="head@acme.com"
+                                placeholder="head@acme.com (optional)"
                                 value={newEmail}
                                 onChange={e => setNewEmail(e.target.value)}
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Monthly AI Budget (credits)</Label>
+                            <div className="flex justify-between">
+                                <Label>Monthly AI Budget (Compute Units)</Label>
+                                <span className="text-[11px] text-muted-foreground">Total Org Budget: {totalOrgBudget.toLocaleString()} CU</span>
+                            </div>
                             <Input
                                 type="number"
-                                placeholder="1000"
+                                placeholder="5000"
                                 value={newQuota}
                                 onChange={e => setNewQuota(e.target.value)}
                             />
+                            <p className="text-[10px] text-muted-foreground italic">1 USD = 5,000 Compute Units (CU)</p>
                         </div>
                     </div>
                     <DialogFooter>
@@ -483,12 +499,16 @@ export default function DepartmentsPage() {
                             />
                         </div>
                         <div className="space-y-2">
-                            <Label>Monthly AI Budget (credits)</Label>
+                            <div className="flex justify-between">
+                                <Label>Monthly AI Budget (Compute Units)</Label>
+                                <span className="text-[11px] text-muted-foreground">Total Org Budget: {totalOrgBudget.toLocaleString()} CU</span>
+                            </div>
                             <Input
                                 type="number"
                                 value={editQuota}
                                 onChange={e => setEditQuota(e.target.value)}
                             />
+                            <p className="text-[10px] text-muted-foreground italic">1 USD = 5,000 Compute Units (CU)</p>
                         </div>
                     </div>
                     <DialogFooter>

@@ -7,6 +7,7 @@ import PageHeader from "@/components/layout/PageHeader";
 import StatCard from "@/components/shared/StatCard";
 import StatusBadge from "@/components/shared/StatusBadge";
 import QuotaBar from "@/components/shared/QuotaBar";
+import SuspendDialog from "@/components/shared/SuspendDialog";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
@@ -18,6 +19,8 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
     const { id } = use(params);
     const [org, setOrg] = useState<SAOrganization | null>(null);
     const [loading, setLoading] = useState(true);
+    const [suspendOpen, setSuspendOpen] = useState(false);
+    const [suspending, setSuspending] = useState(false);
 
     useEffect(() => {
         getOrganizationById(id).then((data) => {
@@ -32,6 +35,17 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
         if (updated) {
             setOrg({ ...org, status: newStatus });
             toast.success(`${org.name} status changed to ${newStatus.toLowerCase()}.`);
+        }
+    };
+
+    const handleSuspendConfirm = async () => {
+        if (!org) return;
+        setSuspending(true);
+        try {
+            await handleStatusChange("SUSPENDED");
+            setSuspendOpen(false);
+        } finally {
+            setSuspending(false);
         }
     };
 
@@ -55,6 +69,14 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
 
     return (
         <div className="mx-auto max-w-7xl">
+            <SuspendDialog
+                open={suspendOpen}
+                onOpenChange={setSuspendOpen}
+                entityName={org.name}
+                entityType="organization"
+                onConfirm={handleSuspendConfirm}
+                isLoading={suspending}
+            />
             <PageHeader
                 title={org.name}
                 subtitle={`${org.industry} · ${org.domain}`}
@@ -70,7 +92,7 @@ export default function OrganizationDetailPage({ params }: { params: Promise<{ i
                             <Button variant="outline" className="text-success hover:text-success" onClick={() => handleStatusChange("ACTIVE")}>Activate</Button>
                         )}
                         {org.status === "ACTIVE" && (
-                            <Button variant="outline" className="text-warning hover:text-warning" onClick={() => handleStatusChange("SUSPENDED")}>Suspend</Button>
+                            <Button variant="outline" className="text-warning hover:text-warning" onClick={() => setSuspendOpen(true)}>Suspend</Button>
                         )}
                         {org.status !== "DEACTIVATED" && (
                             <Button variant="outline" className="text-danger hover:text-danger" onClick={() => handleStatusChange("DEACTIVATED")}>Deactivate</Button>

@@ -22,6 +22,7 @@ import {
     DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
 import { getProfessionals, updateProfessionalStatus, resetProfessionalPassword } from "@/services/sa.service";
+import SuspendDialog from "@/components/shared/SuspendDialog";
 import type { SAProfessional, ProfessionalStatus } from "@/types/sa.types";
 
 const planColors: Record<string, string> = {
@@ -41,6 +42,8 @@ export default function ProfessionalsPage() {
     const [statusFilter, setStatusFilter] = useState("all");
     const [industryFilter, setIndustryFilter] = useState("all");
     const [page, setPage] = useState(1);
+    const [pendingSuspend, setPendingSuspend] = useState<{ id: string; name: string } | null>(null);
+    const [suspending, setSuspending] = useState(false);
 
     useEffect(() => {
         setLoading(true);
@@ -91,9 +94,20 @@ export default function ProfessionalsPage() {
         }
     };
 
+    const handleSuspendConfirm = async () => {
+        if (!pendingSuspend) return;
+        setSuspending(true);
+        try {
+            await handleStatusChange(pendingSuspend.id, pendingSuspend.name, "SUSPENDED");
+            setPendingSuspend(null);
+        } finally {
+            setSuspending(false);
+        }
+    };
+
     const handleExport = () => {
         const rows = [
-            ["Name", "Email", "Job Title", "Industry", "Plan", "Status", "creditsUsed", "Joined"],
+            ["Name", "Email", "Job Title", "Industry", "Plan", "Status", "Usage (CU)", "Joined"],
             ...filtered.map((p) => [p.name, p.email, p.jobTitle, p.industry, p.plan, p.status, p.creditsUsed, p.joinedAt]),
         ];
         const csv = rows.map((r) => r.join(",")).join("\n");
@@ -114,6 +128,14 @@ export default function ProfessionalsPage() {
 
     return (
         <div className="mx-auto max-w-7xl space-y-6">
+            <SuspendDialog
+                open={!!pendingSuspend}
+                onOpenChange={(open) => { if (!open) setPendingSuspend(null); }}
+                entityName={pendingSuspend?.name ?? ""}
+                entityType="account"
+                onConfirm={handleSuspendConfirm}
+                isLoading={suspending}
+            />
             <PageHeader
                 title="Professionals Directory"
                 subtitle={`${total} independent professionals using the platform.`}
@@ -214,7 +236,7 @@ export default function ProfessionalsPage() {
                                 <TableHead>Role &amp; Industry</TableHead>
                                 <TableHead className="text-center">Plan</TableHead>
                                 <TableHead className="text-center">Status</TableHead>
-                                <TableHead className="text-center">creditsUsed</TableHead>
+                                <TableHead className="text-center">Usage (CU)</TableHead>
                                 <TableHead>Joined</TableHead>
                                 <TableHead className="w-10" />
                             </TableRow>
@@ -275,7 +297,7 @@ export default function ProfessionalsPage() {
                                                     </DropdownMenuItem>
                                                 )}
                                                 {p.status !== "SUSPENDED" && p.status !== "DEACTIVATED" && (
-                                                    <DropdownMenuItem className="text-warning cursor-pointer focus:text-warning" onClick={() => handleStatusChange(p.id, p.name, "SUSPENDED")}>
+                                                    <DropdownMenuItem className="text-warning cursor-pointer focus:text-warning" onClick={() => setPendingSuspend({ id: p.id, name: p.name })}>
                                                         Suspend Account
                                                     </DropdownMenuItem>
                                                 )}

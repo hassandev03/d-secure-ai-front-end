@@ -464,7 +464,7 @@ export default function OrgSettingsPage() {
                                     value={empDefaults.monthlyLimit}
                                     onChange={(e) => setEmpDefaults((p) => ({ ...p, monthlyLimit: parseInt(e.target.value) || 0 }))}
                                 />
-                                <p className="text-xs text-muted-foreground">Max AI creditBudget per month for new employees.</p>
+                                <p className="text-xs text-muted-foreground">Max AI Compute Unit budget per month for new employees.</p>
                             </div>
                             <div className="flex items-end pb-1">
                                 <SettingToggle
@@ -804,17 +804,17 @@ export default function OrgSettingsPage() {
                                         value={orgPolicy.defaultCreditLimit}
                                         onChange={(e) => setOrgPolicy((p) => ({ ...p, defaultCreditLimit: parseInt(e.target.value) || 0 }))}
                                     />
-                                    <p className="text-xs text-muted-foreground">Default USD credit budget per employee per month.</p>
+                                    <p className="text-xs text-muted-foreground">Default CU budget per employee per month.</p>
                                 </div>
                                 <div className="space-y-1.5">
-                                    <Label>Max Credit Limit ($ / employee / mo)</Label>
+                                    <Label>Max CU Limit (CU / employee / mo)</Label>
                                     <Input
                                         type="number"
                                         min={0}
                                         value={orgPolicy.maxCreditLimit}
                                         onChange={(e) => setOrgPolicy((p) => ({ ...p, maxCreditLimit: parseInt(e.target.value) || 0 }))}
                                     />
-                                    <p className="text-xs text-muted-foreground">Upper cap (USD) — no department can exceed this per-employee limit.</p>
+                                    <p className="text-xs text-muted-foreground">Upper cap (CU) — no department can exceed this per-employee limit.</p>
                                 </div>
                                 <div className="flex items-end">
                                     <Button

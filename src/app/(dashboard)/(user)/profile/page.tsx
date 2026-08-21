@@ -121,6 +121,9 @@ export default function ProfilePage() {
     const [industry,  setIndustry]  = useState(user?.industry || "");
     const [bio,       setBio]       = useState(user?.bio || "");
 
+    // Sync form fields from the store on user change, but NOT avatarUrl —
+    // avatarUrl is managed by the upload flow to prevent the useEffect from
+    // overwriting the freshly uploaded image immediately after save.
     useEffect(() => {
         if (user) {
             setFullName(user.name || "");
@@ -130,7 +133,6 @@ export default function ProfilePage() {
             setJobTitle(user.jobTitle || "");
             setIndustry(user.industry || "");
             setBio(user.bio || "");
-            setAvatarUrl(user.avatar || null);
         }
     }, [user]);
 
@@ -147,20 +149,24 @@ export default function ProfilePage() {
     const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            setAvatarUrl(URL.createObjectURL(file));
+            // Show a local preview immediately
+            const localPreview = URL.createObjectURL(file);
+            setAvatarUrl(localPreview);
             try {
                 toast.info("Uploading avatar...");
                 const { uploadFile } = await import("@/services/file.service");
-                const res = await uploadFile(file, "GENERAL");
-                const newAvatarUrl = `${process.env.NEXT_PUBLIC_FILE_URL || 'http://localhost:8420/api/v1'}/files/public/${res.file_id}`;
+                const res = await uploadFile(file, "AVATAR");
+                const newAvatarUrl = `${process.env.NEXT_PUBLIC_FILE_URL || 'http://localhost:8000/api/v1'}/files/public/${res.file_id}`;
                 
-                const result = await updateUserProfile({ avatarUrl: newAvatarUrl });
-                if (result.success && result.user) {
-                    updateUser(result.user);
-                    setAvatarUrl(newAvatarUrl);
-                }
+                await updateUserProfile({ avatarUrl: newAvatarUrl });
+                // Update store with the new avatar URL only — no full user replace
+                // so the useEffect does NOT reset avatarUrl back to the old value.
+                updateUser({ avatar: newAvatarUrl });
+                setAvatarUrl(newAvatarUrl);
                 toast.success("Avatar updated successfully.");
             } catch (err) {
+                // Revert preview on failure
+                setAvatarUrl(user?.avatar || null);
                 toast.error("Failed to upload avatar.");
             }
         }

@@ -60,11 +60,11 @@ function PiiBadge({ type }: { type: string }) {
 const MOCK_CHAT: Record<string, { role: "user" | "assistant"; content: string; anonymized?: string }[]> = {
     default: [
         { role: "user",      content: "Please summarize the performance review for Sarah Connor. Her email is sarah.connor@acme.com and her SSN is 123-45-6789.",
-          anonymized: "Please summarize the performance review for [PERSON_NAME_1]. Her email is [EMAIL_1] and her SSN is [SSN_1]." },
-        { role: "assistant", content: "Based on the anonymized query, here is a summary of [PERSON_NAME_1]'s performance review..." },
+          anonymized: "Please summarize the performance review for Alex Smith. Her email is john.doe@example.com and her SSN is 000-11-2222." },
+        { role: "assistant", content: "Based on the anonymized query, here is a summary of Alex Smith's performance review..." },
         { role: "user",      content: "Also pull their credit card on file: 4532-1234-5678-9012.",
-          anonymized: "Also pull their credit card on file: [CARD_NUMBER_1]." },
-        { role: "assistant", content: "The card ending in [CARD_NUMBER_1] has been located. All financial identifiers have been masked." },
+          anonymized: "Also pull their credit card on file: 4111-2222-3333-4444." },
+        { role: "assistant", content: "The card ending in 4444 has been located. All financial identifiers have been masked." },
     ],
 };
 
@@ -180,7 +180,7 @@ const PRESET_EXAMPLES = [
     { label: "Finance Support", text: 'Process refund of $500 for credit card 4532-1234-5678-9012. Customer phone is +44 7911 123456.' },
 ];
 
-type SimStep = "input" | "anonymized" | "responded";
+type SimStep = "input" | "anonymized" | "llm_responded" | "responded";
 
 interface SimResult {
     session_id: string;
@@ -195,6 +195,7 @@ function PrivacyEngineSim() {
     const [step, setStep] = useState<SimStep>("input");
     const [anonymizing, setAnonymizing] = useState(false);
     const [sending, setSending] = useState(false);
+    const [deanoning, setDeanoning] = useState(false);
     const [simResult, setSimResult] = useState<SimResult | null>(null);
     const [rawAIResponse, setRawAIResponse] = useState("");
     const [deanonResponse, setDeanonResponse] = useState("");
@@ -215,18 +216,30 @@ function PrivacyEngineSim() {
             setStep("anonymized");
         } catch (e) {
             // Fallback mock when backend isn't connected or throws NetworkError
-            const mockAnon = input
-                .replace(/\b[\w.-]+@[\w.-]+\.\w{2,}\b/g, "[EMAIL_1]")
-                .replace(/\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/g, "[CARD_1]")
-                .replace(/\b\+?[\d\s-]{10,}\b/g, "[PHONE_1]")
-                .replace(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/g, "[PERSON_1]")
-                .replace(/\b\d{3}-\d{2}-\d{4}\b/g, "[SSN_1]");
+            const mockEntities = [
+                { label: "EMAIL", category: "PERSONALLY_IDENTIFIABLE_INFO", text: input.match(/\b[\w.-]+@[\w.-]+\.\w{2,}\b/)?.[0] ?? "sarah.connor@acme.com", replacement: "john.doe@example.com" },
+                { label: "CREDIT_CARD", category: "FINANCIAL_DATA", text: input.match(/\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/)?.[0] ?? "4532-1234-5678-9012", replacement: "4111-2222-3333-4444" },
+                { label: "PHONE", category: "PERSONALLY_IDENTIFIABLE_INFO", text: input.match(/\b\+?[\d\s-]{10,}\b/)?.[0] ?? "+44 7911 123456", replacement: "555-0199" },
+                { label: "PERSON", category: "PERSONALLY_IDENTIFIABLE_INFO", text: input.match(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/)?.[0] ?? "Sarah Connor", replacement: "Alex Smith" },
+                { label: "SSN", category: "PERSONALLY_IDENTIFIABLE_INFO", text: input.match(/\b\d{3}-\d{2}-\d{4}\b/)?.[0] ?? "123-45-6789", replacement: "000-11-2222" },
+            ];
+            
+            let finalAnon = input;
+            const matchedEntities = [];
+            
+            for (const ent of mockEntities) {
+                if (input.includes(ent.text)) {
+                    finalAnon = finalAnon.replace(new RegExp(escapeRe(ent.text), "g"), ent.replacement);
+                    matchedEntities.push(ent);
+                }
+            }
+            
             setSimResult({
                 session_id: "mock-session",
-                anonymized_text: mockAnon,
-                entities: [],
-                entity_count: 0,
-                categories_detected: ["PERSONALLY_IDENTIFIABLE_INFO"],
+                anonymized_text: finalAnon,
+                entities: matchedEntities as any,
+                entity_count: matchedEntities.length,
+                categories_detected: Array.from(new Set(matchedEntities.map(e => e.category))),
             });
             setStep("anonymized");
         } finally {
@@ -237,39 +250,49 @@ function PrivacyEngineSim() {
     const handleSend = async () => {
         if (!simResult) return;
         setSending(true);
+        setRawAIResponse("");
+        setDeanonResponse("");
         try {
-            // Simulate LLM response logic (LLM generating response)
-            await new Promise((r) => setTimeout(r, 1400));
-            const rawResponse = `Based on the anonymized query:\n\n"${simResult.anonymized_text}"\n\nHere is a detailed response addressing the request. All references have been safely masked before this response was generated. The system processed ${simResult.entity_count} entity/entities across categories: ${simResult.categories_detected.join(", ")}.`;
-
-            // Call the real deanonymize endpoint
+            // Step 1: Real GPT-4.1 call with anonymized text
+            let rawResponse = "";
             try {
-                const res = await api.post<{ deanonymized_text: string; replacements_made: number }>(
-                    "/analytics/privacy/simulate/deanonymize",
-                    { text: rawResponse, session_id: simResult.session_id }
+                const llmRes = await api.post<{ llm_response: string }>(
+                    "/analytics/privacy/simulate/send-to-llm",
+                    { anonymized_text: simResult.anonymized_text }
                 );
-                setRawAIResponse(rawResponse);
-                setDeanonResponse(res.data.deanonymized_text);
-            } catch (backendErr) {
-                // Fallback de-anonymize logic if backend fails
+                rawResponse = llmRes.data.llm_response;
+            } catch {
+                rawResponse = `Based on the anonymized query:\n\n"${simResult.anonymized_text}"\n\nAll sensitive references remain masked. Entities processed: ${simResult.entity_count} across: ${simResult.categories_detected.join(", ")}.`;
+            }
+            // Show raw (still masked) response first
+            setRawAIResponse(rawResponse);
+            setStep("llm_responded");
+            setSending(false);
+
+            // Step 2: Deanonymize
+            setDeanoning(true);
+            try {
+                const vaultMap: Record<string, string> = {};
+                for (const ent of (simResult.entities ?? [])) {
+                    vaultMap[ent.replacement] = ent.text;
+                }
+
+                const dRes = await api.post<{ deanonymized_text: string }>(
+                    "/analytics/privacy/simulate/deanonymize",
+                    { text: rawResponse, session_id: simResult.session_id, vault: vaultMap }
+                );
+                setDeanonResponse(dRes.data.deanonymized_text);
+            } catch {
                 let restored = rawResponse;
                 for (const ent of (simResult.entities ?? [])) {
                     restored = restored.replace(new RegExp(escapeRe(ent.replacement), "g"), ent.text);
                 }
-                if (!simResult.entities.length) {
-                    restored = rawResponse
-                        .replace(/\[EMAIL_1\]/g, input.match(/\b[\w.-]+@[\w.-]+\.\w{2,}\b/)?.[0] ?? "[EMAIL]")
-                        .replace(/\[PERSON_1\]/g, input.match(/\b[A-Z][a-z]+ [A-Z][a-z]+\b/)?.[0] ?? "[PERSON]")
-                        .replace(/\[CARD_1\]/g,   input.match(/\b\d{4}[- ]?\d{4}[- ]?\d{4}[- ]?\d{4}\b/)?.[0] ?? "[CARD]")
-                        .replace(/\[SSN_1\]/g,    input.match(/\b\d{3}-\d{2}-\d{4}\b/)?.[0] ?? "[SSN]");
-                }
-                setRawAIResponse(rawResponse);
                 setDeanonResponse(restored);
             }
-            
             setStep("responded");
         } finally {
             setSending(false);
+            setDeanoning(false);
         }
     };
 
@@ -368,7 +391,7 @@ function PrivacyEngineSim() {
                             disabled={anonymizing || !input.trim()}
                         >
                             {anonymizing
-                                ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Anonymizing...</>
+                                ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Detecting Sensitive Info...</>
                                 : <><Sparkles className="mr-2 h-4 w-4" /> Anonymize</>
                             }
                         </Button>
@@ -382,8 +405,8 @@ function PrivacyEngineSim() {
                                         disabled={sending}
                                     >
                                         {sending
-                                            ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Sending to AI...</>
-                                            : <><Play className="mr-2 h-4 w-4 fill-current" /> Send to AI</>
+                                            ? <><RefreshCw className="mr-2 h-4 w-4 animate-spin" /> Sending to GPT-4.1...</>
+                                            : <><Play className="mr-2 h-4 w-4 fill-current" /> Send to AI (GPT-4.1)</>
                                         }
                                     </Button>
                                 </motion.div>
@@ -393,7 +416,7 @@ function PrivacyEngineSim() {
 
                     {/* Row 2: Raw AI Response | De-anonymized Response */}
                     <AnimatePresence>
-                        {step === "responded" && (
+                        {(step === "llm_responded" || step === "responded") && (
                             <motion.div
                                 initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: "auto" }}
                                 exit={{ opacity: 0, height: 0 }} transition={{ duration: 0.4, type: "spring", stiffness: 200, damping: 22 }}
@@ -403,7 +426,7 @@ function PrivacyEngineSim() {
                                     {/* Raw LLM response */}
                                     <div className="flex flex-col space-y-2">
                                         <span className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-slate-600">
-                                            <Bot className="h-4 w-4 text-slate-400" /> Raw AI Response (tokens still masked)
+                                            <Bot className="h-4 w-4 text-slate-400" /> Raw AI Response
                                         </span>
                                         <div className="rounded-xl border border-slate-200 bg-slate-50 p-4 shadow-inner min-h-[140px]">
                                             <p className="font-mono text-[13px] leading-relaxed text-slate-600 whitespace-pre-wrap">{rawAIResponse}</p>
@@ -417,7 +440,13 @@ function PrivacyEngineSim() {
                                         </span>
                                         <div className="rounded-xl border border-brand-200 bg-brand-50/60 p-4 shadow-inner min-h-[140px] relative overflow-hidden">
                                             <div className="absolute left-0 top-0 bottom-0 w-1 bg-brand-400 rounded-l-xl" />
-                                            <p className="text-[13px] leading-relaxed text-slate-700 pl-2 whitespace-pre-wrap">{deanonResponse}</p>
+                                            {deanoning ? (
+                                                <div className="flex h-full items-center justify-center gap-2 text-xs text-slate-400">
+                                                    <RefreshCw className="h-3.5 w-3.5 animate-spin" /> De-anonymizing...
+                                                </div>
+                                            ) : (
+                                                <p className="text-[13px] leading-relaxed text-slate-700 pl-2 whitespace-pre-wrap">{deanonResponse}</p>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
